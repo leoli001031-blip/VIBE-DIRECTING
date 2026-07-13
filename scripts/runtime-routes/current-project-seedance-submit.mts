@@ -513,6 +513,7 @@ function relayQueueItemsForSegments({
       promptPath: update.promptPath || existing.promptPath,
       referencePaths: update.referencePaths || existing.referencePaths || [],
       submitId: update.submitId || existing.submitId,
+      externalTaskId: update.externalTaskId || update.submitId || existing.externalTaskId || existing.submitId,
       resumeCommand: update.resumeCommand || existing.resumeCommand,
       queueInfo: update.queueInfo || existing.queueInfo,
       queuePosition: update.queuePosition ?? update.queueInfo?.position ?? existing.queuePosition ?? existing.queueInfo?.position,
@@ -555,7 +556,11 @@ function activeRelayQueueItem(existingQueue, relayQueueItemId) {
     const selected = items.find((item) => item?.id === relayQueueItemId || item?.segmentId === relayQueueItemId);
     if (selected) return selected;
   }
-  return items.find((item) => activeRelayStatus(effectiveRelayItemStatus(item)) && item?.submitId);
+  return items.find((item) => activeRelayStatus(effectiveRelayItemStatus(item)) && (item?.externalTaskId || item?.submitId));
+}
+
+function relayExternalTaskId(item) {
+  return asString(item?.externalTaskId || item?.submitId, undefined);
 }
 
 function resumeDownloadDirFromCommand(command, fallbackDir) {
@@ -2422,8 +2427,9 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           status: relayStatus,
           attempted: true,
           promptPath: promptRelPath,
-	          referencePaths: activeReferencePaths,
+          referencePaths: activeReferencePaths,
           submitId: taskInfo.submitId,
+          externalTaskId: taskInfo.submitId,
           resumeCommand,
           queueInfo: taskInfo.queueInfo,
           queuePosition: taskInfo.queueInfo?.position,
@@ -2458,6 +2464,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         status: outputVideoPath ? "returned_with_review_overlay" : statusForUi,
         videoStatus: status,
         submitId: taskInfo.submitId,
+        externalTaskId: taskInfo.submitId,
         taskId: taskInfo.taskId,
         queueInfo: taskInfo.queueInfo,
         relayQueueItemId,
@@ -2473,6 +2480,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         status: outputVideoPath ? "returned_with_review_overlay" : statusForUi,
         videoStatus: status,
         submitId: taskInfo.submitId,
+        externalTaskId: taskInfo.submitId,
         taskId: taskInfo.taskId,
         sourceReceiptId: taskInfo.submitId ? `seedance_submit_${safePathSegment(taskInfo.submitId)}` : videoItemId,
         providerReceiptId: taskInfo.submitId ? `seedance_submit_${safePathSegment(taskInfo.submitId)}` : videoItemId,
@@ -2545,6 +2553,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         submitLogPath: submitLogRelPath,
         previewPlanPath: previewPlanRelPath,
         submitId: taskInfo.submitId,
+        externalTaskId: taskInfo.submitId,
         taskId: taskInfo.taskId,
         queueInfo: taskInfo.queueInfo,
         outputVideoPath,
@@ -2589,13 +2598,14 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
     const existingRelayQueue = readJsonFile(relayQueuePath);
     const existingPreviewPlan = readJsonFile(previewPlanPath);
     const activeItem = activeRelayQueueItem(existingRelayQueue, input.relayQueueItemId);
+    const savedExternalTaskId = relayExternalTaskId(activeItem);
     const activeSegment = referenceSegments.find((segment) => segment.id === (activeItem?.segmentId || activeItem?.id));
     const activeSegmentId = activeSegment?.id || activeItem?.segmentId;
     const relayQueueItemId = activeItem?.id;
     const activeShots = activeSegment?.shots || allShots.filter((shot) => activeItem?.shotIds?.includes(shot.id));
     const blockers = uniqueStrings([
       activeItem ? "" : "当前没有可恢复查询的视频任务。",
-      activeItem?.submitId ? "" : "当前视频任务没有 submitId，不能恢复查询。",
+      savedExternalTaskId ? "" : "当前视频任务没有 externalTaskId，不能恢复查询。",
       activeRelayStatus(effectiveRelayItemStatus(activeItem)) ? "" : "当前视频任务不在排队或生成中。",
     ]);
 
@@ -2640,7 +2650,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 
     const outputRoot = activeItem.promptPath?.includes("/receipts/")
       ? activeItem.promptPath.split("/receipts/")[0]
-      : `${source.runRootRelativePath}/video/resume_${safePathSegment(activeItem.id || activeItem.submitId)}`;
+      : `${source.runRootRelativePath}/video/resume_${safePathSegment(activeItem.id || savedExternalTaskId)}`;
     const fallbackVideoDir = scopedRepoPath(`${outputRoot}/video`);
     const parsedDownloadDir = resumeDownloadDirFromCommand(activeItem.resumeCommand, fallbackVideoDir);
     const videoDir = pathInsideRoot(parsedDownloadDir, source.runRootPath) ? path.resolve(parsedDownloadDir) : fallbackVideoDir;
@@ -2648,11 +2658,11 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 
     let query;
     if (input.mockProviderResult) {
-      const mockVideoPath = path.join(videoDir, `dreamina-resume-${safePathSegment(activeItem.submitId)}.mp4`);
+      const mockVideoPath = path.join(videoDir, `dreamina-resume-${safePathSegment(savedExternalTaskId)}.mp4`);
       writeFileSync(mockVideoPath, Buffer.from("mock seedance video result"));
       query = {
         exitCode: 0,
-        stdout: JSON.stringify({ submit_id: activeItem.submitId, status: "success" }),
+        stdout: JSON.stringify({ submit_id: savedExternalTaskId, status: "success" }),
         stderr: "",
         timedOut: false,
         durationMs: 0,
@@ -2660,7 +2670,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
     } else {
       query = await runCommandDep(input.cliPath, [
         "query_result",
-        `--submit_id=${activeItem.submitId}`,
+        `--submit_id=${savedExternalTaskId}`,
         `--download_dir=${videoDir}`,
       ], {
         cwd: repoRoot,
@@ -2673,7 +2683,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
     const queryLogRelPath = `${receiptsRoot}/dreamina-resume-query.json`;
     writeCurrentProjectRuntimeJson(queryLogRelPath, {
       command: input.cliPath,
-      args: ["query_result", `--submit_id=${activeItem.submitId}`, `--download_dir=${videoDir}`],
+      args: ["query_result", `--submit_id=${savedExternalTaskId}`, `--download_dir=${videoDir}`],
       exitCode: query.exitCode,
       timedOut: query.timedOut,
       durationMs: query.durationMs,
@@ -2707,8 +2717,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
     const outputVideoSha256 = outputVideoFilePath ? sha256File(outputVideoFilePath) : undefined;
     const relayStatus = relayStatusFromSeedance(status, outputVideoPath);
     const failureReason = taskInfo.failureReason || "Seedance 最终生成失败。";
-    const resumeCommand = activeItem.resumeCommand || (activeItem.submitId
-      ? jimengResumeCommand({ submitId: activeItem.submitId, downloadDir: videoDir, cliPath: input.cliPath })
+    const resumeCommand = activeItem.resumeCommand || (savedExternalTaskId
+      ? jimengResumeCommand({ submitId: savedExternalTaskId, downloadDir: videoDir, cliPath: input.cliPath })
       : undefined);
     const relayQueue = relayQueueForSegments({
       segments: referenceSegments,
@@ -2724,7 +2734,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         attempted: true,
         promptPath: activeItem.promptPath,
         referencePaths: activeItem.referencePaths,
-        submitId: taskInfo.submitId || activeItem.submitId,
+        submitId: taskInfo.submitId || savedExternalTaskId,
+        externalTaskId: taskInfo.submitId || savedExternalTaskId,
         resumeCommand,
         queueInfo: taskInfo.queueInfo,
         queuePosition: taskInfo.queueInfo?.position,
@@ -2751,8 +2762,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         ? existingPreviewPlan.previewItems.filter((item) => !belongsToActiveSegment(item))
         : [];
       const durationSeconds = activeSegment?.durationSeconds || activeItem.durationSeconds || activeShots.reduce((sum, shot) => sum + shot.durationSeconds, 0) || 5;
-      const providerReceiptId = (taskInfo.submitId || activeItem.submitId)
-        ? `seedance_submit_${safePathSegment(taskInfo.submitId || activeItem.submitId)}`
+      const providerReceiptId = (taskInfo.submitId || savedExternalTaskId)
+        ? `seedance_submit_${safePathSegment(taskInfo.submitId || savedExternalTaskId)}`
         : videoItemId;
       const currentClip = {
         id: videoItemId,
@@ -2768,7 +2779,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         durationSeconds,
         status: "returned_with_review_overlay",
         videoStatus: "success",
-        submitId: taskInfo.submitId || activeItem.submitId,
+        submitId: taskInfo.submitId || savedExternalTaskId,
+        externalTaskId: taskInfo.submitId || savedExternalTaskId,
         taskId: taskInfo.taskId,
         queueInfo: taskInfo.queueInfo,
         relayQueueItemId,
@@ -2822,7 +2834,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       relayQueue,
       queryLogPath: queryLogRelPath,
       previewPlanPath: outputVideoPath ? previewPlanRelPath : undefined,
-      submitId: taskInfo.submitId || activeItem.submitId,
+      submitId: taskInfo.submitId || savedExternalTaskId,
+      externalTaskId: taskInfo.submitId || savedExternalTaskId,
       taskId: taskInfo.taskId,
       queueInfo: taskInfo.queueInfo,
       outputVideoPath,

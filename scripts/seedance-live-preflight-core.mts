@@ -22,10 +22,10 @@ export interface SeedanceLivePreflightOptions {
 }
 
 export interface SeedanceLivePreflightReport {
-  schemaVersion: "seedance_live_preflight_v1";
+  schemaVersion: "seedance_live_preflight_v2";
   generatedAt: string;
   ready: boolean;
-  status: "ready_to_confirm_submit" | "blocked";
+  status: "ready_for_video_authorization" | "blocked";
   project: {
     root: string;
     projectVibePath: string;
@@ -51,17 +51,30 @@ export interface SeedanceLivePreflightReport {
     completed: number;
   };
   checks: {
+    storyboardReferenceGenerationExpected: boolean;
+    imageProviderKeyRequired: boolean;
     imageProviderKeyConfigured: boolean;
     jimengCliCommand: string;
     jimengCliFound: boolean;
+    jimengCredentialFileFound: boolean;
     confirmationPhraseRequired: "submit-seedance-video";
+  };
+  executionPolicy: {
+    preflightOnly: true;
+    liveVideoAuthorizationRequired: true;
+    providerCalled: false;
+    runtimeExternalNetworkCallMade: false;
+    videoSubmitted: false;
+    maxProviderSubmitCountAfterAuthorization: 1;
+    queryMustReuseExternalTaskId: true;
+    retryRequiresNewConfirmation: true;
   };
   blockers: string[];
   warnings: string[];
   next: string;
 }
 
-const defaultModelVersion = "seedance2.0_vip";
+const defaultModelVersion = "seedance2.0";
 const defaultVideoResolution = "720p";
 const supportedModelVersions = new Set(["seedance2.0", "seedance2.0fast", "seedance2.0_vip", "seedance2.0fast_vip"]);
 const activeQueueStatuses = new Set(["submitting", "submitted", "queued", "polling", "generating", "running", "recoverable_queued"]);
@@ -132,6 +145,11 @@ function assetLooksLikeReference(asset: JsonRecord, projectRoot: string, deps: S
   return deps.fileSize(filePath) > 0;
 }
 
+function assetAppliesToSelectedShot(asset: JsonRecord, selectedShotIds: string[]) {
+  const usedByShotIds = arrayValue(asset.usedByShotIds).map(stringValue).filter(Boolean);
+  return usedByShotIds.length === 0 || usedByShotIds.some((shotId) => selectedShotIds.includes(shotId));
+}
+
 function readRelayQueue(projectRoot: string, deps: SeedanceLivePreflightDeps) {
   const relayQueuePath = path.join(projectRoot, "reports/video_relay_queue.json");
   const relayQueue = deps.readJsonOptional(relayQueuePath);
@@ -167,6 +185,11 @@ function cliReady(deps: SeedanceLivePreflightDeps) {
   };
 }
 
+function jimengCredentialFileFound(deps: SeedanceLivePreflightDeps) {
+  const credentialPath = path.join(deps.homeDir, ".dreamina_cli/credential.json");
+  return deps.exists(credentialPath) && deps.fileSize(credentialPath) > 0;
+}
+
 export function runSeedanceLivePreflight(
   options: SeedanceLivePreflightOptions,
   deps: SeedanceLivePreflightDeps,
@@ -181,8 +204,11 @@ export function runSeedanceLivePreflight(
   const shots = project ? projectShots(project) : [];
   const selectedShotId = options.selectedShotId || "";
   const selectedShots = selectedShotId ? shots.filter((shot) => stringValue(shot.id) === selectedShotId) : shots;
+  const selectedShotIds = selectedShots.map((shot) => stringValue(shot.id)).filter(Boolean);
   const assets = project ? projectAssets(project) : [];
-  const usableReferenceAssets = projectRoot ? assets.filter((asset) => assetLooksLikeReference(asset, projectRoot, deps)) : [];
+  const usableReferenceAssets = projectRoot
+    ? assets.filter((asset) => assetLooksLikeReference(asset, projectRoot, deps) && assetAppliesToSelectedShot(asset, selectedShotIds))
+    : [];
   const relayQueue = projectRoot ? readRelayQueue(projectRoot, deps) : undefined;
   const cli = cliReady(deps);
   const modelVersion = options.modelVersion || defaultModelVersion;
@@ -190,42 +216,53 @@ export function runSeedanceLivePreflight(
   const requestedDuration = options.durationSeconds;
   const targetDurationSeconds = typeof requestedDuration === "number" && Number.isFinite(requestedDuration) && requestedDuration > 0
     ? Math.round(requestedDuration)
-    : Math.round(selectedShots.reduce((sum, shot) => sum + numberValue(shot.durationSeconds || shot.duration || shot.seconds, 4), 0) || 4);
-  const imageProviderKeyConfigured = configuredImageProviderKey(deps);
+    : Math.round(selectedShots.reduce((sum, shot) => sum + numberValue(shot.durationSeconds || shot.duration || shot.seconds, 5), 0) || 5);
+  const selectedReferenceStrategies = selectedShots
+    .map((shot) => stringValue(shot.referenceStrategy))
+    .filter(Boolean);
+  const storyboardReferenceGenerationExpected = selectedShots.length !== 1
+    || selectedReferenceStrategies.some((strategy) => strategy === "storyboard_narrative" || strategy === "storyboard_rapid_cut");
+  const imageProviderKeyRequired = storyboardReferenceGenerationExpected;
+  const imageProviderKeyConfigured = imageProviderKeyRequired ? configuredImageProviderKey(deps) : false;
+  const credentialFileFound = jimengCredentialFileFound(deps);
 
   const blockers = [
     projectRoot ? "" : "当前还没有绑定项目文件夹。",
     project ? "" : "当前项目缺少 project.vibe。",
     shots.length ? "" : "当前项目没有镜头。",
+    selectedShotId ? "" : "P6-D 真实试运行必须明确指定 1 个镜头。",
     selectedShotId && selectedShots.length === 0 ? `找不到选中的镜头：${selectedShotId}` : "",
+    selectedShotId && selectedShots.length !== 1 ? "P6-D 真实试运行只能选择 1 个镜头。" : "",
     usableReferenceAssets.length ? "" : "当前项目还没有可用于 Seedance 的角色/场景/道具图片参考。",
     relayQueue?.activeItems.length ? `已有视频任务在排队或生成：${relayQueue.activeItems.map((item) => stringValue(item.title) || stringValue(item.id) || stringValue(item.submitId)).filter(Boolean).join(", ")}` : "",
-    imageProviderKeyConfigured ? "" : "生成故事板参考需要先配置图片/Responses Key。",
+    !imageProviderKeyRequired || imageProviderKeyConfigured ? "" : "当前镜头需要生成故事板参考，请先配置图片/Responses Key。",
     cli.ready ? "" : `找不到即梦 CLI：${cli.command}。`,
+    credentialFileFound ? "" : "未发现本地即梦登录凭据；请先单独完成 dreamina 登录。",
     videoResolution === "720p" ? "" : "提交前请使用 720p，避免误触高成本分辨率。",
     supportedModelVersions.has(modelVersion) ? "" : `不支持的视频模型档位：${modelVersion}。`,
-    targetDurationSeconds >= 4 && targetDurationSeconds <= 15 ? "" : `当前目标时长 ${targetDurationSeconds}s 超出 Seedance 全能参考 4-15s 范围。`,
+    targetDurationSeconds >= 5 && targetDurationSeconds <= 8 ? "" : `P6-D 单次真实试运行只允许 5-8 秒；当前目标时长为 ${targetDurationSeconds}s。`,
   ].filter(Boolean);
 
   const warnings = [
-    selectedShotId ? "" : "未指定 selected-shot-id；预检按当前项目全部镜头估算时长。",
     relayQueue?.readyItems.length ? `队列里还有 ${relayQueue.readyItems.length} 段 ready，真实提交会继续下一个可提交段。` : "",
     relayQueue?.completedItems.length ? `已有 ${relayQueue.completedItems.length} 段视频回流，可先去预览/导出页复核。` : "",
-    "真实提交仍需要页面确认口令 submit-seedance-video；本脚本不会提交视频。",
+    modelVersion.includes("_vip") ? "当前显式选择了 VIP 档位；只有用户明确要求时才使用该高成本档位。" : "",
+    storyboardReferenceGenerationExpected ? "" : "该单镜头按全能参考路径预检，不会额外生成故事板图片。",
+    "本脚本只做本地只读预检，不调用 provider、不联网、不创建视频，也不代表已取得真实视频授权。",
   ].filter(Boolean);
 
   const ready = blockers.length === 0;
   return {
-    schemaVersion: "seedance_live_preflight_v1",
+    schemaVersion: "seedance_live_preflight_v2",
     generatedAt: (deps.now?.() || new Date()).toISOString(),
     ready,
-    status: ready ? "ready_to_confirm_submit" : "blocked",
+    status: ready ? "ready_for_video_authorization" : "blocked",
     project: {
       root: projectRoot ? path.relative(repoRoot, projectRoot) || "." : "",
       projectVibePath: projectPath ? path.relative(repoRoot, projectPath) : "",
       title: stringValue(project?.manifest && isRecord(project.manifest) ? project.manifest.title : undefined) || stringValue(project?.title) || stringValue(binding?.displayName),
       shotCount: shots.length,
-      selectedShotIds: selectedShots.map((shot) => stringValue(shot.id)).filter(Boolean),
+      selectedShotIds,
       assetCount: assets.length,
       usableReferenceAssetCount: usableReferenceAssets.length,
     },
@@ -245,15 +282,28 @@ export function runSeedanceLivePreflight(
       completed: relayQueue.completedItems.length,
     } : undefined,
     checks: {
+      storyboardReferenceGenerationExpected,
+      imageProviderKeyRequired,
       imageProviderKeyConfigured,
       jimengCliCommand: cli.command,
       jimengCliFound: cli.ready,
+      jimengCredentialFileFound: credentialFileFound,
       confirmationPhraseRequired: "submit-seedance-video",
+    },
+    executionPolicy: {
+      preflightOnly: true,
+      liveVideoAuthorizationRequired: true,
+      providerCalled: false,
+      runtimeExternalNetworkCallMade: false,
+      videoSubmitted: false,
+      maxProviderSubmitCountAfterAuthorization: 1,
+      queryMustReuseExternalTaskId: true,
+      retryRequiresNewConfirmation: true,
     },
     blockers,
     warnings,
     next: ready
-      ? "可以在前端确认提交 1 段 Seedance VIP 720p 视频；保持串行，不要重复点提交。"
-      : "先按 blockers 补齐参考、配置或等待队列，再提交视频。",
+      ? "无提交预检通过；停在视频授权门。取得本轮明确授权后，才可在 packaged App 确认提交 1 段 Seedance 720p 视频。"
+      : "先按 blockers 补齐单镜头、参考、时长、配置或等待队列；不要提交视频。",
   };
 }

@@ -26,6 +26,7 @@ export interface VideoRelayQueueItem {
   promptPath?: string;
   referencePaths: string[];
   submitId?: string;
+  externalTaskId?: string;
   resumeCommand?: string;
   queueInfo?: Record<string, unknown>;
   queuePosition?: number;

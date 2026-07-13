@@ -403,14 +403,15 @@ const timeoutResponse = await timeoutRoute.currentProjectSeedanceSubmitResponse(
 }, {}, timeoutSource);
 assert(timeoutResponse.ok === true, `submit-id timeout should stay recoverable: ${JSON.stringify(timeoutResponse)}`);
 assert(timeoutResponse.submitId === "timeout-submit-001", "recoverable timeout submit should preserve submitId");
+assert(timeoutResponse.externalTaskId === "timeout-submit-001", "recoverable timeout submit should persist the provider id as externalTaskId");
 assert(timeoutResponse.status === "recoverable_queued", "submit-id timeout should be treated as recoverable queue state");
 assert(timeoutResponse.uiStatus === "queued", "submit-id timeout should show as queued to the UI");
 assert(timeoutResponse.relayQueue?.status === "running", "recoverable submitId should keep the relay queue active");
 assert(timeoutResponse.relayQueue?.counts?.active === 1, "recoverable submitId should count as one active task");
 assert(timeoutResponse.relayQueue?.autoSubmitAllowed === false, "recoverable submitId must block another serial submit");
 assert(timeoutResponse.relayQueue?.resumeCommands?.[0]?.includes("timeout-submit-001"), "recoverable submitId should expose a resume command");
-assert(timeoutResponse.relayQueue?.items?.some((item: { status: string; submitId?: string }) =>
-  item.status === "polling" && item.submitId === "timeout-submit-001"
+assert(timeoutResponse.relayQueue?.items?.some((item: { status: string; submitId?: string; externalTaskId?: string }) =>
+  item.status === "polling" && item.submitId === "timeout-submit-001" && item.externalTaskId === "timeout-submit-001"
 ), "recoverable timeout should persist as an active polling queue item");
 
 const duplicateWhileRecoverable = await timeoutRoute.currentProjectSeedanceSubmitResponse({
@@ -993,7 +994,7 @@ writeJson(path.join(groupedRunRootPath, "reports/video_relay_queue.json"), {
       durationSeconds: 4,
       promptPath: `${groupedRunRootRelativePath}/seedance/segment_1/receipts/seedance-prompt.txt`,
       referencePaths: [],
-      submitId: "dreamina_submit_resume_001",
+      externalTaskId: "dreamina_submit_resume_001",
       resumeCommand: `dreamina query_result --submit_id=dreamina_submit_resume_001 --download_dir=${path.join(groupedRunRootPath, "seedance/segment_1/video")}`,
       attemptCount: 1,
       blockers: [],
@@ -1026,6 +1027,7 @@ const groupedResumeResponse = await route.currentProjectSeedanceResumeResponse({
 
 assert(groupedResumeResponse.ok === true, `resume query should pass: ${JSON.stringify(groupedResumeResponse)}`);
 assert(groupedResumeResponse.status === "success", "resume query should mark returned mock video as success");
+assert(groupedResumeResponse.externalTaskId === "dreamina_submit_resume_001", "resume query should reuse an externalTaskId-only persisted task without resubmitting");
 assert(groupedResumeResponse.outputVideoPath, "resume query should expose the returned video path");
 assert(existsSync(path.resolve(groupedRunRootPath, groupedResumeResponse.outputVideoPath)), "resume query should persist the returned video file");
 assert(groupedResumeResponse.relayQueue?.status === "idle", "resume query should clear the active queue item");
@@ -1036,6 +1038,49 @@ const resumedPreviewPlan = JSON.parse(readFileSync(groupedSource.previewPlanPath
 assert(resumedPreviewPlan.clips.some((item: { segmentId?: string; mediaPath?: string }) =>
   item.segmentId === "segment_1" && item.mediaPath === groupedResumeResponse.outputVideoPath
 ), "resume query should write the recovered video into preview plan");
+
+writeJson(path.join(groupedRunRootPath, "reports/video_relay_queue.json"), {
+  items: [
+    {
+      id: "seedance_segment_1",
+      segmentId: "segment_1",
+      shotId: "G01",
+      shotIds: ["G01"],
+      title: "旧书店",
+      status: "recoverable_queued",
+      modelVersion: "seedance2.0",
+      videoResolution: "720p",
+      durationSeconds: 5,
+      referencePaths: [],
+      externalTaskId: "query-only-submit-001",
+      attemptCount: 1,
+      blockers: [],
+      notes: [],
+    },
+  ],
+});
+const queryOnlyCalls: string[][] = [];
+const queryOnlyRoute = createSeedanceTestRoute({
+  runCommand: async (_command: string, args: string[]) => {
+    queryOnlyCalls.push(args);
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({ submit_id: "query-only-submit-001", status: "queued" }),
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    };
+  },
+});
+const queryOnlyResponse = await queryOnlyRoute.currentProjectSeedanceResumeResponse({
+  pollSeconds: 30,
+  relayQueueItemId: "seedance_segment_1",
+  cliPath: "dreamina",
+}, {}, groupedSource);
+assert(queryOnlyResponse.ok === true, `query-only recovery should stay active: ${JSON.stringify(queryOnlyResponse)}`);
+assert(queryOnlyCalls.length === 1, "cold recovery should invoke the provider CLI exactly once");
+assert(queryOnlyCalls[0][0] === "query_result" && queryOnlyCalls[0].includes("--submit_id=query-only-submit-001"), "cold recovery must query the persisted externalTaskId");
+assert(!queryOnlyCalls.flat().includes("multimodal2video"), "cold recovery must never resubmit video generation");
 
 writeJson(path.join(groupedRunRootPath, "reports/video_relay_queue.json"), {
   items: [

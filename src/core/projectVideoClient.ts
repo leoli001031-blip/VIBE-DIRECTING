@@ -11,8 +11,8 @@ import {
   type ProjectRuntimeIdentity,
 } from "./runtimeApiClient";
 import {
+  JIMENG_CLI_DEFAULT_MODEL_VERSION,
   JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
-  JIMENG_CLI_VIP_MODEL_VERSION,
 } from "./jimengVideoCli";
 
 export type ProjectSeedanceSubmitInput = {
@@ -46,6 +46,7 @@ export type ProjectSeedanceRelayQueueItem = {
   promptPath?: string;
   referencePaths?: string[];
   submitId?: string;
+  externalTaskId?: string;
   resumeCommand?: string;
   outputVideoPath?: string;
   localMediaPaths?: string[];
@@ -65,6 +66,7 @@ export type ProjectSeedanceSubmitResult = {
   submitLogPath?: string;
   previewPlanPath?: string;
   submitId?: string;
+  externalTaskId?: string;
   taskId?: string;
   outputVideoPath?: string;
   resumeCommand?: string;
@@ -112,7 +114,7 @@ export async function submitProjectSeedanceVideo(
       signal,
       body: JSON.stringify({
         providerId: input.providerId || "apikey-fun-gpt55-responses-image",
-        modelVersion: input.modelVersion || JIMENG_CLI_VIP_MODEL_VERSION,
+        modelVersion: input.modelVersion || JIMENG_CLI_DEFAULT_MODEL_VERSION,
         videoResolution: input.videoResolution || JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
         ratio: input.ratio || "16:9",
         durationSeconds: input.durationSeconds,
