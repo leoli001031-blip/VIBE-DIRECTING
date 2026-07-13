@@ -44,6 +44,7 @@ function isVideoMediaPath(value: unknown) {
 function previewItemHasVideoEvidence(item: ProjectRealChainPreviewItem) {
   return Boolean(
     item.videoStatus
+    || item.externalTaskId
     || item.submitId
     || item.submit_id
     || item.queueInfo
@@ -152,14 +153,14 @@ function relayQueueCanResume(relayQueue: ProjectSeedanceSubmitResult["relayQueue
   const items = relayQueue.items || [];
   if (items.length) {
     return items.some((item) =>
-      Boolean(item.submitId || item.resumeCommand)
+      Boolean(item.externalTaskId || item.submitId || item.resumeCommand)
       && ["submitting", "submitted", "queued", "running", "generating", "polling", "recoverable_queued"].includes(String(item.status || "")));
   }
   return (relayQueue.resumeCommands || []).length > 0;
 }
 
 function resultCanResume(result: ProjectSeedanceSubmitResult) {
-  return Boolean(result.resumeCommand || result.submitId || relayQueueCanResume(result.relayQueue));
+  return Boolean(result.externalTaskId || result.resumeCommand || result.submitId || relayQueueCanResume(result.relayQueue));
 }
 
 function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideoSubmitActionState {
@@ -327,7 +328,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
   const items = (state.summary?.previewItems || []).filter(previewItemHasVideoEvidence);
   const hasSubmittedVideo = items.some((item) => {
     const statusText = `${item.status || ""} ${item.previewStatus || ""} ${item.videoStatus || ""}`;
-    return Boolean(item.submitId || item.outputVideoPath || item.mediaPath)
+    return Boolean(item.externalTaskId || item.submitId || item.outputVideoPath || item.mediaPath)
       || /submitting|queued|submitted|running|generating|polling|success|returned|review/i.test(statusText);
   });
   if (!hasSubmittedVideo) return undefined;

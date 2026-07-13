@@ -86,6 +86,28 @@ The default changed from VIP to standard `seedance2.0`. An explicit VIP choice
 is reported as a cost warning. The client, runtime route, Agent capability, and
 preflight now share the standard model default.
 
+### Authorization-gate completion audit
+
+A second no-submit audit before the real run found three contract gaps that
+could have weakened packaged recovery or made the evidence misleading:
+
+1. The runtime queue persisted canonical `externalTaskId`, but the Seedance UI
+   action considered only legacy `submitId` or a synthesized `resumeCommand`
+   when deciding whether a cold-restored task could be queried.
+2. The shared Agent execution adapter extracted legacy `submitId`/`taskId` but
+   not a provider result containing only canonical `externalTaskId`, so the
+   fact-bound job ledger could lose the query identity.
+3. The one-shot `omni_reference` route correctly skipped storyboard-image
+   generation but the final submit report unconditionally claimed
+   `storyboardGenerated=true`.
+
+The minimal fixes make `externalTaskId` sufficient query evidence in the real
+chain preview, Seedance action, relay queue, Agent job ledger, receipt, and
+timeline path. The report now sets `storyboardGenerated` from the actual
+`hasStoryboardReference` decision. New tests first reproduced both failures,
+then proved an `externalTaskId`-only task remains queryable without resubmit and
+an omni-reference submit creates or claims no storyboard image.
+
 ## Credential boundary
 
 - The preflight checks only that `dreamina` is discoverable and that the local
@@ -113,10 +135,13 @@ proved cold recovery invoked the CLI once with:
 `query_result --submit_id=query-only-submit-001`
 
 The same test proved recovery did not invoke `multimodal2video`. Duplicate
-submit while a recoverable task is active remains blocked. The Agent execution
-ledger separately binds the running/query job to project id, project root,
-project fact hash, action id, confirmation receipt, job id, and external task
-id; stale facts cannot restore or query it.
+submit while a recoverable task is active remains blocked. UI restore now
+accepts `externalTaskId` without requiring a compatibility `submitId` or
+`resumeCommand`. The Agent execution adapter prefers canonical
+`externalTaskId`, including when it appears only on a relay item, before using
+legacy fields. Its ledger separately binds the running/query job to project id,
+project root, project fact hash, action id, confirmation receipt, job id, and
+external task id; stale facts cannot restore or query it.
 
 ## Offline lifecycle coverage
 
@@ -157,6 +182,10 @@ After submit:
 If no external task id is returned, the run stops as an unknown-submit failure
 and does not spend a second submission automatically.
 
+The exact remaining authorization can be given as:
+
+`授权本轮通过 packaged App 执行 1 次 provider-backed director text QA，并向 Seedance/Jimeng 提交 1 个 P6S01、5 秒、720p、标准 seedance2.0 视频；只提交一次，不自动重试，不生成额外故事板图片；拿到 externalTaskId 后只查询，返回结果保持 needs_review。`
+
 ## Verification
 
 Passed before the final phase gate:
@@ -196,10 +225,10 @@ Packaged artifact:
 
 - app: `release/mac-arm64/Vibe Director Studio.app`
 - archive: `release/mac-arm64/Vibe Director Studio.app/Contents/Resources/app.asar`
-- archive build time: `2026-07-14 05:02:14 +0800`
-- archive size: `7,355,367` bytes
+- archive build time: `2026-07-14 06:02:33 +0800`
+- archive size: `7,355,483` bytes
 - archive SHA-256:
-  `3bb4ec5d5b39c0f182a1ce71ce9f263facb515476b44f8d8fa1c4975cad7852d`
+  `32c589197a9d050dcfd83f24a93ee567179e809195522d99fe70ab51959f542f`
 - signature: local ad-hoc; notarization intentionally remains out of scope
 
 The rebuilt packaged runtime contains the canonical `externalTaskId` fields,

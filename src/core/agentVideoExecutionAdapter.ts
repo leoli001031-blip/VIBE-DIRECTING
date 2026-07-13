@@ -478,7 +478,11 @@ function externalTaskId(value: unknown) {
   const result = record(value);
   const relayQueue = record(result?.relayQueue);
   const firstRelayItem = array(relayQueue?.items).map(record).find(Boolean);
-  return text(result?.submitId) || text(result?.taskId) || text(firstRelayItem?.submitId);
+  return text(result?.externalTaskId)
+    || text(result?.submitId)
+    || text(result?.taskId)
+    || text(firstRelayItem?.externalTaskId)
+    || text(firstRelayItem?.submitId);
 }
 
 function resultError(value: unknown, fallback: string) {

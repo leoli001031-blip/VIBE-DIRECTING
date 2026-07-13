@@ -83,6 +83,7 @@ export type ProjectRealChainPreviewItem = {
   productionQaStatus?: string;
   blockers?: string[];
   videoStatus?: string;
+  externalTaskId?: string;
   submitId?: string;
   submit_id?: string;
   queueInfo?: Record<string, unknown>;

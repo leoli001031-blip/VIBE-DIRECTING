@@ -180,7 +180,7 @@ export function buildVideoRelayQueueState(input: BuildVideoRelayQueueStateInput)
     notes: [
       "Jimeng/Seedance is treated as a serial provider: maxConcurrentVideoJobs=1.",
       "Queue state should be persisted beside Project.vibe/runtime state before a packaged app auto-runner is enabled.",
-      "Use saved submitId/resumeCommand to recover queued jobs instead of resubmitting.",
+      "Use saved externalTaskId (or legacy submitId/resumeCommand) to query queued jobs instead of resubmitting.",
     ],
   };
 }

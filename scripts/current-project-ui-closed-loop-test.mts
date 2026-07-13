@@ -610,6 +610,7 @@ function assertCreatorPanelContract() {
   const p6RealImage2ActionSource = readText("src/ui/director/useP6RealImage2Action.ts");
   const image2AssetGenerationActionSource = readText("src/ui/director/useImage2AssetGenerationAction.ts");
   const projectImage2ActionsSource = readText("src/core/projectImage2Actions.ts");
+  const projectRealChainStatusSource = readText("src/core/projectRealChainStatus.ts");
   const currentProjectBindingClientSource = readText("src/core/projectCurrentBindingClient.ts");
   const viteConfigSource = readText("vite.config.ts");
   const projectAgentTimelineSource = readText("src/project/projectAgentTimeline.ts");
@@ -1071,8 +1072,10 @@ function assertCreatorPanelContract() {
   assert(/recoveryTargetShotIds/.test(seedanceSubmitActionSource), "Seedance action state should expose blocked shot ids for recovery");
   assert(/recoveryTargetShotIds:\s*effectiveActionState\.recoveryTargetShotIds/.test(seedanceSubmitActionSource), "Seedance action view should return blocked shot ids to the Agent panel");
   assert(/state\.summary\?\.relayQueue[\s\S]*state as ProjectRealChainUiState & \{ relayQueue\?: ProjectSeedanceSubmitResult\["relayQueue"\] \}[\s\S]*\.relayQueue/.test(seedanceSubmitActionSource), "Seedance action state should read persisted relay queues from both summary and top-level runtime status");
+  assert(/function relayQueueCanResume[\s\S]*item\.externalTaskId[\s\S]*function resultCanResume[\s\S]*result\.externalTaskId/.test(seedanceSubmitActionSource), "Seedance restore must treat the canonical externalTaskId as sufficient query evidence without requiring a legacy submitId or synthesized resume command");
   assert(/function\s+realChainStillNeedsReview[\s\S]*needsReviewCount[\s\S]*reviewOverlayShots[\s\S]*returned_with_review_overlay[\s\S]*relayQueue\.status === "complete"[\s\S]*!realChainStillNeedsReview\(state\)[\s\S]*suggestedActionLabel:\s*"查看交付"/.test(seedanceSubmitActionSource), "Seedance action state must stop showing completed approved queues as pending review");
-  assert(/function previewItemHasVideoEvidence[\s\S]*item\.videoStatus[\s\S]*item\.submitId[\s\S]*item\.outputVideoPath[\s\S]*isVideoMediaPath\(item\.mediaPath\)[\s\S]*previewItems \|\| \[\]\)\.filter\(previewItemHasVideoEvidence\)/.test(seedanceSubmitActionSource), "Seedance restore must not classify a reviewable Image2 image hold as a returned video");
+  assert(/function previewItemHasVideoEvidence[\s\S]*item\.videoStatus[\s\S]*item\.externalTaskId[\s\S]*item\.submitId[\s\S]*item\.outputVideoPath[\s\S]*isVideoMediaPath\(item\.mediaPath\)[\s\S]*previewItems \|\| \[\]\)\.filter\(previewItemHasVideoEvidence\)/.test(seedanceSubmitActionSource), "Seedance restore must recognize canonical video task evidence without classifying a reviewable Image2 image hold as a returned video");
+  assert(/externalTaskId\?:\s*string/.test(projectRealChainStatusSource), "Project real-chain preview items must preserve the canonical external video task id across restore");
   assert(/item\.kind !== "video_clip" && item\.kind !== "image_hold"/.test(minimalPreviewSource), "Preview review decisions must support hash-bound image holds as well as returned videos");
   assert(/actionState\.status === "running" \|\| actionState\.status === "blocked" \|\| actionState\.canResume/.test(seedanceSubmitActionSource), "Seedance action state must keep local QA blockers visible instead of being overwritten by an idle persisted queue");
   assert(/消息里建议补参考，不会提交视频/.test(agentPanelSource), "Agent Panel should explain blocker recovery without implying video submission");

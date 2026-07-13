@@ -260,7 +260,7 @@ const runningVideo = await runAgentVideoExecution({
   },
   execute: () => {
     runningSubmitCalls += 1;
-    return { status: "submitted", providerCalled: true, submitId: "mock-submit-p3" };
+    return { status: "submitted", providerCalled: true, externalTaskId: "mock-submit-p3" };
   },
   onLedgerSnapshot: persistLedgerSnapshot,
 });

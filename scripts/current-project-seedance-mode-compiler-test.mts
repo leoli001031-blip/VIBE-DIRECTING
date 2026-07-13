@@ -349,6 +349,77 @@ assert(defaultSeedanceManifest.videoResolution === "720p", "real-test standard s
 assert(defaultSeedanceManifest.submitPolicy?.representativeSegmentsSubmittedThisRequest === 1, "default standard lane should document representative-only real submits");
 assert(defaultSeedanceResponse.relayQueue?.items?.some((item: { modelVersion: string }) => item.modelVersion === JIMENG_CLI_DEFAULT_MODEL_VERSION), "relay queue should persist the standard model version");
 
+const omniRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-omni";
+const omniRunRootPath = path.resolve(repoRoot, omniRunRootRelativePath);
+rmSync(omniRunRootPath, { recursive: true, force: true });
+mkdirSync(omniRunRootPath, { recursive: true });
+for (const assetName of ["scene", "character", "prop"]) {
+  writeFile(path.join(omniRunRootPath, `assets/${assetName}.png`), tinyPng);
+}
+const omniSource = {
+  runRootPath: omniRunRootPath,
+  runRootRelativePath: omniRunRootRelativePath,
+  projectVibePath: path.join(omniRunRootPath, "project/project.vibe"),
+  projectVibeRelativePath: `${omniRunRootRelativePath}/project/project.vibe`,
+  previewPlanPath: path.join(omniRunRootPath, "reports/preview_plan.json"),
+  previewPlanRelativePath: `${omniRunRootRelativePath}/reports/preview_plan.json`,
+};
+const omniRoute = createSeedanceTestRoute({
+  readProjectFacts: () => ({
+    projectVibe: {
+      shots: [{
+        id: "P6S01",
+        title: "纸飞机亮起",
+        durationSeconds: 5,
+        executionMode: "action_insert",
+        referenceStrategy: "omni_reference",
+        rhythmProfile: "anime_emotion",
+        intent: "雨夜便利店门口，女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。",
+        camera: "中景轻推到纸飞机发光的手部特写。",
+        primaryAction: "女孩递出纸飞机，纸飞机亮起。",
+        sceneAssetIds: ["scene_store"],
+        characterAssetIds: ["char_girl"],
+        propAssetIds: ["prop_plane"],
+        characterGuidance: ["女孩", "机器人保安"],
+        sceneGuidance: ["雨夜便利店门口"],
+        propGuidance: ["发光纸飞机"],
+      }],
+    },
+  }),
+  currentProjectWorkbenchFacts: () => ({
+    visualMemory: {
+      assets: [
+        { type: "scene", id: "scene_store", name: "雨夜便利店门口", path: `${omniRunRootRelativePath}/assets/scene.png` },
+        { type: "character", id: "char_girl", name: "女孩和机器人保安", path: `${omniRunRootRelativePath}/assets/character.png` },
+        { type: "prop", id: "prop_plane", name: "发光纸飞机", path: `${omniRunRootRelativePath}/assets/prop.png` },
+      ],
+    },
+  }),
+});
+const omniResponse = await omniRoute.currentProjectSeedanceSubmitResponse({
+  confirmation: {
+    confirmed: true,
+    phrase: "submit-seedance-video",
+    receiptId: "receipt_omni_seedance_test",
+    confirmedAt: "2026-05-23T00:00:01.500Z",
+  },
+  modelVersion: "seedance2.0",
+  videoResolution: "720p",
+  ratio: "16:9",
+  durationSeconds: 5,
+  pollSeconds: 30,
+  selectedShotIds: ["P6S01"],
+  providerId: APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID,
+  agentTaskEnvelope,
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, omniSource);
+assert(omniResponse.ok === true, `omni-reference mock submit should pass: ${JSON.stringify(omniResponse)}`);
+assert(omniResponse.compilerMode === "omni_reference", "single-shot P6 lane should compile to omni_reference");
+assert(omniResponse.storyboardGenerated === false, "omni_reference must not claim that an omitted storyboard image was generated");
+assert(!omniResponse.storyboardReferencePath && !omniResponse.storyboardPromptPath, "omni_reference must not expose storyboard image or prompt artifacts");
+assert(!existsSync(path.resolve(repoRoot, omniResponse.outputRoot, "inputs/storyboard_reference.png")), "omni_reference must not write a storyboard image file");
+
 const timeoutRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-submit-timeout";
 const timeoutRunRootPath = path.resolve(repoRoot, timeoutRunRootRelativePath);
 rmSync(timeoutRunRootPath, { recursive: true, force: true });
