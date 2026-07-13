@@ -606,6 +606,7 @@ export function DirectorMode({
     status: "idle" | "running" | "blocked" | "needs_review" | "verified";
     message?: string;
     disabled?: boolean;
+    reviewableOutput?: boolean;
   };
   endFrameAction?: {
     keyConfigured: boolean;

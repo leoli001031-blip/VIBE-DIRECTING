@@ -227,6 +227,7 @@
     "prototype-ui:test": "tsx scripts/prototype-ui-contract-test.mts",
     "p3-image2-small-batch-preview:test": "tsx scripts/p3-image2-small-batch-preview-test.mts",
     "p6-real-image2:test": "tsx scripts/p6-real-image2-closed-loop-test.mts",
+    "p6-real-image2:preflight-safety-test": "tsx scripts/p6-real-image2-preflight-safety-test.mts",
     "p6-real-image2:retry-harness-test": "tsx scripts/p6-real-image2-retry-harness-test.mts",
     "p6-real-image2:app-action-test": "tsx scripts/current-project-p6-real-image2-app-action-test.mts",
     "p6-real-image2:serial-batch-test": "tsx scripts/current-project-p6-real-image2-serial-batch-test.mts",

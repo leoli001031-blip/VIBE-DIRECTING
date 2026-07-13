@@ -14,11 +14,15 @@ export {
 } from "./projectImage2Endpoints";
 
 export {
+  approveProjectImage2OneShotUiState,
   deriveProjectImage2BatchPlanStatus,
   deriveProjectImage2OneShotStatus,
   guardProjectImage2BatchUiStateForCurrentProject,
   guardProjectImage2OneShotUiStateForCurrentProject,
+  reconcileProjectImage2OneShotUiState,
 } from "./projectImage2Derive";
+
+export type { ProjectImage2OneShotReviewEvidence } from "./projectImage2Derive";
 
 export {
   confirmProjectImage2OneShot,

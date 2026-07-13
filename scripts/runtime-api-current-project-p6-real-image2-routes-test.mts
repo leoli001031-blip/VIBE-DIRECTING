@@ -47,6 +47,7 @@ function createFixture(overrides = {}) {
     sha256Bytes: () => "",
     writeOneShotExecutorBytes: () => "",
     writeOneShotExecutorJson: () => {},
+    claimOneShotExecutorJson: () => true,
     running: () => false,
   });
   return { api, calls };

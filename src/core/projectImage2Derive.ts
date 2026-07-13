@@ -47,6 +47,77 @@ export function guardProjectImage2OneShotUiStateForCurrentProject(
   };
 }
 
+export type ProjectImage2OneShotReviewEvidence = {
+  shotId?: string;
+  sourceReceiptId?: string;
+  outputHash?: string;
+};
+
+function oneShotHasReturnedOutput(state: ProjectImage2OneShotUiState) {
+  return state.summary?.outputExists === true
+    && Boolean(state.summary.imageUrl && state.summary.outputSha256);
+}
+
+function oneShotOutputMatches(
+  left: ProjectImage2OneShotUiState,
+  right: ProjectImage2OneShotUiState,
+) {
+  const leftSummary = left.summary;
+  const rightSummary = right.summary;
+  return Boolean(
+    leftSummary?.selectedShotId
+      && leftSummary.selectedShotId === rightSummary?.selectedShotId
+      && leftSummary.expectedOutputPath
+      && leftSummary.expectedOutputPath === rightSummary.expectedOutputPath
+      && leftSummary.outputSha256
+      && leftSummary.outputSha256 === rightSummary.outputSha256,
+  );
+}
+
+export function approveProjectImage2OneShotUiState(
+  state: ProjectImage2OneShotUiState,
+  evidence: ProjectImage2OneShotReviewEvidence,
+): ProjectImage2OneShotUiState {
+  const summary = state.summary;
+  const sourceReceiptId = summary?.sourceReceiptId
+    || summary?.receipt?.receiptId
+    || summary?.submitPermissionReceipt?.receiptId
+    || summary?.providerRequestId;
+  const evidenceMatches = state.status === "needs_review"
+    && oneShotHasReturnedOutput(state)
+    && evidence.shotId === summary?.selectedShotId
+    && evidence.sourceReceiptId === sourceReceiptId
+    && evidence.outputHash === summary?.outputSha256;
+  if (!summary || !evidenceMatches) return state;
+  return {
+    ...state,
+    status: "verified",
+    message: "画面已通过复核。",
+    summary: {
+      ...summary,
+      uiStatus: "verified",
+      userLabel: "已验证",
+      reviewRequired: false,
+      formalPromotionBlocked: true,
+      formalPromotionBlockedReason: "锁定为视觉记忆或正式素材前仍需明确授权。",
+      formalPromotionBlockedReasons: ["锁定为视觉记忆或正式素材前仍需明确授权。"],
+      message: "画面已通过复核。",
+    },
+  };
+}
+
+export function reconcileProjectImage2OneShotUiState(
+  current: ProjectImage2OneShotUiState,
+  next: ProjectImage2OneShotUiState,
+): ProjectImage2OneShotUiState {
+  const currentHasOutput = oneShotHasReturnedOutput(current);
+  const nextIsEmptyShotStatus = next.status === "unavailable"
+    && next.message === "选择镜头后可准备小样包。";
+  if (currentHasOutput && nextIsEmptyShotStatus) return current;
+  if (current.status === "verified" && oneShotOutputMatches(current, next)) return current;
+  return next;
+}
+
 function image2BatchPayloadFromUnknown(payload: unknown): ProjectImage2BatchPayload | undefined {
   if (!isRecord(payload)) return undefined;
   if (payload.projectionKind === "current_project_image2_batch_prepare_plan" || Array.isArray(payload.items)) {
@@ -298,10 +369,18 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     uiStatus: rawStatus,
     projectId: project.projectId || report.projectId,
     projectRoot: project.projectRoot || report.projectRoot,
+    projectFactHash: report.projectFactHash,
+    actionId: report.actionId,
     selectedShotId: report.selectedShotId,
-    expectedOutputPath: report.expectedOutputPath,
+    selectedShotIds: report.selectedShotIds,
+    expectedOutputPath: report.expectedOutputPath || report.outputPath,
+    expectedOutputs: report.expectedOutputs,
     promptPath: report.promptPath,
     promptText: report.promptText,
+    promptSha256: report.promptSha256,
+    providerId: report.providerId,
+    providerSlot: report.providerSlot,
+    requiredMode: report.requiredMode,
     providerObservationPath: report.providerObservationPath,
     semanticQaPath: report.semanticQaPath,
     triggerPlanPath: report.triggerPlanPath,
@@ -310,6 +389,7 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     submitPermissionReceiptRequested: report.submitPermissionReceiptRequested === true || Boolean(permissionReceipt),
     submitPermissionReceiptPresent: persistedPermissionPresent ?? Boolean(permissionReceipt),
     submitPermissionReceiptStatePath: permissionStatePath,
+    submitPermissionReceiptClaimStatePath: stringOrUndefined(report.submitPermissionReceiptClaimStatePath),
     submitPermissionReceipt: permissionReceipt,
     permissionBlockers,
     credentialRef,
@@ -321,6 +401,9 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     actualImage2Triggered: report.actualImage2Triggered === true,
     providerReturnIngested: report.providerReturnIngested === true,
     providerRequestId: report.providerRequestId,
+    sourceReceiptId: report.sourceReceiptId,
+    reviewReceiptId: report.reviewReceiptId,
+    reviewRecoveredFromProjectVibe: report.reviewRecoveredFromProjectVibe === true,
     outputSha256: report.outputSha256,
     hashBoundActual: report.hashBoundActual === true,
     providerObservationMode: report.providerObservationMode || "not_observed",

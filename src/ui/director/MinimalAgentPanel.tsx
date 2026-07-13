@@ -1807,8 +1807,8 @@ function minimalAgentReferenceReviewMessageIsStale(message: MinimalAgentMessage,
   return /复核|需要复核|等你复核|去参考页复核|参考待复核/.test(text) && !/参考可用/.test(text);
 }
 
-function minimalAgentReferenceReviewMessageIsPremature(message: MinimalAgentMessage, referenceHasReviewableAssets: boolean) {
-  if (referenceHasReviewableAssets || message.role === "user") return false;
+function minimalAgentReferenceReviewMessageIsPremature(message: MinimalAgentMessage, referenceHasReviewableOutput: boolean) {
+  if (referenceHasReviewableOutput || message.role === "user") return false;
   const text = minimalAgentMessageSearchText(message);
   return /参考已生成|参考图已经回到参考页|\d+\s*项参考需要复核|去参考页复核|等你复核/.test(text)
     && !/参考可用/.test(text);
@@ -2660,8 +2660,8 @@ function buildDirectProductActionTimelineEntry(input: {
   };
 }
 
-function agentActionLogItemIsPrematureReferenceReview(item: AgentActionLogItem, referenceHasReviewableAssets: boolean) {
-  if (referenceHasReviewableAssets) return false;
+function agentActionLogItemIsPrematureReferenceReview(item: AgentActionLogItem, referenceHasReviewableOutput: boolean) {
+  if (referenceHasReviewableOutput) return false;
   const text = [
     item.title,
     item.result,
@@ -4631,6 +4631,7 @@ function agentCurrentTaskConfirmationMessage(
 function agentCurrentTaskEffectLabel(projection: AgentCurrentTaskProjection) {
   if (projection.step === "draft_story") return "整理创作意图，不启动生成";
   if (projection.step === "confirm_story") return "保存当前故事并推进项目状态";
+  if (projection.step === "prepare_references" && !projection.requiresConfirmation && projection.effect === "none") return "检查生成结果并决定是否采用";
   if (projection.effect === "state_only") return "只更新项目位置与绑定状态";
   if (projection.effect === "generation_job") return "建立这一步的受控任务与回执";
   if (projection.effect === "local_export") return "只写入本地交付资料包";
@@ -4656,6 +4657,7 @@ function agentCurrentTaskTone(projection: AgentCurrentTaskProjection) {
 }
 
 function agentCurrentTaskStatusLabel(projection: AgentCurrentTaskProjection) {
+  if (projection.step === "prepare_references" && !projection.requiresConfirmation && projection.effect === "none") return "等待复核";
   const tone = agentCurrentTaskTone(projection);
   if (tone === "blocked") return "需要处理";
   if (tone === "running") return "处理中";
@@ -4858,6 +4860,7 @@ export function MinimalAgentPanel({
     status: "idle" | "running" | "blocked" | "needs_review" | "verified";
     message?: string;
     disabled?: boolean;
+    reviewableOutput?: boolean;
   };
   endFrameAction?: {
     keyConfigured: boolean;
@@ -5991,8 +5994,10 @@ export function MinimalAgentPanel({
   const referenceLockedCount = runtimeState.visualMemory.summary.locked;
   const referenceReviewCount = runtimeState.visualMemory.summary.needsReview;
   const referenceDisplayableCount = runtimeState.visualMemory.assets.filter(minimalAgentAssetHasDisplayableReference).length;
-  const referenceNeedsReview = referenceReviewCount > 0;
-  const referenceHasReviewableAssets = referenceNeedsReview && referenceDisplayableCount > 0;
+  const referenceReviewableCount = Math.max(referenceReviewCount, realSampleAction?.reviewableOutput ? 1 : 0);
+  const referenceNeedsReview = referenceReviewableCount > 0;
+  const referenceHasReviewableOutput = (referenceReviewCount > 0 && referenceDisplayableCount > 0)
+    || realSampleAction?.reviewableOutput === true;
   const referencesReadyAfterReview = referenceLockedCount > 0 && referenceDisplayableCount > 0 && referenceMissingCount === 0 && !referenceNeedsReview;
   const agentReadinessTimelineEntries = mergeVibeAgentTimelineEntries(
     mergeVibeAgentTimelineEntries(visibleAgentTimelineEntries, agentTimelineEntries),
@@ -6021,12 +6026,16 @@ export function MinimalAgentPanel({
     agentGenerationProjectIdentity,
   );
   const referenceMissingCountForAgent = referenceExecutionSatisfiedForAgent ? 0 : referenceMissingCount;
-  const referenceReviewCountForAgent = referencesUsableForAgent ? 0 : referenceReviewCount;
+  const referenceReviewCountForAgent = referenceHasReviewableOutput
+    ? referenceReviewableCount
+    : referencesUsableForAgent
+      ? 0
+      : referenceReviewableCount;
   const referenceReadyCountForAgent = referencesUsableForAgent ? Math.max(referenceLockedCount, 1) : referenceLockedCount;
   const videoSubmittedForAgent = Boolean(videoAlreadySent || videoBusy || videoCanResume || timelineShowsVideoReady || timelineHasVideoValidation);
   const realSampleLabel = realSampleBusy
     ? "生成中"
-    : referenceHasReviewableAssets
+    : referenceHasReviewableOutput
       ? "等待复核"
     : referenceGenerationBlockedByProject
       ? "选择保存位置"
@@ -6127,7 +6136,7 @@ export function MinimalAgentPanel({
   const displayedCompactScopeLabel = compactAgentScopeLabel(displayedScopeLabel);
   const displayedCompactSelectionHint = compactAgentSelectionHint(displayedSelectionHint);
   const visibleAgentActionLog = agentActionLog.filter((item) =>
-    !agentActionLogItemIsPrematureReferenceReview(item, referenceHasReviewableAssets)
+    !agentActionLogItemIsPrematureReferenceReview(item, referenceHasReviewableOutput)
   );
   const standaloneAgentActionLogAllowed = visibleAgentActionLog.length > 0 && !videoResultIsPrimary && !exportResultIsPrimary;
 
@@ -7531,18 +7540,18 @@ export function MinimalAgentPanel({
     const timelineShowsReferenceReview = agentTimelineEntries.some((entry) =>
       entry.toolName === "generate_references" && /复核/.test(`${entry.title} ${entry.body}`),
     );
-    const visibleReferenceStatus = realSampleAction?.status === "needs_review" && !referenceHasReviewableAssets
+    const visibleReferenceStatus = realSampleAction?.status === "needs_review" && !referenceHasReviewableOutput
       ? undefined
       : realSampleAction?.status === "verified" && referenceDisplayableCount === 0
         ? "running"
         : realSampleAction?.status;
-    const projectedReferenceStatus = referenceHasReviewableAssets
+    const projectedReferenceStatus = referenceHasReviewableOutput
       ? "needs_review"
       : referencesReadyAfterReview && timelineShowsReferenceReview
         ? "verified"
         : visibleReferenceStatus;
-    const projectedReferenceMessage = referenceHasReviewableAssets
-      ? `${referenceReviewCount} 项参考需要复核。`
+    const projectedReferenceMessage = referenceHasReviewableOutput
+      ? `${referenceReviewableCount} 项参考需要复核。`
       : referencesReadyAfterReview && timelineShowsReferenceReview
         ? "参考可用，下一步可以发送视频。"
       : realSampleAction?.status === "verified" && referenceDisplayableCount === 0
@@ -7581,9 +7590,9 @@ export function MinimalAgentPanel({
     realSampleAction?.status,
     referenceDisplayableCount,
     referenceLockedCount,
-    referenceHasReviewableAssets,
+    referenceHasReviewableOutput,
     referenceNeedsReview,
-    referenceReviewCount,
+    referenceReviewableCount,
     referencesReadyAfterReview,
     projectFactHash,
   ]);
@@ -8047,7 +8056,7 @@ export function MinimalAgentPanel({
   const hasPreparedComposerInput = Boolean(preparedContext?.userIntent?.trim() || hasComposerInput);
   const canPreviewPrototypeDemo = Boolean(workflow && onPreviewPrototypeAgentDemo && hasPreparedComposerInput && !canConfirmFeedback && !readOnlyStatusInspection);
   const canOfferFooterDirectAction = !hasComposerInput && !isPreparingPlan && (!workflow || planPhase === "confirmed");
-  const hasReferenceItemsToReview = referenceHasReviewableAssets;
+  const hasReferenceItemsToReview = referenceHasReviewableOutput;
   const referenceReviewFooterAction = hasReferenceItemsToReview
     ? {
         label: "去参考复核",
@@ -8238,9 +8247,9 @@ export function MinimalAgentPanel({
     : footerDirectActionBoundaryFor(footerDirectAction);
   const stateAwareAgentTimelineEntries = useMemo(
     () => visibleAgentTimelineEntries.filter((entry) =>
-      !minimalAgentReferenceReviewMessageIsPremature(minimalAgentMessageFromTimelineEntry(entry), referenceHasReviewableAssets)
+      !minimalAgentReferenceReviewMessageIsPremature(minimalAgentMessageFromTimelineEntry(entry), referenceHasReviewableOutput)
     ),
-    [visibleAgentTimelineEntries, referenceHasReviewableAssets],
+    [visibleAgentTimelineEntries, referenceHasReviewableOutput],
   );
   const agentTimelineStatusView = useMemo(
     () => buildVibeAgentTimelineStatusView(stateAwareAgentTimelineEntries),
@@ -8753,6 +8762,7 @@ export function MinimalAgentPanel({
       currentProjectRoot: localProjectReadyForTools ? runtimeState.project.root : undefined,
       currentProjectFactHash: projectFactHash,
       completedSteps: agentCurrentTaskCompletedSteps,
+      referenceReviewCount: referenceReviewCountForAgent,
       facts: projectStatusView?.facts,
     }),
     [
@@ -8773,6 +8783,7 @@ export function MinimalAgentPanel({
       newVideoDraftShotCountForAgent,
       projectStatusView,
       projectFactHash,
+      referenceReviewCountForAgent,
       runtimeState.project.root,
       runtimeState.sourceIndex.projectId,
       restoredAgentStagedPlanDraft,
@@ -9803,7 +9814,7 @@ export function MinimalAgentPanel({
     : agentCommandKind === "generate_references" || agentCommandKind === "submit_video" || agentCommandKind === "resume_video"
       ? agentCommand?.label || "按需展开"
       : "按需查看";
-  const realSampleDetailNeedsReview = referenceHasReviewableAssets || agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
+  const realSampleDetailNeedsReview = referenceHasReviewableOutput || agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
   const showRealSampleDetailButton = realSampleDetailNeedsReview || !referenceGenerationBlockedByProject;
   const emptyStartStatusReplyActive = projectStatusView?.stage === "准备开始"
     && projectStatusView.doing === "AI 会先整理故事和镜头"
@@ -10263,7 +10274,7 @@ export function MinimalAgentPanel({
     !minimalAgentReferenceReviewMessageIsStale(message, threadReferencesUsableForAgent)
     && !(projectStoryAlreadyCommittedForDraftConfirmation && minimalAgentMessageIsNewVideoDraftConfirmation(message))
     && !(composerCurrentTurnPreviewActive && minimalAgentMessageIsPassiveProjectReadyState(message))
-    && !minimalAgentReferenceReviewMessageIsPremature(message, referenceHasReviewableAssets)
+    && !minimalAgentReferenceReviewMessageIsPremature(message, referenceHasReviewableOutput)
     && !minimalAgentReferenceGenerationConfirmationIsStale(fullAgentThreadMessages, message, threadReferencesUsableForAgent, restoredReferenceGenerationActionId)
     && !minimalAgentReferenceCompletionMessageIsStale(message, threadReferencesUsableForAgent)
     && !minimalAgentReferenceBlockedMessageIsStale(fullAgentThreadMessages, message)
@@ -11652,8 +11663,8 @@ export function MinimalAgentPanel({
                 <span>参考图</span>
                 <strong>{realSampleLabel}</strong>
                 <small>{
-                  referenceHasReviewableAssets
-                    ? `${referenceReviewCount} 项参考等你复核。`
+                  referenceHasReviewableOutput
+                    ? `${referenceReviewableCount} 项参考等你复核。`
                   : referenceGenerationBlockedByContract
                     ? agentVideoPermissionDisplayDetail(currentVideoPermissionContract)
                     : referenceGenerationBlockedByProject

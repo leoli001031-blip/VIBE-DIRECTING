@@ -17,10 +17,6 @@ function writeText(filePath, text) {
   writeFileSync(filePath, text, "utf8");
 }
 
-function repoPath(relativePath) {
-  return path.resolve(process.cwd(), relativePath);
-}
-
 function waitForServer(child) {
   return new Promise((resolve, reject) => {
     let stdout = "";
@@ -181,6 +177,7 @@ function serialShot(permissionPayload, status, index) {
     mockProviderResult: { status },
     confirmation: {
       receiptId: `confirm_serial_${index}`,
+      actionId: permissionPayload.receipt.actionId,
       confirmedAt: new Date(Date.now() + index).toISOString(),
       phrase: "submit-p6-image2",
       confirmed: true,
@@ -236,6 +233,8 @@ try {
   assert(submitted.payload.summary?.needsReview === 1, "serial batch should count one needs_review shot");
   assert(submitted.payload.summary?.missing === 1, "serial batch should count one missing shot");
   assert(submitted.payload.summary?.promotionAllowed === false, "serial batch must not promote by default");
+  assert(submitted.payload.providerCalled === false, "mock serial test must not claim a real provider call");
+  assert(submitted.payload.providerCallCount === 0, "mock serial test must record zero provider calls");
   assert(submitted.payload.runtimeProviderSubmitAttempted === false, "mock serial test must not attempt live provider submit");
   assert(submitted.payload.runtimeExternalNetworkCallMade === false, "mock serial test must not make external network calls");
   assert(JSON.stringify(submitted.payload).includes("fake-p6-serial-test-key") === false, "serial payload must not include raw key material");
@@ -244,9 +243,9 @@ try {
   assert(byShot.get("P6S01")?.status === "verified", "P6S01 should become verified from mock success");
   assert(byShot.get("P6S02")?.status === "needs_review", "P6S02 should stay needs_review");
   assert(byShot.get("P6S03")?.status === "missing", "P6S03 should become missing placeholder");
-  assert(existsSync(repoPath(byShot.get("P6S01")?.outputPath)), "verified mock output should be written");
-  assert(existsSync(repoPath(byShot.get("P6S02")?.outputPath)), "needs_review mock output should be written");
-  assert(statSync(repoPath(byShot.get("P6S01")?.outputPath)).size > 0, "verified mock output should not be empty");
+  assert(existsSync(byShot.get("P6S01")?.outputFilePath), "verified mock output should be written");
+  assert(existsSync(byShot.get("P6S02")?.outputFilePath), "needs_review mock output should be written");
+  assert(statSync(byShot.get("P6S01")?.outputFilePath).size > 0, "verified mock output should not be empty");
   assert(byShot.get("P6S03")?.p6Ingest?.summary?.missing === 1, "missing shot should carry missing return ingest");
 
   console.log(`current-project-p6-real-image2-serial-batch-test: ok ${fixtureRoot}`);

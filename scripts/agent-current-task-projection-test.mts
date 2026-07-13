@@ -256,6 +256,42 @@ assert(startReferenceProjection.step === "prepare_references", "start-reference 
 assert(startReferenceProjection.step !== "submit_video" && startReferenceProjection.step !== "export", "start-reference must not jump to video or export");
 assert(startReferenceProjection.requiresConfirmation, "start-reference must preserve the confirmation boundary");
 
+const referenceReviewProjection = buildAgentCurrentTaskProjection({
+  projectObservation: missingReferencesObservation,
+  pipelinePlan: missingReferencesPlan,
+  referenceReviewCount: 1,
+  currentProjectId: "project-current",
+  currentProjectRoot: "/tmp/project-current",
+  currentProjectFactHash: "facts-current",
+  timelineConfirmations: [{
+    confirmationId: "stale_reference_generation_confirmation",
+    step: "prepare_references",
+    status: "waiting",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
+    projectFactHash: "facts-current",
+    createdAt: "2026-07-07T00:00:03.000Z",
+    label: "补参考",
+  }],
+  restoredStagedPlan: {
+    status: "restored",
+    step: "prepare_references",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
+    projectFactHash: "facts-current",
+    confirmationId: "stale_reference_generation_confirmation",
+    createdAt: "2026-07-07T00:00:02.000Z",
+    label: "补参考",
+  },
+});
+assert(referenceReviewProjection.step === "prepare_references", "a returned reference should remain in the reference stage for review");
+assert(referenceReviewProjection.label === "复核参考", "a returned reference should make review the current task");
+assert(referenceReviewProjection.source === "project_observation", "reference review should be driven by structured current output state");
+assert(!referenceReviewProjection.requiresConfirmation, "reviewing an existing output must not ask to generate it again");
+assert(referenceReviewProjection.effect === "none", "reference review must not claim a generation effect");
+assert(!referenceReviewProjection.confirmationId, "a stale reference-generation confirmation must not own the review task");
+assert(factValue(referenceReviewProjection.facts, "待复核") === "1 项", "reference review should expose the structured review count");
+
 const saveLocationRoute = route({
   text: "选择保存位置",
   hasSelection: false,

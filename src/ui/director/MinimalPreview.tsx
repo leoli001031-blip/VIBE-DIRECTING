@@ -105,7 +105,7 @@ function text(value: unknown) {
 }
 
 function previewReviewTarget(item: DisplayItem | undefined, label: string): CreatorReviewTrayItem | undefined {
-  if (!item || item.kind !== "video_clip" || !item.mediaPath || !previewNeedsReview(item)) return undefined;
+  if (!item || (item.kind !== "video_clip" && item.kind !== "image_hold") || !item.mediaPath || !previewNeedsReview(item)) return undefined;
   const sourceReceiptId = text(item.sourceReceiptId) || text(item.providerReceiptId) || text(item.providerRequestId);
   const outputHash = text(item.outputHash) || text(item.outputSha256);
   if (!sourceReceiptId || !outputHash) return undefined;
@@ -113,7 +113,7 @@ function previewReviewTarget(item: DisplayItem | undefined, label: string): Crea
     id: item.id,
     shotId: item.shotId,
     label,
-    detail: "视频结果已出",
+    detail: item.kind === "video_clip" ? "视频结果已出" : "参考画面已生成",
     status: "needs_review",
     mediaPath: item.mediaPath,
     sourceReceiptId,

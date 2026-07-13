@@ -162,7 +162,11 @@ import {
   type ProjectRealChainUiState,
   type ProjectWorkbenchStoryShotFact,
 } from "./core/projectCurrentRuntimeClient";
-import { submitCurrentProjectReviewDecision } from "./core/projectReviewDecisionClient";
+import {
+  projectRelativeReviewMediaPath,
+  submitCurrentProjectReviewDecision,
+} from "./core/projectReviewDecisionClient";
+import { approveProjectImage2OneShotUiState } from "./core/projectImage2Client";
 import { markCurrentProjectAssetStatus } from "./core/projectAssetStatusClient";
 import { saveCurrentProjectVibeToRuntime } from "./core/projectCurrentBindingClient";
 import {
@@ -235,6 +239,7 @@ import { buildCreatorDeskProjection } from "./ui/app/creatorDeskProjection";
 import { useCurrentProjectRuntimePanels } from "./ui/app/useCurrentProjectRuntimePanels";
 import { useImage2AssetGenerationAction } from "./ui/director/useImage2AssetGenerationAction";
 import { useImage2EndFrameAction } from "./ui/director/useImage2EndFrameAction";
+import { useP6RealImage2Action } from "./ui/director/useP6RealImage2Action";
 import { useSeedanceVideoSubmitAction } from "./ui/director/useSeedanceVideoSubmitAction";
 import { AppOverview } from "./ui/common/AppOverview";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
@@ -388,34 +393,6 @@ function isBrowserDraftProjectRoot(projectRoot?: string) {
   return normalized === ".vibe-runtime/browser-projects"
     || normalized.startsWith(".vibe-runtime/browser-projects/")
     || normalized.includes("/.vibe-runtime/browser-projects/");
-}
-
-function projectRelativeReviewMediaPath(mediaPath: string | undefined, projectRoot?: string) {
-  let candidate = mediaPath?.trim().replace(/\\/g, "/") || "";
-  if (!candidate) return undefined;
-  try {
-    const parsed = new URL(candidate);
-    if (parsed.pathname.endsWith("/api/runtime/files")) {
-      candidate = parsed.searchParams.get("path")?.trim().replace(/\\/g, "/") || candidate;
-    }
-  } catch {
-    // Plain project paths are expected here.
-  }
-  const root = projectRoot?.trim().replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "") || "";
-  const normalizedCandidate = candidate
-    .replace(/^file:\/+/, "")
-    .replace(/^\.?\//, "")
-    .replace(/\/+/g, "/");
-  if (root && normalizedCandidate.startsWith(`${root}/`)) {
-    return normalizedCandidate.slice(root.length + 1) || undefined;
-  }
-  const rootIndex = root ? normalizedCandidate.indexOf(`/${root}/`) : -1;
-  if (rootIndex >= 0) {
-    return normalizedCandidate.slice(rootIndex + root.length + 2) || undefined;
-  }
-  return normalizedCandidate && !normalizedCandidate.startsWith("/") && !normalizedCandidate.includes("../")
-    ? normalizedCandidate
-    : undefined;
 }
 
 function projectDraftRecordLabel(target: ProjectVibeDraftTarget, mode?: string) {
@@ -2874,9 +2851,11 @@ function App() {
     },
     projectId: effectiveRuntimeProjectIdentity?.projectId,
     projectRoot: effectiveRuntimeProjectIdentity?.projectRoot,
+    oneShot: projectImage2OneShotState.summary,
   }), [
     effectiveRuntimeProjectIdentity?.projectId,
     effectiveRuntimeProjectIdentity?.projectRoot,
+    projectImage2OneShotState.summary,
     projectRealChainRelayQueue,
     projectRealChainState.summary,
     workbenchRuntimeState.storyFlow.shots,
@@ -4325,8 +4304,15 @@ function App() {
     }
     const reviewMediaPath = projectRelativeReviewMediaPath(
       item.mediaPath,
-      prototypeProjectDraftTarget.projectRoot || effectiveRuntimeProjectIdentity?.projectRoot,
+      effectiveRuntimeProjectIdentity?.projectRoot || prototypeProjectDraftTarget.projectRoot,
     );
+    const approvedOneShotState = mode === "approve"
+      ? approveProjectImage2OneShotUiState(projectImage2OneShotState, {
+          shotId: item.shotId,
+          sourceReceiptId: item.sourceReceiptId,
+          outputHash: item.outputHash,
+        })
+      : projectImage2OneShotState;
     const requiresHashBoundOutput = mode === "approve" || promotionMode;
     if (requiresHashBoundOutput && (!reviewMediaPath || !item.sourceReceiptId || !item.outputHash)) {
       setLatestPrototypeAgentDemo({
@@ -4401,8 +4387,11 @@ function App() {
 	            setProjectRealChainState(refreshed);
 	          }
 	          const reopened = await openProjectVibeDraft(prototypeProjectDraftTarget);
-	          if (reopened.ok && reopened.project && reopened.mode === "electron_project_file") {
+          if (reopened.ok && reopened.project && reopened.mode === "electron_project_file") {
             applyProjectVibeProjectState(reopened.project, prototypeProjectDraftTarget, { generatedAt: now });
+          }
+          if (approvedOneShotState !== projectImage2OneShotState) {
+            setProjectImage2OneShotState(approvedOneShotState);
           }
           setLatestPrototypeAgentDemo({
             status: "preview_ready",
@@ -5962,6 +5951,16 @@ function App() {
     setProviderConfigStatuses,
     setProjectRealChainState,
   });
+  const { realSampleAction, runP6RealImage2OneShot } = useP6RealImage2Action({
+    runtimeProjectIdentity,
+    selectedShotId: workbenchSelectedShotId,
+    oneShotState: projectImage2OneShotState,
+    providerConfigStatuses,
+    setProviderConfigStatuses,
+    setOneShotState: setProjectImage2OneShotState,
+    setProjectRealChainState,
+    openPreview: () => setDirectorView("preview"),
+  });
   async function runMissingVisualsFromStory(input?: { signal?: AbortSignal }) {
     const batch = projectImage2BatchState.summary;
     const retryCount = batch?.retrySummary?.nextRunnableCount || batch?.retrySummary?.retryScheduled || 0;
@@ -6131,7 +6130,7 @@ function App() {
           exportAction={exportActionState}
           previewEmptyStateLabel={currentProjectPreviewEmptyState.label}
           previewEmptyStateDetail={currentProjectPreviewEmptyState.detail}
-          realSampleAction={assetGenerationAction}
+          realSampleAction={realSampleAction}
           endFrameAction={endFrameAction}
           videoSendAction={gatedVideoSubmitAction}
           webSearchSettings={agentWebSearchSettings}
@@ -6163,7 +6162,7 @@ function App() {
           }
           onSelectShot={selectShot}
           onRunExport={runLocalExportAction}
-          onCreateP6RealSample={runImage2AssetGeneration}
+          onCreateP6RealSample={runP6RealImage2OneShot}
           onCreateImage2EndFrame={runImage2EndFrame}
           onSendSeedanceVideo={runSeedanceVideoSubmit}
           onDialogueAudioCreated={applyDialogueAudioCreated}

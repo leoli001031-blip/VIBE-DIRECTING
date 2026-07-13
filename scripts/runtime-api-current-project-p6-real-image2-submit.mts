@@ -22,6 +22,91 @@ function uniqueStrings(values) {
   return [...new Set((values || []).filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
 }
 
+function sameStringArray(left, right) {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && left.length === right.length
+    && left.every((value, index) => value === right[index]);
+}
+
+function expectedOutputsEqual(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((item, index) => {
+    const expected = right[index];
+    return isRecord(item)
+      && isRecord(expected)
+      && item.shotId === expected.shotId
+      && item.expectedOutputPath === expected.expectedOutputPath
+      && item.providerObservationPath === expected.providerObservationPath
+      && item.semanticQaPath === expected.semanticQaPath;
+  });
+}
+
+function referenceInputsEqual(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((item, index) => {
+    const expected = right[index];
+    return isRecord(item)
+      && isRecord(expected)
+      && item.id === expected.id
+      && item.type === expected.type
+      && item.name === expected.name
+      && item.path === expected.path
+      && item.sha256 === expected.sha256;
+  });
+}
+
+function prepareReceiptMatchesCurrent(candidate, current) {
+  return isRecord(candidate)
+    && isRecord(current)
+    && candidate.receiptId === current.receiptId
+    && candidate.status === "prepared"
+    && candidate.projectId === current.projectId
+    && candidate.projectRoot === current.projectRoot
+    && candidate.projectFactHash === current.projectFactHash
+    && candidate.actionId === current.actionId
+    && candidate.selectedShotId === current.selectedShotId
+    && sameStringArray(candidate.selectedShotIds, current.selectedShotIds)
+    && candidate.imageCount === current.imageCount
+    && candidate.providerId === current.providerId
+    && candidate.providerSlot === current.providerSlot
+    && candidate.requiredMode === current.requiredMode
+    && candidate.expectedOutputPath === current.expectedOutputPath
+    && candidate.providerObservationPath === current.providerObservationPath
+    && candidate.semanticQaPath === current.semanticQaPath
+    && candidate.promptPath === current.promptPath
+    && candidate.promptSha256 === current.promptSha256;
+}
+
+function permissionReceiptMatchesCurrent(candidate, current) {
+  return isRecord(candidate)
+    && isRecord(current)
+    && candidate.permissionReceiptId === current.permissionReceiptId
+    && candidate.receiptId === current.receiptId
+    && candidate.handoffId === current.handoffId
+    && candidate.status === "pending_action_time_confirmation"
+    && candidate.projectId === current.projectId
+    && candidate.projectRoot === current.projectRoot
+    && candidate.projectFactHash === current.projectFactHash
+    && candidate.actionId === current.actionId
+    && candidate.providerId === current.providerId
+    && candidate.providerSlot === current.providerSlot
+    && candidate.requiredMode === current.requiredMode
+    && sameStringArray(candidate.selectedShotIds, current.selectedShotIds)
+    && expectedOutputsEqual(candidate.expectedOutputs, current.expectedOutputs)
+    && referenceInputsEqual(candidate.referenceInputs, current.referenceInputs)
+    && candidate.promptPath === current.promptPath
+    && candidate.promptSha256 === current.promptSha256
+    && candidate.credential?.credentialRef === current.credential?.credentialRef
+    && candidate.maxProviderCallsPerReceipt === 1
+    && candidate.submitIntent?.maxProviderCallsPerReceipt === 1
+    && candidate.submitIntent?.providerSubmitAllowed === 0
+    && candidate.providerCalled === false
+    && candidate.runtimeProviderSubmitAttempted === false
+    && candidate.runtimeExternalNetworkCallMade === false
+    && candidate.projectVibeWritten === false;
+}
+
 function normalizeMockProviderResult(value) {
   if (value === true) return { enabled: true, status: "needs_review" };
   if (!isRecord(value)) return { enabled: false, status: undefined };
@@ -39,6 +124,20 @@ function safePathSegment(value) {
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 80) || "shot";
+}
+
+function projectRelativePath(value, projectRoot) {
+  if (!asString(value) || !asString(projectRoot)) return undefined;
+  const root = path.resolve(projectRoot);
+  const directTarget = path.resolve(value);
+  const directRelative = path.relative(root, directTarget);
+  const directInside = directRelative === "" || (!directRelative.startsWith("..") && !path.isAbsolute(directRelative));
+  const target = path.isAbsolute(value) || directInside
+    ? directTarget
+    : path.resolve(root, value);
+  const relative = path.relative(root, target);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return undefined;
+  return relative.replace(/\\/g, "/");
 }
 
 function requestBodyString(body, names) {
@@ -96,8 +195,16 @@ function providerConfigFor(statuses, providerId) {
 function permissionReceiptLike(receipt) {
   if (!isRecord(receipt)) return undefined;
   return {
-    receiptId: receipt.receiptId,
+    receiptId: receipt.permissionReceiptId || receipt.receiptId,
+    prepareReceiptId: receipt.receiptId,
+    permissionReceiptId: receipt.permissionReceiptId,
     status: receipt.status,
+    projectId: receipt.projectId,
+    projectRoot: receipt.projectRoot,
+    projectFactHash: receipt.projectFactHash,
+    actionId: receipt.actionId,
+    providerId: receipt.providerId,
+    promptSha256: receipt.promptSha256,
     providerCalled: receipt.providerCalled,
     runtimeExternalNetworkCallMade: receipt.runtimeExternalNetworkCallMade,
     projectVibeWritten: receipt.projectVibeWritten,
@@ -125,6 +232,7 @@ function referenceInputsFromStatusProjection(statusProjection) {
       type: asString(input?.type),
       name: asString(input?.name),
       path,
+      sha256: asString(input?.sha256),
     });
   }
   return [...byPath.values()];
@@ -298,6 +406,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
     readFileSync,
     writeOneShotExecutorBytes,
     writeOneShotExecutorJson,
+    claimOneShotExecutorJson,
     writeJson,
     running,
   } = deps;
@@ -322,6 +431,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         fileName: fileNameForImagePath(input.path),
         mimeType: mimeTypeForImagePath(input.path),
         bytes: readFileSync(scopedRepoPath(input.path)),
+        expectedSha256: input.sha256,
       }));
   }
 
@@ -335,24 +445,41 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
     const receipt = statusProjection.receipt;
     const handoff = statusProjection.handoffPacket;
     const submitPermissionReceipt = input.submitPermissionReceipt;
+    const currentSubmitPermissionReceipt = statusProjection.submitPermissionReceipt;
     const providerStatuses = getProviderConfigStatuses();
     const providerConfig = providerConfigFor(providerStatuses, input.providerId);
-    const apiKey = getProviderApiKey(input.providerId);
     const confirmation = input.confirmation || {};
-    const confirmationOk = confirmation.confirmed === true
+    const confirmationShapeOk = confirmation.confirmed === true
       && confirmation.phrase === CONFIRM_PHRASE
       && Boolean(asString(confirmation.receiptId))
       && Boolean(asString(confirmation.confirmedAt));
+    const confirmationActionMatches = Boolean(asString(receipt?.actionId))
+      && confirmation.actionId === receipt?.actionId;
+    const confirmationOk = confirmationShapeOk && confirmationActionMatches;
     const shotId = input.selectedShotId || receipt?.selectedShotId;
     const selectedShotIds = input.selectedShotIds?.length ? input.selectedShotIds : shotId ? [shotId] : [];
     const sandboxRoot = receipt?.sandbox?.root;
     const shotRoot = receipt?.sandbox?.shotRoot;
+    const permissionReceiptId = asString(submitPermissionReceipt?.permissionReceiptId);
+    const submitClaimStatePath = shotRoot && permissionReceiptId
+      ? `${shotRoot}/state/provider-submit-claims/${safePathSegment(permissionReceiptId)}.json`
+      : undefined;
     const expectedOutputPath = handoff?.expectedOutputPath || receipt?.expectedOutputPath || statusProjection.expectedOutputPath;
     const providerObservationPath = handoff?.providerObservationPath || receipt?.providerObservationPath || statusProjection.providerObservationPath;
     const semanticQaPath = handoff?.semanticQaPath || receipt?.semanticQaPath || statusProjection.semanticQaPath;
     const sourcePrompt = handoff?.promptText || receipt?.promptText || statusProjection.promptText || "";
+    const currentPromptSha256 = sourcePrompt ? sha256Bytes(Buffer.from(sourcePrompt, "utf8")) : undefined;
+    const expectedOutputs = [{
+      shotId,
+      expectedOutputPath,
+      providerObservationPath,
+      semanticQaPath,
+    }];
     const referenceInputs = referenceInputsFromStatusProjection(statusProjection);
     const referenceImages = referenceImageFiles(referenceInputs);
+    const referenceImageHashesMatch = referenceImages.every((image) =>
+      Boolean(image.expectedSha256) && sha256Bytes(image.bytes) === image.expectedSha256
+    );
     const providerOperation = referenceImages.length ? "image.edit" : "image.generate";
     const prompt = buildImage2CleanBasePrompt({
       sourcePrompt,
@@ -361,8 +488,19 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
     });
     const runId = `p6_real_image2_${safePathSegment(statusProjection.projectId)}_${safePathSegment(shotId)}_${Date.now()}`;
     const evidenceRoot = `${shotRoot}/p6-real-image2/${runId}`;
+    const planOutputRoot = projectRelativePath(evidenceRoot, statusProjection.projectRoot);
+    const planExpectedOutputs = expectedOutputs.map((output) => ({
+      shotId: output.shotId,
+      expectedOutputPath: projectRelativePath(output.expectedOutputPath, statusProjection.projectRoot),
+      providerObservationPath: projectRelativePath(output.providerObservationPath, statusProjection.projectRoot),
+      semanticQaPath: projectRelativePath(output.semanticQaPath, statusProjection.projectRoot),
+    }));
+    const planReferenceInputs = referenceInputs.map((input) => ({
+      ...input,
+      path: projectRelativePath(input.path, statusProjection.projectRoot),
+    }));
     const credentialRef = `secret-store://providers/${input.providerId}/default`;
-    const plan = buildP6RealImage2Plan({
+    const basePlan = buildP6RealImage2Plan({
       generatedAt,
       runId,
       shotIds: selectedShotIds,
@@ -371,14 +509,9 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       providerId: input.providerId,
       providerBaseUrl: providerConfig?.baseUrl || "",
       credentialRef,
-      outputRoot: evidenceRoot,
-      expectedOutputs: [{
-        shotId,
-        expectedOutputPath,
-        providerObservationPath,
-        semanticQaPath,
-      }],
-      referenceInputs,
+      outputRoot: planOutputRoot || "",
+      expectedOutputs: planExpectedOutputs,
+      referenceInputs: planReferenceInputs,
       submitPermissionReceipt: permissionReceiptLike(submitPermissionReceipt),
       actionTimeConfirmation: {
         confirmed: confirmationOk,
@@ -386,17 +519,101 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         confirmedAt: confirmation.confirmedAt,
       },
     });
-    const blockers = uniqueStrings([
+    const plan = {
+      ...basePlan,
+      identity: {
+        projectId: receipt?.projectId,
+        projectRoot: receipt?.projectRoot,
+        projectFactHash: receipt?.projectFactHash,
+        actionId: receipt?.actionId,
+        confirmationId: confirmation.receiptId,
+        permissionReceiptId,
+        promptSha256: currentPromptSha256,
+        referenceInputs: planReferenceInputs,
+      },
+    };
+    const identityBlockers = uniqueStrings([
       statusProjection.ok === true ? "" : "请先准备单镜头小样。",
       receipt?.status === "prepared" ? "" : "请先准备并确认小样包。",
       handoff?.status === "ready_for_manual_transport" ? "" : "请先完成小样动作确认。",
       submitPermissionReceipt?.status === "pending_action_time_confirmation" ? "" : "请先生成许可回执。",
-      providerConfig ? "" : "未找到可用的出图配置。",
-      providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存生图 Key。",
-      confirmationOk ? "" : "需要在提交前明确确认本次只生成 1 张图。",
+      permissionReceiptId ? "" : "许可回执缺少单次提交标识，请重新准备。",
+      submitClaimStatePath && !runtimePathExists(submitClaimStatePath) ? "" : "该许可回执已经提交过，请重新准备后再试。",
+      prepareReceiptMatchesCurrent(input.receipt, receipt) ? "" : "提交使用的 prepare receipt 已过期或与当前项目不一致。",
+      permissionReceiptMatchesCurrent(submitPermissionReceipt, currentSubmitPermissionReceipt) ? "" : "许可回执已过期或与当前项目不一致，请重新准备。",
+      submitPermissionReceipt?.receiptId === receipt?.receiptId && submitPermissionReceipt?.handoffId === handoff?.packetId
+        ? ""
+        : "许可回执与当前 handoff 不一致。",
+      submitPermissionReceipt?.projectId === receipt?.projectId
+        && submitPermissionReceipt?.projectRoot === receipt?.projectRoot
+        && submitPermissionReceipt?.projectFactHash === receipt?.projectFactHash
+        && submitPermissionReceipt?.actionId === receipt?.actionId
+        ? ""
+        : "许可回执与当前项目事实或动作不一致。",
+      submitPermissionReceipt?.providerId === input.providerId && receipt?.providerId === input.providerId
+        ? ""
+        : "许可回执与当前图片 provider 不一致。",
+      sameStringArray(selectedShotIds, receipt?.selectedShotIds)
+        && sameStringArray(selectedShotIds, submitPermissionReceipt?.selectedShotIds)
+        ? ""
+        : "许可回执与当前镜头选择不一致。",
+      expectedOutputsEqual(submitPermissionReceipt?.expectedOutputs, expectedOutputs)
+        ? ""
+        : "许可回执与当前输出或 QA 路径不一致。",
+      referenceInputsEqual(submitPermissionReceipt?.referenceInputs, referenceInputs) && referenceImageHashesMatch
+        ? ""
+        : "当前参考文件与许可回执不一致，请重新准备。",
+      currentPromptSha256
+        && currentPromptSha256 === receipt?.promptSha256
+        && currentPromptSha256 === handoff?.promptSha256
+        && currentPromptSha256 === submitPermissionReceipt?.promptSha256
+        ? ""
+        : "当前提示词与许可回执不一致，请重新准备。",
+      confirmationShapeOk ? "" : "需要在提交前明确确认本次只生成 1 张图。",
+      confirmationActionMatches ? "" : "本次确认与当前生成 actionId 不一致。",
       input.imageCount === 1 && selectedShotIds.length === 1 ? "" : "P6 App 入口只允许 1-shot。",
+      planOutputRoot
+        && planExpectedOutputs.every((output) => output.expectedOutputPath && output.providerObservationPath && output.semanticQaPath)
+        && planReferenceInputs.every((input) => input.path)
+        ? ""
+        : "P6 证据路径必须位于当前项目根内。",
       plan.status === "ready_for_live_submit" ? "" : plan.blockers[0],
     ]);
+    const apiKey = identityBlockers.length === 0 ? getProviderApiKey(input.providerId) : undefined;
+    const blockers = uniqueStrings([
+      ...identityBlockers,
+      providerConfig ? "" : "未找到可用的出图配置。",
+      providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存生图 Key。",
+    ]);
+
+    const submitClaim = {
+      schemaVersion: "p6_real_image2_provider_submit_claim_v1",
+      status: "provider_submit_claimed",
+      claimedAt: generatedAt,
+      permissionReceiptId,
+      prepareReceiptId: receipt?.receiptId,
+      handoffId: handoff?.packetId,
+      projectId: receipt?.projectId,
+      projectRoot: receipt?.projectRoot,
+      projectFactHash: receipt?.projectFactHash,
+      actionId: receipt?.actionId,
+      confirmationId: confirmation.receiptId,
+      promptSha256: currentPromptSha256,
+      selectedShotIds,
+      providerId: input.providerId,
+      referenceInputs,
+      providerCalled: false,
+      runtimeProviderSubmitAttempted: false,
+      runtimeExternalNetworkCallMade: false,
+      projectVibeWritten: false,
+    };
+    const writeSubmitClaim = (patch = {}) => writeOneShotExecutorJson(submitClaimStatePath, {
+      ...submitClaim,
+      ...patch,
+    }, sandboxRoot, shotRoot);
+    if (blockers.length === 0 && !claimOneShotExecutorJson(submitClaimStatePath, submitClaim, sandboxRoot, shotRoot)) {
+      blockers.push("该许可回执已经提交过，请重新准备后再试。");
+    }
 
     if (blockers.length > 0) {
       return {
@@ -421,6 +638,11 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         projectRootMode: source.projectRootMode,
         projectRoot: statusProjection.projectRoot,
         projectId: statusProjection.projectId,
+        projectFactHash: receipt?.projectFactHash,
+        actionId: receipt?.actionId,
+        confirmationId: confirmation.receiptId,
+        permissionReceiptId,
+        promptSha256: currentPromptSha256,
         project: statusProjection.project,
         selectedShotId: shotId,
         providerId: input.providerId,
@@ -449,12 +671,29 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
     writeOneShotExecutorJson(`${evidenceRoot}/action-confirmation.json`, {
       schemaVersion: "p6_real_image2_action_confirmation_v1",
       receiptId: confirmation.receiptId,
+      permissionReceiptId,
+      projectId: receipt.projectId,
+      projectRoot: receipt.projectRoot,
+      projectFactHash: receipt.projectFactHash,
+      actionId: receipt.actionId,
+      promptSha256: currentPromptSha256,
       confirmedAt: confirmation.confirmedAt,
       selectedShotIds,
       phraseMatched: true,
       providerId: input.providerId,
+      referenceInputs,
       rawCredentialMaterialPresent: false,
     }, sandboxRoot, shotRoot);
+
+    if (!input.mockProviderResult) {
+      writeSubmitClaim({
+        status: "provider_submit_attempted",
+        attemptedAt: new Date().toISOString(),
+        providerCalled: !input.mockProviderResult,
+        runtimeProviderSubmitAttempted: true,
+        runtimeExternalNetworkCallMade: true,
+      });
+    }
 
     const providerResult = input.mockProviderResult
       ? input.mockProviderResultStatus === "missing"
@@ -499,17 +738,32 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       : undefined;
 
     if (!providerResult.ok) {
+      writeSubmitClaim({
+        status: input.mockProviderResult ? "mock_submit_consumed" : "provider_submit_failed",
+        completedAt: new Date().toISOString(),
+        providerCalled: !input.mockProviderResult,
+        runtimeProviderSubmitAttempted: !input.mockProviderResult,
+        runtimeExternalNetworkCallMade: !input.mockProviderResult,
+        providerRequestId: providerResult.providerRequestId,
+        failureKind: providerResult.failureKind || providerResult.errorType,
+      });
       const providerObservation = {
         schemaVersion: "p6_real_image2_provider_observation_v1",
         generatedAt,
         receiptId: receipt.receiptId,
+        projectId: receipt.projectId,
+        projectRoot: receipt.projectRoot,
+        projectFactHash: receipt.projectFactHash,
+        actionId: receipt.actionId,
+        confirmationId: confirmation.receiptId,
+        promptSha256: currentPromptSha256,
         providerObservationReceiptId: `p6_provider_observation_${safePathSegment(runId)}_${safePathSegment(shotId)}_missing`,
         receiptPath: providerObservationPath,
         runId,
         shotId,
         selectedShotId: shotId,
         selectedShotIds,
-        submitPermissionReceiptId: submitPermissionReceipt.receiptId,
+        submitPermissionReceiptId: permissionReceiptId,
         handoffPacketId: handoff.packetId,
         provider: input.providerId,
         providerId: input.providerId,
@@ -527,7 +781,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         referenceVisualInputCount: referenceImages.length,
         referenceVisualInputPaths: referenceImages.map((item) => item.path),
         outputPath: expectedOutputPath,
-        providerCalled: true,
+        providerCalled: !input.mockProviderResult,
         actualImage2Triggered: !input.mockProviderResult,
         providerCallsAttempted: input.mockProviderResult ? 0 : 1,
         maxProviderCallsPerExecution: 1,
@@ -547,13 +801,19 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         generatedAt,
         reviewedAt: generatedAt,
         receiptId: receipt.receiptId,
+        projectId: receipt.projectId,
+        projectRoot: receipt.projectRoot,
+        projectFactHash: receipt.projectFactHash,
+        actionId: receipt.actionId,
+        confirmationId: confirmation.receiptId,
+        promptSha256: currentPromptSha256,
         semanticQaReceiptId: `p6_semantic_qa_${safePathSegment(runId)}_${safePathSegment(shotId)}_missing`,
         receiptPath: semanticQaPath,
         runId,
         shotId,
         selectedShotId: shotId,
         selectedShotIds,
-        submitPermissionReceiptId: submitPermissionReceipt.receiptId,
+        submitPermissionReceiptId: permissionReceiptId,
         semanticReviewMode: "missing_output_placeholder",
         outputPath: expectedOutputPath,
         expectedOutputPath,
@@ -564,21 +824,31 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
           reason: providerResult.message,
           retryable: providerResult.providerResponseMetadata?.retryable === true,
         },
-        providerCalled: true,
+        providerCalled: !input.mockProviderResult,
         actualImage2Triggered: !input.mockProviderResult,
       };
       writeOneShotExecutorJson(providerObservationPath, providerObservation, sandboxRoot, shotRoot);
       writeOneShotExecutorJson(semanticQaPath, semanticQa, sandboxRoot, shotRoot);
+      const planExpectedOutput = plan.expectedOutputs[0];
       const ingest = buildP6RealImage2ReturnIngest({
         generatedAt: new Date().toISOString(),
         plan,
         returnedOutputs: [{
           shotId,
-          outputPath: expectedOutputPath,
+          outputPath: planExpectedOutput?.expectedOutputPath,
           providerObservationPresent: true,
           semanticQaStatus: "missing",
-          providerObservation,
-          semanticQa,
+          providerObservation: {
+            ...providerObservation,
+            receiptPath: planExpectedOutput?.providerObservationPath,
+            outputPath: planExpectedOutput?.expectedOutputPath,
+          },
+          semanticQa: {
+            ...semanticQa,
+            receiptPath: planExpectedOutput?.semanticQaPath,
+            outputPath: planExpectedOutput?.expectedOutputPath,
+            expectedOutputPath: planExpectedOutput?.expectedOutputPath,
+          },
           providerSelfReportedSuccess: false,
         }],
       });
@@ -587,7 +857,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         ok: false,
         ...runtimePolicy({
           runMode: "p6_real_image2_one_shot_submit",
-          providerCalled: true,
+          providerCalled: !input.mockProviderResult,
           prepareRan: false,
           projectVibeWritten: false,
           liveSubmitAllowed: false,
@@ -600,6 +870,12 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         status: "missing",
         uiStatus: "missing",
         userLabel: "未发现回流",
+        projectId: receipt.projectId,
+        projectRoot: receipt.projectRoot,
+        projectFactHash: receipt.projectFactHash,
+        actionId: receipt.actionId,
+        confirmationId: confirmation.receiptId,
+        promptSha256: currentPromptSha256,
         selectedShotId: shotId,
         selectedShotIds,
         providerId: input.providerId,
@@ -607,7 +883,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         requestedAspectRatio: IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO,
         providerOperation,
         referenceVisualInputCount: referenceImages.length,
-        providerCalled: true,
+        providerCalled: !input.mockProviderResult,
         runtimeProviderSubmitAttempted: !input.mockProviderResult,
         runtimeExternalNetworkCallMade: !input.mockProviderResult,
         formalPromotionBlocked: true,
@@ -621,7 +897,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
           shotId,
           status: "missing",
           reviewRequired: false,
-          providerCalled: true,
+          providerCalled: !input.mockProviderResult,
           actualImage2Triggered: !input.mockProviderResult,
         },
         blockers: [providerResult.message],
@@ -637,17 +913,33 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
 
     const outputFilePath = writeOneShotExecutorBytes(expectedOutputPath, providerResult.bytes, sandboxRoot, shotRoot);
     const outputSha256 = sha256Bytes(providerResult.bytes);
+    writeSubmitClaim({
+      status: input.mockProviderResult ? "mock_submit_consumed" : "provider_submit_succeeded",
+      completedAt: new Date().toISOString(),
+      providerCalled: !input.mockProviderResult,
+      runtimeProviderSubmitAttempted: !input.mockProviderResult,
+      runtimeExternalNetworkCallMade: !input.mockProviderResult,
+      providerRequestId: providerResult.providerRequestId,
+      outputPath: projectRelativePath(expectedOutputPath, statusProjection.projectRoot),
+      outputSha256,
+    });
     const providerObservation = {
       schemaVersion: "p6_real_image2_provider_observation_v1",
       generatedAt,
       receiptId: receipt.receiptId,
+      projectId: receipt.projectId,
+      projectRoot: receipt.projectRoot,
+      projectFactHash: receipt.projectFactHash,
+      actionId: receipt.actionId,
+      confirmationId: confirmation.receiptId,
+      promptSha256: currentPromptSha256,
       providerObservationReceiptId: `p6_provider_observation_${safePathSegment(runId)}_${safePathSegment(shotId)}`,
       receiptPath: providerObservationPath,
       runId,
       shotId,
       selectedShotId: shotId,
       selectedShotIds,
-      submitPermissionReceiptId: submitPermissionReceipt.receiptId,
+      submitPermissionReceiptId: permissionReceiptId,
       handoffPacketId: handoff.packetId,
       providerRequestId: providerResult.providerRequestId,
       provider: input.providerId,
@@ -659,7 +951,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       providerOperation,
       providerTransport: providerResult.providerResponseMetadata?.transport,
       providerTransportOperation: providerResult.providerResponseMetadata?.providerOperation,
-      providerObservationMode: "actual_provider_call_observed",
+      providerObservationMode: input.mockProviderResult ? "mock_provider_result" : "actual_provider_call_observed",
       rawSsePath: rawSseFilePath ? rawSsePath : undefined,
       rawSseSha256: providerResult.providerResponseMetadata?.rawSseSha256,
       referenceInputs,
@@ -668,9 +960,9 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       outputPath: expectedOutputPath,
       outputSha256,
       outputBytes: providerResult.bytes.length,
-      providerCalled: true,
-      actualImage2Triggered: true,
-      providerCallsAttempted: 1,
+      providerCalled: !input.mockProviderResult,
+      actualImage2Triggered: !input.mockProviderResult,
+      providerCallsAttempted: input.mockProviderResult ? 0 : 1,
       maxProviderCallsPerExecution: 1,
       externalNetworkCallMade: !input.mockProviderResult,
       rawCredentialMaterialSeen: false,
@@ -684,14 +976,20 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       generatedAt,
       reviewedAt: generatedAt,
       receiptId: receipt.receiptId,
+      projectId: receipt.projectId,
+      projectRoot: receipt.projectRoot,
+      projectFactHash: receipt.projectFactHash,
+      actionId: receipt.actionId,
+      confirmationId: confirmation.receiptId,
+      promptSha256: currentPromptSha256,
       semanticQaReceiptId: `p6_semantic_qa_${safePathSegment(runId)}_${safePathSegment(shotId)}`,
       receiptPath: semanticQaPath,
       runId,
       shotId,
       selectedShotId: shotId,
       selectedShotIds,
-      submitPermissionReceiptId: submitPermissionReceipt.receiptId,
-      semanticReviewMode: "actual_image_semantic_review",
+      submitPermissionReceiptId: permissionReceiptId,
+      semanticReviewMode: input.mockProviderResult ? "mock_image_semantic_review" : "actual_image_semantic_review",
       outputPath: expectedOutputPath,
       expectedOutputPath,
       outputSha256,
@@ -700,10 +998,12 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       qaStatus: semanticQaStatus,
       finalAssessment: {
         status: semanticQaStatus,
-        reason: semanticQaStatus === "success" ? "Mock Image2 结果已验证。" : "真实 Image2 结果已回流，进入人工复核。",
+        reason: input.mockProviderResult
+          ? semanticQaStatus === "success" ? "Mock Image2 结果已验证。" : "Mock Image2 结果等待测试复核。"
+          : "真实 Image2 结果已回流，进入人工复核。",
       },
-      providerCalled: true,
-      actualImage2Triggered: true,
+      providerCalled: !input.mockProviderResult,
+      actualImage2Triggered: !input.mockProviderResult,
     };
     writeOneShotExecutorJson(providerObservationPath, providerObservation, sandboxRoot, shotRoot);
     writeOneShotExecutorJson(semanticQaPath, semanticQa, sandboxRoot, shotRoot);
@@ -714,25 +1014,35 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       imageCount: 1,
       receiptId: receipt.receiptId,
       expectedOutputPath,
-      actualProviderReturned: true,
+      actualProviderReturned: !input.mockProviderResult,
       returnedOutputPath: expectedOutputPath,
       providerRequestId: providerResult.providerRequestId,
       providerName: input.providerId,
       providerObservation,
       semanticQa,
-      executorMode: "external_provider_return",
+      executorMode: input.mockProviderResult ? "dry_run_executor" : "external_provider_return",
     }, {}, source);
+    const planExpectedOutput = plan.expectedOutputs[0];
     const ingest = buildP6RealImage2ReturnIngest({
       generatedAt: new Date().toISOString(),
       plan,
       returnedOutputs: [{
         shotId,
-        outputPath: expectedOutputPath,
+        outputPath: planExpectedOutput?.expectedOutputPath,
         sha256: outputSha256,
         providerObservationPresent: true,
         semanticQaStatus,
-        providerObservation,
-        semanticQa,
+        providerObservation: {
+          ...providerObservation,
+          receiptPath: planExpectedOutput?.providerObservationPath,
+          outputPath: planExpectedOutput?.expectedOutputPath,
+        },
+        semanticQa: {
+          ...semanticQa,
+          receiptPath: planExpectedOutput?.semanticQaPath,
+          outputPath: planExpectedOutput?.expectedOutputPath,
+          expectedOutputPath: planExpectedOutput?.expectedOutputPath,
+        },
         providerSelfReportedSuccess: true,
       }],
     });
@@ -742,7 +1052,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       ok: ingest.summary.previewEligible > 0,
       ...runtimePolicy({
         runMode: "p6_real_image2_one_shot_submit",
-        providerCalled: true,
+        providerCalled: !input.mockProviderResult,
         prepareRan: false,
         projectVibeWritten: false,
         liveSubmitAllowed: false,
@@ -764,6 +1074,10 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       projectRootMode: source.projectRootMode,
       projectRoot: statusProjection.projectRoot,
       projectId: statusProjection.projectId,
+      projectFactHash: receipt.projectFactHash,
+      actionId: receipt.actionId,
+      confirmationId: confirmation.receiptId,
+      promptSha256: currentPromptSha256,
       project: statusProjection.project,
       selectedShotId: shotId,
       selectedShotIds,
@@ -773,10 +1087,11 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       providerOperation,
       referenceVisualInputCount: referenceImages.length,
       runId,
-      outputPath: expectedOutputPath,
+      outputPath: planExpectedOutput?.expectedOutputPath,
       outputFilePath,
       outputSha256,
-      evidenceRoot,
+      evidenceRoot: plan.outputRoot,
+      evidenceRootFilePath: evidenceRoot,
       plan,
       p6Ingest: ingest,
       returnProjection,
@@ -785,10 +1100,10 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         status: ingest.previewItems[0]?.status || "missing",
         imageUrl: ingest.previewItems.length ? runtimeFileUrl(expectedOutputPath) : undefined,
         reviewRequired: ingest.previewItems[0]?.status === "needs_review",
-        providerCalled: true,
-        actualImage2Triggered: true,
+        providerCalled: !input.mockProviderResult,
+        actualImage2Triggered: !input.mockProviderResult,
       },
-      providerCalled: true,
+      providerCalled: !input.mockProviderResult,
       runtimeProviderSubmitAttempted: !input.mockProviderResult,
       runtimeExternalNetworkCallMade: !input.mockProviderResult,
       formalPromotionBlocked: true,
@@ -875,6 +1190,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         selectedShotId: result.selectedShotId,
         runId: result.runId,
         outputPath: result.outputPath,
+        outputFilePath: result.outputFilePath,
         outputSha256: result.outputSha256,
         previewProjection: result.previewProjection,
         p6Ingest: result.p6Ingest,

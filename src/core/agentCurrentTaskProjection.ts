@@ -125,6 +125,7 @@ export interface AgentCurrentTaskProjectionInput {
   currentProjectRoot?: string;
   currentProjectFactHash?: string;
   completedSteps?: AgentCurrentTaskCompletedStep[];
+  referenceReviewCount?: number;
   facts?: AgentCurrentTaskFact[];
 }
 
@@ -388,6 +389,7 @@ function buildProjection(input: {
   actionId?: string;
   jobId?: string;
   blockers?: string[];
+  effect?: AgentCurrentTaskEffect;
   facts: AgentCurrentTaskFact[];
 }): AgentCurrentTaskProjection {
   const requiresConfirmation = input.requiresConfirmation ?? confirmationRequiredForStep(input.step);
@@ -396,7 +398,7 @@ function buildProjection(input: {
     step: input.step,
     label: input.label || labelForStep(input.step),
     requiresConfirmation,
-    effect: effectForStep(input.step),
+    effect: input.effect ?? effectForStep(input.step),
     confirmationKind: input.confirmationKind || (
       requiresConfirmation ? "pipeline_action" : undefined
     ),
@@ -464,6 +466,19 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
       actionId: input.restoredStagedPlan.actionId,
       blockers: input.restoredStagedPlan.blockers || [],
       facts: factsForInput(input, input.restoredStagedPlan.facts || []),
+    });
+  }
+
+  const referenceReviewCount = Math.max(0, Math.floor(input.referenceReviewCount || 0));
+  if (referenceReviewCount > 0) {
+    return buildProjection({
+      source: "project_observation",
+      step: "prepare_references",
+      label: "复核参考",
+      requiresConfirmation: false,
+      effect: "none",
+      blockers: [],
+      facts: factsForInput(input, [{ label: "待复核", value: `${referenceReviewCount} 项` }]),
     });
   }
 

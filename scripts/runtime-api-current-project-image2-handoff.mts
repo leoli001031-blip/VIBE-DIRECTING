@@ -1,4 +1,6 @@
 import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { hashProjectVibeFacts } from "../src/project/projectVibe.ts";
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,7 +83,6 @@ function requireFunction(value, name) {
 
 export function createRuntimeApiCurrentProjectImage2Handoff({
   repoRoot,
-  repoRootRealPath,
   currentProjectSource,
   projectProjectionFromSource,
   currentProjectWorkbenchFacts,
@@ -112,7 +113,6 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
   readFileSync,
 } = {}) {
   if (!repoRoot) throw new Error("createRuntimeApiCurrentProjectImage2Handoff requires repoRoot");
-  if (!repoRootRealPath) throw new Error("createRuntimeApiCurrentProjectImage2Handoff requires repoRootRealPath");
   requireFunction(currentProjectSource, "currentProjectSource");
   requireFunction(projectProjectionFromSource, "projectProjectionFromSource");
   requireFunction(currentProjectWorkbenchFacts, "currentProjectWorkbenchFacts");
@@ -137,6 +137,34 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
   requireFunction(readFileSync, "readFileSync");
   if (!Array.isArray(currentProjectImage2TransportModes)) throw new Error("currentProjectImage2TransportModes is required.");
   if (!Array.isArray(currentProjectImage2ForbiddenProviders)) throw new Error("currentProjectImage2ForbiddenProviders is required.");
+
+  function oneShotProjectRelativeOutputPath(outputPath, projectRoot) {
+    if (!outputPath || !projectRoot) return undefined;
+    try {
+      const realRoot = realpathSync(scopedRepoPath(projectRoot));
+      const realOutput = realpathSync(scopedRepoPath(outputPath));
+      const relative = path.relative(realRoot, realOutput).replace(/\\/g, "/");
+      if (!relative || relative.startsWith("../") || path.isAbsolute(relative)) return undefined;
+      return normalizeRelativePath(relative);
+    } catch {
+      return undefined;
+    }
+  }
+
+  function approvedOneShotReviewReceipt(projectVibe, { selectedShotId, outputPath, outputSha256 }) {
+    const reviewReceipts = Array.isArray(projectVibe?.receipts?.reviewReceipts)
+      ? projectVibe.receipts.reviewReceipts
+      : [];
+    return [...reviewReceipts].reverse().find((receipt) => {
+      const receiptOutputPath = asString(receipt?.outputPath)?.replace(/\\/g, "/");
+      return receipt?.status === "approved"
+        && receipt?.humanReviewed === true
+        && asString(receipt?.shotId) === selectedShotId
+        && asString(receipt?.sourceReceiptId)
+        && receiptOutputPath === outputPath
+        && asString(receipt?.outputHash) === outputSha256;
+    });
+  }
 
   function oneShotRequestInput(url, body) {
     const receipt = isRecord(body?.receipt) ? body.receipt : isRecord(body?.prepareReceipt) ? body.prepareReceipt : undefined;
@@ -196,8 +224,10 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     if (typeof rootPath !== "string" || !rootPath.trim()) return false;
     const normalizedPath = normalizeRelativePath(candidatePath.trim());
     const normalizedRoot = normalizeRelativePath(rootPath.trim());
-    if (path.isAbsolute(normalizedPath) || normalizedPath.startsWith("../") || normalizedPath.includes("/../")) return false;
-    return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+    const resolvedPath = path.isAbsolute(normalizedPath) ? path.resolve(normalizedPath) : path.resolve(repoRoot, normalizedPath);
+    const resolvedRoot = path.isAbsolute(normalizedRoot) ? path.resolve(normalizedRoot) : path.resolve(repoRoot, normalizedRoot);
+    const relative = path.relative(resolvedRoot, resolvedPath);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
   }
 
   function oneShotStatePaths(shotRoot) {
@@ -228,8 +258,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const stateRootRealPath = realpathSync(stateRootPath);
     const sandboxRootRealPath = realpathSync(sandboxRootPath);
     if ((dirRealPath !== stateRootRealPath && !dirRealPath.startsWith(`${stateRootRealPath}${path.sep}`))
-      || (stateRootRealPath !== sandboxRootRealPath && !stateRootRealPath.startsWith(`${sandboxRootRealPath}${path.sep}`))
-      || (sandboxRootRealPath !== repoRootRealPath && !sandboxRootRealPath.startsWith(`${repoRootRealPath}${path.sep}`))) {
+      || (stateRootRealPath !== sandboxRootRealPath && !stateRootRealPath.startsWith(`${sandboxRootRealPath}${path.sep}`))) {
       throw new Error(`Refusing to write one-shot state through an unsafe real path: ${relativePath}`);
     }
     const tempPath = path.join(dirPath, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
@@ -261,8 +290,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const sandboxRealPath = realpathSync(sandboxPath);
     const shotRealPath = realpathSync(shotPath);
     if ((dirRealPath !== sandboxRealPath && !dirRealPath.startsWith(`${sandboxRealPath}${path.sep}`))
-      || (dirRealPath !== shotRealPath && !dirRealPath.startsWith(`${shotRealPath}${path.sep}`))
-      || (sandboxRealPath !== repoRootRealPath && !sandboxRealPath.startsWith(`${repoRootRealPath}${path.sep}`))) {
+      || (dirRealPath !== shotRealPath && !dirRealPath.startsWith(`${shotRealPath}${path.sep}`))) {
       throw new Error(`Refusing to write one-shot prepare file through an unsafe real path: ${relativePath}`);
     }
     const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
@@ -311,33 +339,87 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
 
   function oneShotReceiptMatches(candidate, receipt) {
     return isRecord(candidate)
+      && isRecord(receipt)
       && candidate.schemaVersion === receipt.schemaVersion
       && candidate.receiptId === receipt.receiptId
       && candidate.status === "prepared"
       && candidate.projectId === receipt.projectId
       && candidate.projectRoot === receipt.projectRoot
+      && candidate.projectFactHash === receipt.projectFactHash
+      && candidate.actionId === receipt.actionId
       && candidate.selectedShotId === receipt.selectedShotId
-      && candidate.expectedOutputPath === receipt.expectedOutputPath;
+      && sameStringArray(candidate.selectedShotIds, receipt.selectedShotIds)
+      && candidate.imageCount === receipt.imageCount
+      && candidate.providerId === receipt.providerId
+      && candidate.providerSlot === receipt.providerSlot
+      && candidate.requiredMode === receipt.requiredMode
+      && candidate.expectedOutputPath === receipt.expectedOutputPath
+      && candidate.providerObservationPath === receipt.providerObservationPath
+      && candidate.semanticQaPath === receipt.semanticQaPath
+      && candidate.promptPath === receipt.promptPath
+      && sameReferenceInputs(candidate.visualReferenceInputs, receipt.visualReferenceInputs)
+      && candidate.promptSha256 === receipt.promptSha256;
   }
 
   function oneShotHandoffMatches(candidate, receipt) {
     return isRecord(candidate)
+      && isRecord(receipt)
       && candidate.schemaVersion === "vibe_core_current_project_image2_one_shot_handoff_packet_v1"
       && candidate.packetId === `handoff_${receipt.receiptId}`
       && candidate.status === "ready_for_manual_transport"
       && candidate.receiptId === receipt.receiptId
       && candidate.projectId === receipt.projectId
       && candidate.projectRoot === receipt.projectRoot
+      && candidate.projectFactHash === receipt.projectFactHash
+      && candidate.actionId === receipt.actionId
       && candidate.selectedShotId === receipt.selectedShotId
-      && candidate.expectedOutputPath === receipt.expectedOutputPath;
+      && sameStringArray(candidate.selectedShotIds, receipt.selectedShotIds)
+      && candidate.imageCount === receipt.imageCount
+      && candidate.providerId === receipt.providerId
+      && candidate.providerSlot === receipt.providerSlot
+      && candidate.requiredMode === receipt.requiredMode
+      && candidate.expectedOutputPath === receipt.expectedOutputPath
+      && candidate.providerObservationPath === receipt.providerObservationPath
+      && candidate.semanticQaPath === receipt.semanticQaPath
+      && candidate.promptPath === receipt.promptPath
+      && sameReferenceInputs(candidate.visualReferenceInputs, receipt.visualReferenceInputs)
+      && candidate.promptSha256 === receipt.promptSha256;
+  }
+
+  function sameStringArray(left, right) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => value === right[index]);
+  }
+
+  function sameReferenceInputs(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => {
+      const expected = right[index];
+      return isRecord(item)
+        && isRecord(expected)
+        && item.id === expected.id
+        && item.type === expected.type
+        && item.name === expected.name
+        && item.path === expected.path
+        && item.sha256 === expected.sha256;
+    });
   }
 
   function oneShotTransportPlan(mode, {
     projectId,
     projectRoot,
+    projectFactHash,
+    actionId,
     selectedShotId,
+    selectedShotIds,
+    providerId,
+    providerSlot,
+    requiredMode,
     promptPath,
     promptText,
+    promptSha256,
     expectedOutputPath,
     providerObservationPath,
     semanticQaPath,
@@ -355,10 +437,17 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       transportModeAllowed,
       projectId,
       projectRoot,
+      projectFactHash,
+      actionId,
       selectedShotId,
+      selectedShotIds,
+      providerId,
+      providerSlot,
+      requiredMode,
       receiptId,
       promptPath,
       promptText,
+      promptSha256,
       expectedOutputPath,
       providerObservationPath,
       semanticQaPath,
@@ -382,7 +471,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
         ...base,
         target: "agent_app_server",
         endpoint: "/api/agent/app-server/image2/one-shot",
-        requiredFields: ["projectId", "projectRoot", "receiptId", "selectedShotId", "expectedOutputPath", "providerObservationPath", "semanticQaPath", "receiptStatePath", "handoffStatePath"],
+        requiredFields: ["projectId", "projectRoot", "projectFactHash", "actionId", "receiptId", "selectedShotId", "promptSha256", "expectedOutputPath", "providerObservationPath", "semanticQaPath", "receiptStatePath", "handoffStatePath"],
         externalCallPreparedOnly: true,
       };
     }
@@ -450,15 +539,73 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     });
   }
 
-  function buildProviderSubmitPermissionReceiptState({
-    generatedAt,
-    receiptId,
-    handoffId,
+  function providerSubmitPermissionExpectedOutputsEqual(candidate, expectedOutputs) {
+    if (!Array.isArray(candidate) || !Array.isArray(expectedOutputs) || candidate.length !== expectedOutputs.length) return false;
+    return candidate.every((item, index) => {
+      const expected = expectedOutputs[index];
+      return isRecord(item)
+        && item.shotId === expected.shotId
+        && item.expectedOutputPath === expected.expectedOutputPath
+        && item.providerObservationPath === expected.providerObservationPath
+        && item.semanticQaPath === expected.semanticQaPath;
+    });
+  }
+
+  function providerSubmitPermissionReceiptMatches(candidate, {
+    receipt,
+    handoff,
     providerId,
     providerSlot,
     requiredMode,
     selectedShotIds,
     expectedOutputs,
+    referenceInputs,
+    promptPath,
+    promptSha256,
+  }) {
+    return isRecord(candidate)
+      && isRecord(receipt)
+      && isRecord(handoff)
+      && candidate.schemaVersion === providerSubmitPermissionReceiptSchemaVersion
+      && Boolean(asString(candidate.permissionReceiptId))
+      && candidate.status === "pending_action_time_confirmation"
+      && candidate.receiptId === receipt.receiptId
+      && candidate.handoffId === handoff.packetId
+      && candidate.projectId === receipt.projectId
+      && candidate.projectRoot === receipt.projectRoot
+      && candidate.projectFactHash === receipt.projectFactHash
+      && candidate.actionId === receipt.actionId
+      && candidate.providerId === providerId
+      && candidate.providerSlot === providerSlot
+      && candidate.requiredMode === requiredMode
+      && sameStringArray(candidate.selectedShotIds, selectedShotIds)
+      && providerSubmitPermissionExpectedOutputsEqual(candidate.expectedOutputs, expectedOutputs)
+      && sameReferenceInputs(candidate.referenceInputs, referenceInputs)
+      && candidate.promptPath === promptPath
+      && candidate.promptSha256 === promptSha256
+      && candidate.maxProviderCallsPerReceipt === 1
+      && candidate.submitIntent?.maxProviderCallsPerReceipt === 1
+      && candidate.submitIntent?.providerSubmitAllowed === 0
+      && candidate.providerCalled === false
+      && candidate.runtimeProviderSubmitAttempted === false
+      && candidate.runtimeExternalNetworkCallMade === false
+      && candidate.projectVibeWritten === false;
+  }
+
+  function buildProviderSubmitPermissionReceiptState({
+    generatedAt,
+    receiptId,
+    handoffId,
+    projectId,
+    projectRoot,
+    projectFactHash,
+    actionId,
+    providerId,
+    providerSlot,
+    requiredMode,
+    selectedShotIds,
+    expectedOutputs,
+    referenceInputs,
     credentialRef,
     maxProviderCallsPerReceipt,
     actionTimeConfirmation,
@@ -479,26 +626,50 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
         semanticQaPath: asString(item?.semanticQaPath) || "",
       }))
       : [];
+    const normalizedReferenceInputs = Array.isArray(referenceInputs)
+      ? referenceInputs.map((item) => ({
+        id: asString(item?.id),
+        type: asString(item?.type),
+        name: asString(item?.name),
+        path: asString(item?.path) || "",
+        sha256: asString(item?.sha256) || "",
+      }))
+      : [];
     const ref = asString(credentialRef) || "";
+    const permissionReceiptId = `image2_submit_permission_${safePathSegment(receiptId).slice(0, 40)}_${randomUUID()}`;
     const blockers = uniqueStrings([
       receiptId ? "" : "Submit permission receipt requires a prepare receipt id.",
       handoffId ? "" : "Submit permission receipt requires a handoff id.",
+      projectId ? "" : "Submit permission receipt requires projectId.",
+      projectRoot ? "" : "Submit permission receipt requires projectRoot.",
+      projectFactHash ? "" : "Submit permission receipt requires projectFactHash.",
+      actionId ? "" : "Submit permission receipt requires actionId.",
       providerId ? "" : "Submit permission receipt requires providerId.",
       providerSlot ? "" : "Submit permission receipt requires providerSlot.",
       requiredMode ? "" : "Submit permission receipt requires requiredMode.",
       normalizedSelectedShotIds.length >= 1 && normalizedSelectedShotIds.length <= 3 ? "" : "Submit permission receipt supports only 1-3 selected shots.",
       new Set(normalizedSelectedShotIds).size === normalizedSelectedShotIds.length ? "" : "Submit permission receipt selectedShotIds must be unique.",
       providerSubmitPermissionExpectedOutputsMatch(normalizedSelectedShotIds, normalizedExpectedOutputs) ? "" : "Submit permission expectedOutputs must match selectedShotIds.",
+      normalizedReferenceInputs.length > 0 && normalizedReferenceInputs.every((item) => item.path && item.sha256)
+        ? ""
+        : "Submit permission receipt requires hash-bound reference inputs.",
       ref ? "" : "credentialRef is required and must be an opaque reference.",
       rawSecretValuePattern.test(ref) ? "credentialRef must not contain raw credential material." : "",
+      promptPath ? "" : "Submit permission receipt requires promptPath.",
+      promptSha256 ? "" : "Submit permission receipt requires promptSha256.",
       Number(maxProviderCallsPerReceipt) === 1 ? "" : "maxProviderCallsPerReceipt must equal 1.",
       inspectForRawCredentialMaterial(rawBody) || inspectForRawCredentialMaterial(rawQuery) ? "Raw credential material or credential-like keys are forbidden." : "",
     ]);
     return {
       schemaVersion: providerSubmitPermissionReceiptSchemaVersion,
       generatedAt,
+      permissionReceiptId,
       receiptId,
       handoffId,
+      projectId,
+      projectRoot,
+      projectFactHash,
+      actionId,
       status: blockers.length ? "blocked" : "pending_action_time_confirmation",
       blockers,
       providerId,
@@ -506,6 +677,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       requiredMode,
       selectedShotIds: normalizedSelectedShotIds,
       expectedOutputs: normalizedExpectedOutputs,
+      referenceInputs: normalizedReferenceInputs,
       credential: {
         credentialRef: ref,
         authorizedReferenceOnly: true,
@@ -547,6 +719,12 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
   function currentProjectImage2OneShotResponse(action, input, extra = {}, source = currentProjectSource()) {
     const projection = projectProjectionFromSource(source);
     const { project, projectFacts } = projection;
+    const projectId = asString(project.projectId)
+      || asString(source.requestProjectId)
+      || asString(source.binding?.projectId);
+    const projectFactHash = isRecord(projectFacts?.projectVibe)
+      ? hashProjectVibeFacts(projectFacts.projectVibe)
+      : undefined;
     const workbenchFacts = currentProjectWorkbenchFacts(source, projectFacts);
     const shots = Array.isArray(workbenchFacts.storyFlow?.shots) ? workbenchFacts.storyFlow.shots : [];
     const selectedShotId = input.selectedShotId;
@@ -554,14 +732,24 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const selectedShot = shots.find((shot) => shot.id === selectedShotId);
     const shotPlans = Array.isArray(projectFacts.runManifest?.shotPlans) ? projectFacts.runManifest.shotPlans : [];
     const selectedShotPlan = shotPlans.find((shotPlan) => shotPlan?.shotId === selectedShotId) || {};
+    const providerId = asString(selectedShotPlan.providerId) || "openai-image2-api";
+    const providerSlot = asString(selectedShotPlan.providerSlot) || "image.generate";
+    const requiredMode = asString(selectedShotPlan.requiredMode) || "text2image";
     const sandboxRoot = `${source.runRootRelativePath}/real-trigger-one-shot`;
     const shotRoot = `${sandboxRoot}/${safePathSegment(selectedShotId)}`;
     const statePaths = oneShotStatePaths(shotRoot);
     const expectedOutputPath = input.expectedOutputPath || `${shotRoot}/image2-start.png`;
     const promptPath = runtimeRelativeFromValue(selectedShotPlan.promptPath) || `${source.runRootRelativePath}/prompt_requests/${safePathSegment(selectedShotId)}_start_frame_prompt.md`;
     const promptText = promptPath && runtimePathExists(promptPath) ? readFileSync(scopedRepoPath(promptPath), "utf8") : "";
+    const promptSha256 = promptPath && runtimePathExists(promptPath) ? sha256File(scopedRepoPath(promptPath)) : undefined;
     const providerObservationPath = `${shotRoot}/provider_observations/image2-start-provider-observation.json`;
     const semanticQaPath = `${shotRoot}/semantic_qa/image2-start-semantic-qa.json`;
+    const expectedOutputs = [{
+      shotId: selectedShotId,
+      expectedOutputPath,
+      providerObservationPath,
+      semanticQaPath,
+    }];
     const handoffPacketPath = `${shotRoot}/handoff/image2-start-handoff-packet.json`;
     const manifestPath = `${shotRoot}/manifest.json`;
     const qaReportPath = `${shotRoot}/qa/semantic-qa.json`;
@@ -569,6 +757,12 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const persistedHandoff = oneShotStateJson(statePaths.handoffStatePath, statePaths.stateRoot, sandboxRoot);
     const persistedTriggerPlan = oneShotStateJson(statePaths.triggerPlanStatePath, statePaths.stateRoot, sandboxRoot);
     const persistedSubmitPermissionReceipt = oneShotStateJson(statePaths.submitPermissionReceiptStatePath, statePaths.stateRoot, sandboxRoot);
+    const persistedSubmitClaimStatePath = asString(persistedSubmitPermissionReceipt?.permissionReceiptId)
+      ? `${statePaths.stateRoot}/provider-submit-claims/${safePathSegment(persistedSubmitPermissionReceipt.permissionReceiptId)}.json`
+      : undefined;
+    const persistedSubmitClaim = persistedSubmitClaimStatePath
+      ? oneShotStateJson(persistedSubmitClaimStatePath, statePaths.stateRoot, sandboxRoot)
+      : undefined;
     const persistedTransportMode = asString(input.receipt?.transportMode)
       || asString(persistedReceipt?.transportMode)
       || asString(persistedHandoff?.transportPlan?.mode);
@@ -578,7 +772,10 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     });
     const lockedReferences = selectedShot ? oneShotLockedReferences(workbenchFacts, selectedShot) : { characters: [], scenes: [], props: [], styles: [] };
     const shotPropIds = new Set(Array.isArray(selectedShot?.propIds) ? selectedShot.propIds : []);
-    const visualReferenceInputs = oneShotReferenceSummaries(lockedReferences);
+    const visualReferenceInputs = oneShotReferenceSummaries(lockedReferences).map((item) => ({
+      ...item,
+      sha256: runtimePathExists(item.path) ? sha256File(scopedRepoPath(item.path)) : undefined,
+    }));
     const outputPathSafe = oneShotPathInsideRoot(expectedOutputPath, source.runRootRelativePath)
       && oneShotPathInsideRoot(expectedOutputPath, sandboxRoot);
     const sidecarPathsSafe = [
@@ -595,6 +792,8 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const oneShotOnly = selectedShotIds.length === 1 && selectedShotIds[0] === selectedShotId && input.imageCount === 1;
     const blockers = uniqueStrings([
       projection.ok ? "" : "Current project runtime projection is unavailable.",
+      projectId ? "" : "Current project id is required before preparing a sample.",
+      projectFactHash ? "" : "Current Project.vibe fact hash is required before preparing a sample.",
       selectedShotId ? "" : "Select one shot before preparing a sample.",
       selectedShotIds.length === 1 ? "" : "Image2 one-shot requires exactly one selected shot.",
       input.imageCount === 1 ? "" : "Image2 one-shot requires exactly one image.",
@@ -606,14 +805,25 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       lockedReferences.scenes.length ? "" : "Locked scene reference is required for this shot.",
       shotPropIds.size === 0 || lockedReferences.props.length ? "" : "Locked prop reference is required for this shot.",
       lockedReferences.styles.length ? "" : "Locked style reference is required for this shot.",
+      visualReferenceInputs.length > 0 && visualReferenceInputs.every((item) => item.sha256)
+        ? ""
+        : "Locked reference files must be readable and hash-bound before preparing a sample.",
     ]);
-    const receiptId = `image2_one_shot_prepare_${safePathSegment(project.projectId || "project")}_${safePathSegment(selectedShotId)}_${safePathSegment(project.runId || "run")}`;
+    const actionId = `image2_one_shot_${safePathSegment(projectId || "project")}_${safePathSegment(selectedShotId)}_${safePathSegment(projectFactHash || "facts")}`;
+    const receiptId = `image2_one_shot_prepare_${safePathSegment(projectId || "project")}_${safePathSegment(selectedShotId)}_${safePathSegment(project.runId || "run")}_${safePathSegment(projectFactHash || "facts")}`;
     const transportPlan = oneShotTransportPlan(transport.mode, {
-      projectId: project.projectId,
+      projectId,
       projectRoot: project.projectRoot,
+      projectFactHash,
+      actionId,
       selectedShotId,
+      selectedShotIds,
+      providerId,
+      providerSlot,
+      requiredMode,
       promptPath,
       promptText,
+      promptSha256,
       expectedOutputPath,
       providerObservationPath,
       semanticQaPath,
@@ -630,16 +840,22 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       status: blockers.length ? "blocked" : "prepared",
       action: "prepare",
       generatedAt: new Date().toISOString(),
-      projectId: project.projectId,
+      projectId,
       projectRoot: project.projectRoot,
+      projectFactHash,
+      actionId,
       projectVibePath: project.projectVibePath,
       selectedShotId,
       selectedShotIds,
       imageCount: input.imageCount,
       oneShotOnly,
+      providerId,
+      providerSlot,
+      requiredMode,
       expectedOutputPath,
       promptPath,
       promptText,
+      promptSha256,
       providerObservationPath,
       semanticQaPath,
       handoffPacketPath,
@@ -679,11 +895,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       },
       blockers,
     };
-    const receiptMatches = input.receipt
-      && input.receipt.receiptId === receipt.receiptId
-      && input.receipt.selectedShotId === selectedShotId
-      && input.receipt.expectedOutputPath === expectedOutputPath
-      && input.receipt.status === "prepared";
+    const receiptMatches = oneShotReceiptMatches(input.receipt, receipt);
     const confirmBlockers = action === "confirm"
       ? uniqueStrings([
         ...blockers,
@@ -698,6 +910,14 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const providerObservation = readRuntimeJson(providerObservationPath);
     const semanticQa = readRuntimeJson(semanticQaPath);
     const semantic = semanticQaSummary(semanticQa);
+    const projectRelativeOutputPath = outputExists
+      ? oneShotProjectRelativeOutputPath(expectedOutputPath, source.runRootRelativePath)
+      : undefined;
+    const approvedReviewReceipt = approvedOneShotReviewReceipt(projectFacts.projectVibe, {
+      selectedShotId,
+      outputPath: projectRelativeOutputPath,
+      outputSha256,
+    });
     const persistedReceiptUsable = action === "status"
       && oneShotReceiptMatches(persistedReceipt, receipt);
     const persistedHandoffUsable = action === "status"
@@ -711,17 +931,28 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       && persistedTriggerPlan.status === "trigger_plan_prepared"
       && persistedTriggerPlan.receiptId === receipt.receiptId
       && persistedTriggerPlan.handoffId === `handoff_${receipt.receiptId}`
+      && persistedTriggerPlan.projectId === receipt.projectId
+      && persistedTriggerPlan.projectRoot === receipt.projectRoot
+      && persistedTriggerPlan.projectFactHash === receipt.projectFactHash
+      && persistedTriggerPlan.actionId === receipt.actionId
+      && persistedTriggerPlan.promptSha256 === receipt.promptSha256
+      && persistedTriggerPlan.providerId === providerId
       && persistedTriggerPlan.providerCalled === false
       && persistedTriggerPlan.actualImage2Triggered === false;
     const handoffPacket = {
       packetId: `handoff_${receipt.receiptId}`,
       schemaVersion: "vibe_core_current_project_image2_one_shot_handoff_packet_v1",
       receiptId: receipt.receiptId,
-      projectId: project.projectId,
+      projectId,
       projectRoot: project.projectRoot,
+      projectFactHash,
+      actionId,
       selectedShotId,
       selectedShotIds,
       imageCount: input.imageCount,
+      providerId,
+      providerSlot,
+      requiredMode,
       status: "ready_for_manual_transport",
       createdAt: new Date().toISOString(),
       requiresExternalAction: true,
@@ -732,6 +963,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       expectedOutputPath,
       promptPath,
       promptText,
+      promptSha256,
       visualReferenceInputs,
       providerObservationPath,
       semanticQaPath,
@@ -752,6 +984,21 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
         actualExecutionAllowed: false,
       },
     };
+    const persistedSubmitPermissionReceiptUsable = action === "status"
+      && persistedHandoffUsable
+      && !isRecord(persistedSubmitClaim)
+      && providerSubmitPermissionReceiptMatches(persistedSubmitPermissionReceipt, {
+        receipt,
+        handoff: persistedHandoff,
+        providerId,
+        providerSlot,
+        requiredMode,
+        selectedShotIds,
+        expectedOutputs,
+        referenceInputs: visualReferenceInputs,
+        promptPath,
+        promptSha256,
+      });
     if (action === "prepare" && confirmBlockers.length === 0) {
       writeOneShotStateJson(statePaths.receiptStatePath, receipt, statePaths.stateRoot, sandboxRoot);
     }
@@ -766,20 +1013,42 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       receiptId: receiptForResponse?.receiptId || receipt.receiptId,
       handoffPacketId: handoffForResponse?.packetId || `handoff_${receipt.receiptId}`,
     };
-    const hashBoundActual = Boolean(
+    const currentFactHashBoundActual = Boolean(
       outputSha256
         && outputExists
         && actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, providerObservationContext)
         && actualSemanticQaMatches(semanticQa, expectedOutputPath, outputSha256),
     );
+    const approvedSourceReceiptId = asString(approvedReviewReceipt?.sourceReceiptId);
+    const approvedReviewHashBoundActual = Boolean(
+      outputSha256
+        && outputExists
+        && approvedSourceReceiptId
+        && actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, {
+          selectedShotId,
+          receiptId: approvedSourceReceiptId,
+          handoffPacketId: `handoff_${approvedSourceReceiptId}`,
+        })
+        && actualSemanticQaMatches(semanticQa, expectedOutputPath, outputSha256),
+    );
+    const reviewRecoveredFromProjectVibe = approvedReviewHashBoundActual;
+    const hashBoundActual = currentFactHashBoundActual || approvedReviewHashBoundActual;
     const providerObservationMode = hashBoundActual ? providerObservation?.providerObservationMode || "actual_provider_call_observed" : "not_observed";
     const semanticQaStatus = hashBoundActual ? semanticQa?.status || semanticQa?.qaStatus || semanticQa?.finalAssessment?.status || "needs_review" : "not_written";
-    const returnSource = hashBoundActual ? "actual_provider_return_ingest" : "dry_run_projection_only";
+    const returnSource = reviewRecoveredFromProjectVibe
+      ? "project_vibe_approved_review"
+      : hashBoundActual
+        ? "actual_provider_return_ingest"
+        : "dry_run_projection_only";
     const formalPromotionBlockedReasons = hashBoundActual
-      ? ["Formal promotion remains blocked until human QA approval after hash-bound provider return."]
+      ? [reviewRecoveredFromProjectVibe
+          ? "Formal promotion remains blocked until explicit lock or promotion authorization."
+          : "Formal promotion remains blocked until human QA approval after hash-bound provider return."]
       : [];
     const status = confirmBlockers.length
       ? "blocked"
+      : reviewRecoveredFromProjectVibe
+        ? "verified"
       : outputExists && (semantic.passed || semantic.needsReview || semantic.present)
         ? "needs_review"
         : persistedTriggerPlanUsable
@@ -795,8 +1064,10 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
         ? "等待回流"
       : status === "handoff_prepared"
         ? "等待文件"
-        : status === "needs_review"
+      : status === "needs_review"
           ? "需要复核"
+          : status === "verified"
+            ? "已验证"
           : status === "blocked"
             ? "待处理"
             : "准备小样包";
@@ -833,9 +1104,11 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       },
       projectRootMode: source.projectRootMode,
       projectRoot: project.projectRoot,
-      projectId: project.projectId,
+      projectId,
+      projectFactHash,
+      actionId,
       identity: {
-        projectId: project.projectId,
+        projectId,
         projectRoot: project.projectRoot,
       },
       project,
@@ -843,6 +1116,9 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       uiStatus: status,
       userLabel,
       providerRequestId: providerObservation?.providerRequestId,
+      sourceReceiptId: approvedSourceReceiptId || receiptForResponse?.receiptId,
+      reviewReceiptId: asString(approvedReviewReceipt?.id),
+      reviewRecoveredFromProjectVibe,
       outputSha256,
       hashBoundActual,
       providerObservationMode,
@@ -854,24 +1130,30 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       selectedShotId,
       selectedShotIds,
       expectedOutputPath,
+      expectedOutputs,
       promptPath,
       promptText,
+      promptSha256,
+      providerId,
+      providerSlot,
+      requiredMode,
       providerObservationPath,
       semanticQaPath,
       handoffPacketPath,
       statePaths,
       submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
+      submitPermissionReceiptClaimStatePath: persistedSubmitClaimStatePath,
       receipt: receiptForResponse,
       handoffPacket: handoffForResponse,
-      submitPermissionReceipt: isRecord(persistedSubmitPermissionReceipt) ? persistedSubmitPermissionReceipt : undefined,
+      submitPermissionReceipt: persistedSubmitPermissionReceiptUsable ? persistedSubmitPermissionReceipt : undefined,
       transportPlan,
       persistedState: {
         receiptPresent: persistedReceiptUsable || (action === "prepare" && confirmBlockers.length === 0) || confirmed,
         handoffPresent: persistedHandoffUsable || confirmed,
         triggerPlanPresent: persistedTriggerPlanUsable,
-        submitPermissionReceiptPresent: isRecord(persistedSubmitPermissionReceipt)
-          && persistedSubmitPermissionReceipt.receiptId === receipt.receiptId
-          && persistedSubmitPermissionReceipt.handoffId === `handoff_${receipt.receiptId}`,
+        submitPermissionReceiptPresent: persistedSubmitPermissionReceiptUsable,
+        submitPermissionReceiptClaimed: isRecord(persistedSubmitClaim),
+        submitPermissionReceiptClaimStatePath: persistedSubmitClaimStatePath,
         receiptStatePath: statePaths.receiptStatePath,
         handoffStatePath: statePaths.handoffStatePath,
         triggerPlanStatePath: statePaths.triggerPlanStatePath,
@@ -899,9 +1181,17 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       },
       previewProjection: {
         shotId: selectedShotId,
-        status: outputExists ? (semantic.needsReview ? "needs_review" : "returned") : persistedTriggerPlanUsable ? "waiting_action_time_confirmation" : handoffForResponse ? "waiting_file" : "not_started",
+        status: reviewRecoveredFromProjectVibe
+          ? "verified"
+          : outputExists
+            ? (semantic.needsReview ? "needs_review" : "returned")
+            : persistedTriggerPlanUsable
+              ? "waiting_action_time_confirmation"
+              : handoffForResponse
+                ? "waiting_file"
+                : "not_started",
         imageUrl: outputExists ? runtimeFileUrl(expectedOutputPath) : undefined,
-        reviewRequired: semantic.needsReview,
+        reviewRequired: reviewRecoveredFromProjectVibe ? false : semantic.needsReview,
       },
       submitPolicy: {
         providerCallAllowed: false,
@@ -942,8 +1232,11 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const statePaths = statusProjection.statePaths || {};
     const sandboxRoot = statusProjection.receipt?.sandbox?.root;
     const shotRoot = statusProjection.receipt?.sandbox?.shotRoot;
+    const currentReceipt = statusProjection.receipt;
     const receipt = oneShotStateJson(statePaths.receiptStatePath, statePaths.stateRoot, sandboxRoot);
     const handoff = oneShotStateJson(statePaths.handoffStatePath, statePaths.stateRoot, sandboxRoot);
+    const receiptMatchesCurrent = oneShotReceiptMatches(receipt, currentReceipt);
+    const handoffMatchesCurrent = oneShotHandoffMatches(handoff, currentReceipt);
     const promptPath = handoff?.promptPath || receipt?.promptPath || statusProjection.promptPath;
     const promptText = handoff?.promptText || receipt?.promptText || statusProjection.promptText || "";
     const expectedOutputPath = handoff?.expectedOutputPath || receipt?.expectedOutputPath || statusProjection.expectedOutputPath;
@@ -972,9 +1265,9 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
     const projection = projectProjectionFromSource(source);
     const shotPlans = Array.isArray(projection.projectFacts?.runManifest?.shotPlans) ? projection.projectFacts.runManifest.shotPlans : [];
     const selectedShotPlan = shotPlans.find((shotPlan) => shotPlan?.shotId === transportPlan.selectedShotId) || {};
-    const providerId = asString(selectedShotPlan.providerId) || "openai-image2-api";
-    const providerSlot = asString(selectedShotPlan.providerSlot) || "image.generate";
-    const requiredMode = asString(selectedShotPlan.requiredMode) || "text2image";
+    const providerId = asString(currentReceipt?.providerId) || asString(selectedShotPlan.providerId) || "openai-image2-api";
+    const providerSlot = asString(currentReceipt?.providerSlot) || asString(selectedShotPlan.providerSlot) || "image.generate";
+    const requiredMode = asString(currentReceipt?.requiredMode) || asString(selectedShotPlan.requiredMode) || "text2image";
     const expectedOutputs = [
       {
         shotId: transportPlan.selectedShotId,
@@ -990,14 +1283,20 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       || input.credentialRefProvided === true
       || Boolean(input.credentialRef);
     const blockers = uniqueStrings([
+      statusProjection.ok === true ? "" : "Current one-shot projection must be valid before trigger-plan.",
       isRecord(receipt) ? "" : "Persisted prepare receipt is required before trigger-plan.",
       isRecord(handoff) ? "" : "Persisted handoff packet is required before trigger-plan.",
+      receiptMatchesCurrent ? "" : "Persisted prepare receipt must match the current project facts, provider, shot, prompt, and output paths.",
+      handoffMatchesCurrent ? "" : "Persisted handoff packet must match the current prepare receipt.",
       handoff?.status === "ready_for_manual_transport" ? "" : "Handoff must be ready_for_manual_transport before trigger-plan.",
       receipt?.status === "prepared" ? "" : "Prepare receipt must be status=prepared before trigger-plan.",
       pathSafe ? "" : "Trigger plan path must stay inside the one-shot sandbox.",
       transportPlan.transportModeAllowed ? "" : "Transport mode must be manual, agent_app_server, agent_cli, or disabled.",
       transportPlan.transportMode === "disabled" ? "Image2 transport mode is disabled for this request." : "",
       promptPath && promptText ? "" : "Prompt path and prompt text are required before trigger-plan.",
+      promptSha256 && promptSha256 === currentReceipt?.promptSha256 && promptSha256 === handoff?.promptSha256
+        ? ""
+        : "Current prompt hash must match the prepare receipt and handoff packet.",
       rawCredentialMaterialPresent ? "Raw credential material or credential-like keys are forbidden." : "",
       submitPermissionReceiptRequested && !providerSubmitPermissionInputExpectedOutputsMatch(input.expectedOutputs, expectedOutputs) ? "Request expectedOutputs must match the prepared one-shot output paths." : "",
     ]);
@@ -1005,11 +1304,16 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       generatedAt,
       receiptId: transportPlan.receiptId,
       handoffId: transportPlan.handoffId,
+      projectId: currentReceipt?.projectId,
+      projectRoot: currentReceipt?.projectRoot,
+      projectFactHash: currentReceipt?.projectFactHash,
+      actionId: currentReceipt?.actionId,
       providerId,
       providerSlot,
       requiredMode,
       selectedShotIds: transportPlan.selectedShotIds,
       expectedOutputs,
+      referenceInputs: currentReceipt?.visualReferenceInputs,
       credentialRef: input.credentialRef,
       maxProviderCallsPerReceipt: input.maxProviderCallsPerReceipt,
       actionTimeConfirmation: input.actionTimeConfirmation,
@@ -1032,6 +1336,10 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       selectedShotIds: transportPlan.selectedShotIds,
       receiptId: transportPlan.receiptId,
       handoffId: transportPlan.handoffId,
+      projectId: currentReceipt?.projectId,
+      projectRoot: currentReceipt?.projectRoot,
+      projectFactHash: currentReceipt?.projectFactHash,
+      actionId: currentReceipt?.actionId,
       providerId,
       providerSlot,
       requiredMode,
@@ -1040,6 +1348,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       promptText,
       expectedOutputPath,
       expectedOutputs,
+      referenceInputs: currentReceipt?.visualReferenceInputs,
       providerObservationPath,
       semanticQaPath,
       submitPermissionReceiptRequested,
@@ -1103,6 +1412,8 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       projectRootMode: source.projectRootMode,
       projectRoot: statusProjection.projectRoot,
       projectId: statusProjection.projectId,
+      projectFactHash: currentReceipt?.projectFactHash,
+      actionId: currentReceipt?.actionId,
       project: statusProjection.project,
       status: ok ? "trigger_plan_prepared" : "blocked",
       uiStatus: ok ? "trigger_plan_prepared" : "blocked",

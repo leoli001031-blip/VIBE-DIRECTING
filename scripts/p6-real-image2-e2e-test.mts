@@ -20,6 +20,7 @@ import {
   type ProviderRetryResult,
   type ProviderRetrySchedulerState,
 } from "../src/core/providerRetryScheduler.ts";
+import { getProviderApiKey } from "./runtime-api-credentials.mts";
 
 const CONFIRM_PHRASE = "submit-p6-image2";
 const DEFAULT_PROMPT =
@@ -317,7 +318,13 @@ async function callImage2ProviderBatch(input: {
 
 const providerId = process.env.VIBE_IMAGE2_PROVIDER_ID || "openai-image2-api";
 const baseUrl = process.env.VIBE_IMAGE2_BASE_URL || "https://api.openai.com";
-const apiKey = process.env.VIBE_IMAGE2_API_KEY || "";
+const environmentApiKey = process.env.VIBE_IMAGE2_API_KEY?.trim() || "";
+const apiKey = environmentApiKey || getProviderApiKey(providerId) || "";
+const credentialRef = environmentApiKey
+  ? "env:VIBE_IMAGE2_API_KEY"
+  : apiKey
+    ? `local-settings://providers/${providerId}`
+    : "unconfigured";
 const confirmPhrase = process.env.VIBE_P6_IMAGE2_CONFIRM || "";
 const liveRequested = argFlag("--live") || process.env.VIBE_P6_IMAGE2_LIVE === "1";
 const preflightRequested = argFlag("--preflight") || !liveRequested;
@@ -366,7 +373,7 @@ function buildPermissionReceipt() {
     requiredMode: "text2image",
     selectedShotIds: shotIds,
     expectedOutputs,
-    credentialRef: "env:VIBE_IMAGE2_API_KEY",
+    credentialRef,
     maxProviderCallsPerReceipt: 1,
     actionTimeConfirmation: {
       confirmationReceiptId: `action_confirmation_${runId}`,
@@ -388,7 +395,7 @@ const plan = buildP6RealImage2Plan({
   imageCount: shotIds.length,
   providerId,
   providerBaseUrl: baseUrl,
-  credentialRef: "env:VIBE_IMAGE2_API_KEY",
+  credentialRef,
   outputRoot,
   submitPermissionReceipt: permissionReceipt,
   actionTimeConfirmation: {
@@ -403,7 +410,7 @@ writeJson(`${outputRoot}/submit-plan.json`, plan);
 
 const liveSubmitBlockers = [
   ...plan.blockers,
-  ...(!apiKey ? ["VIBE_IMAGE2_API_KEY is required for live P6 submit."] : []),
+  ...(!apiKey ? ["An Image2 credential is required for live P6 submit."] : []),
   ...(confirmPhrase !== CONFIRM_PHRASE ? [`VIBE_P6_IMAGE2_CONFIRM must equal ${CONFIRM_PHRASE}.`] : []),
 ];
 const canSubmitProvider = liveRequested && Boolean(apiKey) && confirmPhrase === CONFIRM_PHRASE && plan.status === "ready_for_live_submit";

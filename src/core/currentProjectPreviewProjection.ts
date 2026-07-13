@@ -1,4 +1,5 @@
 import type { PreviewQueueItem, PreviewQueueItemKind } from "./previewPlayerQueue";
+import type { ProjectImage2OneShotStatus } from "./projectImage2Types";
 import {
   buildJimengVideoStatusProjection,
   type JimengVideoStatusProjection,
@@ -173,6 +174,7 @@ export interface BuildCurrentProjectPreviewProjectionInput {
   previewItems?: CurrentProjectPreviewItemInput[];
   previewPlan?: CurrentProjectPreviewPlanInput;
   relayQueue?: VideoRelayQueueState;
+  oneShot?: ProjectImage2OneShotStatus;
   projectId?: string;
   projectRoot?: string;
   generatedAt?: string;
@@ -446,20 +448,89 @@ function mergeRuntimePreviewItems(
   ];
 }
 
+function oneShotPreviewItem(oneShot: ProjectImage2OneShotStatus | undefined): CurrentProjectPreviewItemInput | undefined {
+  if (
+    !oneShot?.selectedShotId
+    || !oneShot.outputExists
+    || !oneShot.imageUrl
+    || !oneShot.outputSha256
+    || !oneShot.hashBoundActual
+    || !oneShot.providerReturnIngested
+    || (oneShot.uiStatus !== "needs_review" && oneShot.uiStatus !== "verified")
+  ) return undefined;
+  const sourceReceiptId = stringValue(oneShot.sourceReceiptId)
+    || stringValue(oneShot.receipt?.receiptId)
+    || stringValue(oneShot.submitPermissionReceipt?.permissionReceiptId)
+    || stringValue(oneShot.providerRequestId);
+  const verified = oneShot.uiStatus === "verified";
+  return {
+    id: `p6_one_shot_${oneShot.selectedShotId}`,
+    shotId: oneShot.selectedShotId,
+    mediaType: "image",
+    imageUrl: oneShot.imageUrl,
+    expectedOutputPath: oneShot.expectedOutputPath,
+    sourceReceiptId,
+    providerReceiptId: stringValue(oneShot.submitPermissionReceipt?.permissionReceiptId),
+    providerRequestId: oneShot.providerRequestId,
+    outputHash: oneShot.outputSha256,
+    outputSha256: oneShot.outputSha256,
+    promptText: oneShot.promptText,
+    promptPath: oneShot.promptPath,
+    promptHash: oneShot.promptSha256,
+    referencePaths: oneShot.receipt?.visualReferenceInputs
+      ?.map((item) => stringValue(item.path))
+      .filter((item): item is string => Boolean(item)),
+    status: verified ? "verified" : "needs_review",
+    previewStatus: verified ? "verified" : "needs_review",
+    previewQaStatus: verified ? "verified" : "needs_review",
+    productionQaStatus: verified ? "verified" : "needs_review",
+    reviewRequired: !verified,
+    outputExists: true,
+    blockers: [],
+  };
+}
+
+function mergeOneShotPreviewItem(
+  items: CurrentProjectPreviewItemInput[],
+  oneShot: ProjectImage2OneShotStatus | undefined,
+) {
+  const candidate = oneShotPreviewItem(oneShot);
+  if (!candidate) return items;
+  const matchIndex = items.findIndex((item) => {
+    if (item.shotId !== candidate.shotId) return false;
+    const mediaPath = item.mediaPath || item.outputVideoPath || item.videoPath || item.videoUrl || item.imageUrl;
+    return !String(item.mediaType || "").toLowerCase().includes("video")
+      && !item.videoStatus
+      && !mediaLooksVideo(mediaPath);
+  });
+  if (matchIndex < 0) return [...items, candidate];
+  return items.map((item, index) => index === matchIndex
+    ? {
+        ...item,
+        ...candidate,
+        order: item.order ?? candidate.order,
+        durationSeconds: item.durationSeconds ?? candidate.durationSeconds,
+      }
+    : item);
+}
+
 function previewItemList(
   summary: CurrentProjectPreviewSummaryInput | undefined,
   previewItems: CurrentProjectPreviewItemInput[] | undefined,
   clips: CurrentProjectPreviewPlanClipInput[],
   relayQueue: VideoRelayQueueState | undefined,
+  oneShot: ProjectImage2OneShotStatus | undefined,
 ): CurrentProjectPreviewItemInput[] {
   const explicit = previewItems?.length ? previewItems : summary?.previewItems;
   const normalized = (explicit || []).map(asPreviewItem).filter((item): item is CurrentProjectPreviewItemInput => Boolean(item));
   const relayItems = relayQueuePreviewItems(relayQueue);
-  if (normalized.length) return mergeRuntimePreviewItems(normalized, relayItems);
-  if (relayItems.length) return relayItems;
-  return clips
-    .filter((clip) => Boolean(clip.shotId))
-    .map((clip) => ({
+  const baseItems = normalized.length
+    ? mergeRuntimePreviewItems(normalized, relayItems)
+    : relayItems.length
+      ? relayItems
+      : clips
+        .filter((clip) => Boolean(clip.shotId))
+        .map((clip) => ({
       id: clip.id || clip.clipId,
       shotId: clip.shotId,
       order: clip.order,
@@ -475,7 +546,8 @@ function previewItemList(
       providerOutputSha256: clip.providerOutputSha256,
       previewQaStatus: clip.previewQaStatus,
       productionQaStatus: clip.productionQaStatus,
-    }));
+        }));
+  return mergeOneShotPreviewItem(baseItems, oneShot);
 }
 
 function byShotId<T extends { shotId?: string }>(items: T[]) {
@@ -505,6 +577,7 @@ function reviewShotSet(summary: CurrentProjectPreviewSummaryInput | undefined) {
 }
 
 function itemReviewRequired(item: CurrentProjectPreviewItemInput, clip: CurrentProjectPreviewPlanClipInput | undefined, reviewShots: Set<string>) {
+  if (item.reviewRequired === false) return false;
   const shotId = stringValue(item.shotId);
   return item.reviewRequired === true
     || item.reviewOverlay === true
@@ -541,7 +614,7 @@ export function buildCurrentProjectPreviewProjection(
   const reviewShots = reviewShotSet(summary);
   let startSeconds = 0;
 
-  const items = sortedItems(previewItemList(summary, input.previewItems, clips, input.relayQueue)).map((item, index): CurrentProjectPreviewQueueItem => {
+  const items = sortedItems(previewItemList(summary, input.previewItems, clips, input.relayQueue, input.oneShot)).map((item, index): CurrentProjectPreviewQueueItem => {
     const shotId = stringValue(item.shotId);
     const clip = shotId ? clipsByShotId.get(shotId) : undefined;
     const status = normalizeStatus(item.status, item.previewStatus, item.runtimeTruthStatus, clip?.status);

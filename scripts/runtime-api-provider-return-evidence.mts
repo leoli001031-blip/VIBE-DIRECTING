@@ -46,12 +46,15 @@ export function createRuntimeApiProviderReturnEvidence({
   function actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, expectedContext = {}) {
     if (!isRecord(providerObservation)) return false;
     const provider = String(providerObservation.provider || providerObservation.providerId || "");
+    const providerOperation = asString(providerObservation.providerOperation);
+    const imageProviderObserved = /(?:^|[-_.])image2?(?:[-_.]|$)/i.test(provider)
+      || /^image\.(?:generate|edit)$/i.test(providerOperation);
     const outputPath = runtimeRelativeFromValue(providerObservation.outputPath);
     const observedHash = asString(providerObservation.outputSha256) || asString(providerObservation.outputHash);
     const providerRequestId = asString(providerObservation.providerRequestId);
     const contextMatches = providerObservationContextBlockers(providerObservation, expectedContext).length === 0;
     return providerObservation.providerObservationMode === "actual_provider_call_observed"
-      && /image2/i.test(provider)
+      && imageProviderObserved
       && Boolean(providerRequestId)
       && contextMatches
       && outputPath === expectedOutputPath

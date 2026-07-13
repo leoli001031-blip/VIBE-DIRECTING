@@ -20,6 +20,7 @@ import {
   loadProjectImage2OneShotStatus,
   prepareProjectImage2OneShot,
   prepareProjectImage2OneShotPermissionReceipt,
+  reconcileProjectImage2OneShotUiState,
   runProjectImage2BatchCheck,
 } from "../../core/projectImage2Client";
 import {
@@ -44,6 +45,9 @@ type UseCurrentProjectRuntimePanelsInput = {
   selectedShotId: string;
   previewRefreshEnabled: boolean;
 };
+
+type ProjectImage2OneShotStateUpdate = ProjectImage2OneShotPanelState
+  | ((current: ProjectImage2OneShotPanelState) => ProjectImage2OneShotPanelState);
 
 function unavailableProjectPanelState(message: string) {
   return { status: "unavailable" as const, message };
@@ -120,7 +124,7 @@ export function useCurrentProjectRuntimePanels({
 }: UseCurrentProjectRuntimePanelsInput) {
   const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
   const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
-  const [projectImage2OneShotState, setProjectImage2OneShotState] = useState<ProjectImage2OneShotPanelState>({ status: "unavailable" });
+  const [projectImage2OneShotState, setProjectImage2OneShotStateRaw] = useState<ProjectImage2OneShotPanelState>({ status: "unavailable" });
   const [strictEditPreflightState, setStrictEditPreflightState] = useState<ProjectRound5StrictEditPreflightPanelState>({ status: "idle" });
   const [providerConfigStatuses, setProviderConfigStatuses] = useState<ProviderConfigStatus[]>([]);
   const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>(
@@ -131,6 +135,12 @@ export function useCurrentProjectRuntimePanels({
   const [projectSelectionStatus, setProjectSelectionStatus] = useState<ProjectSelectionStatus>("idle");
   const [authorizationRef, setAuthorizationRef] = useState("secret-store://providers/openai-image2/default");
   const projectRealChainStateRef = useRef(projectRealChainState);
+  const setProjectImage2OneShotState = useCallback((update: ProjectImage2OneShotStateUpdate) => {
+    setProjectImage2OneShotStateRaw((current) => {
+      const next = typeof update === "function" ? update(current) : update;
+      return reconcileProjectImage2OneShotUiState(current, next);
+    });
+  }, []);
 
   useEffect(() => {
     projectRealChainStateRef.current = projectRealChainState;
@@ -209,15 +219,19 @@ export function useCurrentProjectRuntimePanels({
       setUnavailableProjectPanels(browserDraftProjectMessage);
       return;
     }
-    const [nextRealChainState, nextImage2BatchState, nextOneShotState] = await Promise.all([
+    const [nextRealChainState, nextImage2BatchState] = await Promise.all([
       loadProjectRealChainStatus(identity),
       loadProjectImage2BatchPlan(identity),
-      loadProjectImage2OneShotStatus(identity, selectedShotId),
     ]);
+    const oneShotShotId = selectedShotId
+      || nextRealChainState.summary?.workbenchFacts?.storyFlow?.shots[0]?.id;
+    const nextOneShotState = oneShotShotId
+      ? await loadProjectImage2OneShotStatus(identity, oneShotShotId)
+      : undefined;
     const statuses = await loadProviderConfigStatuses();
     setProjectRealChainState(nextRealChainState);
     setProjectImage2BatchState(nextImage2BatchState);
-    setProjectImage2OneShotState(nextOneShotState);
+    if (nextOneShotState) setProjectImage2OneShotState(nextOneShotState);
     setProviderConfigStatuses(statuses);
     setStrictEditPreflightState({ status: "idle" });
   }, [selectedShotId, setUnavailableProjectPanels]);
@@ -289,14 +303,16 @@ export function useCurrentProjectRuntimePanels({
         setProjectImage2BatchState(unavailableProjectPanelState("加载复核状态失败。"));
       }
     });
-    loadProjectImage2OneShotStatus(runtimeProjectIdentity, selectedShotId).then((nextState) => {
-      if (!cancelled) setProjectImage2OneShotState(nextState);
-    }).catch((error: unknown) => {
-      if (!cancelled) {
-        console.error("Failed to load project image2 one-shot status", error);
-        setProjectImage2OneShotState(unavailableProjectPanelState("加载小样状态失败。"));
-      }
-    });
+    if (selectedShotId) {
+      loadProjectImage2OneShotStatus(runtimeProjectIdentity, selectedShotId).then((nextState) => {
+        if (!cancelled) setProjectImage2OneShotState(nextState);
+      }).catch((error: unknown) => {
+        if (!cancelled) {
+          console.error("Failed to load project image2 one-shot status", error);
+          setProjectImage2OneShotState(unavailableProjectPanelState("加载小样状态失败。"));
+        }
+      });
+    }
     return () => {
       cancelled = true;
     };

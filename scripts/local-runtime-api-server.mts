@@ -901,6 +901,7 @@ const {
   oneShotExecutorPathInsideSandbox,
   assertOneShotExecutorSandboxWritePath,
   writeOneShotExecutorJson,
+  claimOneShotExecutorJson,
   writeOneShotExecutorBytes,
   assertCurrentProjectRuntimeWritePath,
   writeCurrentProjectRuntimeJson,
@@ -1098,6 +1099,7 @@ const {
   readFileSync,
   writeOneShotExecutorBytes,
   writeOneShotExecutorJson,
+  claimOneShotExecutorJson,
   writeJson,
   running: () => running,
 });

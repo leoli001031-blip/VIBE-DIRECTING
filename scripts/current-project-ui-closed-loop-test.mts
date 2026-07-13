@@ -19,6 +19,7 @@ import {
   selectCurrentProjectBinding,
 } from "../src/core/projectCurrentRuntimeClient.ts";
 import {
+  approveProjectImage2OneShotUiState,
   confirmProjectImage2OneShot,
   deriveProjectImage2BatchPlanStatus,
   deriveProjectImage2OneShotStatus,
@@ -37,6 +38,7 @@ import {
   projectImage2OneShotConfirmEndpoint,
   projectImage2OneShotPrepareTriggerEndpoint,
   projectImage2OneShotExecuteReturnEndpoint,
+  reconcileProjectImage2OneShotUiState,
   runProjectImage2BatchCheck,
 } from "../src/core/projectImage2Client.ts";
 import {
@@ -47,6 +49,7 @@ import {
 import {
   buildCurrentProjectPreviewProjection,
 } from "../src/core/currentProjectPreviewProjection.ts";
+import { projectRelativeReviewMediaPath } from "../src/core/projectReviewDecisionClient.ts";
 import { createAssetLibraryFromCurrentProjectWorkbench } from "../src/ui/app/projectRuntimeProjections.ts";
 import { buildProjectStatusViewModel } from "../src/ui/app/projectStatusViewModel.ts";
 import { assetLibraryAssetToRecord } from "../src/ui/director/assetLibraryUi.ts";
@@ -55,6 +58,32 @@ import { toMediaSrc } from "../src/ui/common/MediaFrame.tsx";
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
+
+const reviewProjectRoot = "/private/var/folders/test/projects/reference-review";
+const reviewOutputPath = "/var/folders/test/projects/reference-review/real-trigger-one-shot/P6S01/image2-start.png";
+assert(
+  projectRelativeReviewMediaPath(reviewOutputPath, reviewProjectRoot) === "real-trigger-one-shot/P6S01/image2-start.png",
+  "review media paths must treat macOS /private/var and /var as the same project root",
+);
+assert(
+  projectRelativeReviewMediaPath(
+    `http://127.0.0.1:8791/api/runtime/files?path=${encodeURIComponent(reviewOutputPath)}`,
+    reviewProjectRoot,
+  ) === "real-trigger-one-shot/P6S01/image2-start.png",
+  "runtime file URLs must resolve to a project-relative review output",
+);
+assert(
+  projectRelativeReviewMediaPath("real-trigger-one-shot/P6S01/image2-start.png", reviewProjectRoot) === "real-trigger-one-shot/P6S01/image2-start.png",
+  "existing project-relative review outputs must remain valid",
+);
+assert(
+  projectRelativeReviewMediaPath("/tmp/outside/image.png", reviewProjectRoot) === undefined,
+  "unmatched absolute review outputs must not be reinterpreted as project-relative paths",
+);
+assert(
+  projectRelativeReviewMediaPath("../outside/image.png", reviewProjectRoot) === undefined,
+  "review outputs must reject parent traversal",
+);
 
 function assertUnifiedProjectStatusVideoStage() {
   const runtimeState = {
@@ -575,6 +604,7 @@ function assertCreatorPanelContract() {
   const creatorDeskProjectionSource = readText("src/ui/app/creatorDeskProjection.ts");
   const workbenchProjectionSource = readText("src/core/currentProjectWorkbenchProjection.ts");
   const minimalStoryFlowSource = readText("src/ui/director/MinimalStoryFlow.tsx");
+  const minimalPreviewSource = readText("src/ui/director/MinimalPreview.tsx");
   const agentPanelSource = readText("src/ui/director/MinimalAgentPanel.tsx");
   const agentPanelProjectionSource = readText("src/ui/director/agentPanelProjection.ts");
   const p6RealImage2ActionSource = readText("src/ui/director/useP6RealImage2Action.ts");
@@ -782,6 +812,18 @@ function assertCreatorPanelContract() {
   assert(/loadCurrentProjectChoices\(\)/.test(currentProjectRuntimeSurface), "current project hook must load recent project choices through the runtime helper");
   assert(/selectProjectChoice/.test(currentProjectRuntimeSurface), "current project path must route recent project choices through the current selection helper");
   assert(/refreshCurrentProjectPanels\(binding\)/.test(currentProjectRuntimeSurface), "current project hook must refresh current binding and project panels after selection");
+  assert(
+    /const \[nextRealChainState, nextImage2BatchState\] = await Promise\.all\([\s\S]*const oneShotShotId = selectedShotId[\s\S]*nextRealChainState\.summary\?\.workbenchFacts\?\.storyFlow\?\.shots\[0\]\?\.id[\s\S]*const nextOneShotState = oneShotShotId[\s\S]*\? await loadProjectImage2OneShotStatus\(identity, oneShotShotId\)[\s\S]*: undefined[\s\S]*if \(nextOneShotState\) setProjectImage2OneShotState\(nextOneShotState\)/.test(currentProjectRuntimeSurface),
+    "current project refresh must resolve a real shot before loading or replacing one-shot state so an unavailable real-chain response cannot overwrite a restored result",
+  );
+  assert(
+    /loadProjectImage2BatchPlan\(runtimeProjectIdentity\)[\s\S]*if \(selectedShotId\) \{[\s\S]*loadProjectImage2OneShotStatus\(runtimeProjectIdentity, selectedShotId\)/.test(currentProjectRuntimeSurface),
+    "current project one-shot effect must wait for a resolved shot instead of overwriting restored output with an empty-shot status",
+  );
+  assert(
+    /setProjectImage2OneShotStateRaw[\s\S]*reconcileProjectImage2OneShotUiState\(current, next\)/.test(currentProjectRuntimeSurface),
+    "late one-shot responses must pass through the output-identity reconciliation guard",
+  );
   assert(/loadCurrentProjectBindingStatus\(\)/.test(currentProjectRuntimeSurface), "current project hook must load runtime current project binding first");
   assert(/useState<ProjectCurrentBindingStatus>\(\s*\(\)\s*=>\s*currentProjectBindingStatusFromBootstrap\(\)/.test(currentProjectRuntimeSurface), "current project hook must initialize from bootstrapped binding before async runtime fetch");
   assert(/__VIBE_CURRENT_PROJECT_BINDING__/.test(viteConfigSource), "Vite dev preview must bootstrap the current project binding for restricted browser surfaces");
@@ -880,7 +922,11 @@ function assertCreatorPanelContract() {
   assert(/submitCurrentProjectReviewDecision\(effectiveRuntimeProjectIdentity,\s*\{/.test(app), "review decisions must use the current project runtime route when a project folder is bound");
   assert(/if \(item\.assetId && rejectMode\)/.test(app), "asset-backed rejects may use the fast asset-status path");
   assert(!/item\.assetId && \(promotionMode \|\| rejectMode\)/.test(app), "Review Tray locks must not bypass the Project.vibe review decision route");
-  assert(/function projectRelativeReviewMediaPath/.test(appSource), "Review decisions must normalize media paths to project-relative paths");
+  assert(/projectRelativeReviewMediaPath\(/.test(appSource), "Review decisions must normalize media paths to project-relative paths");
+  assert(
+    /effectiveRuntimeProjectIdentity\?\.projectRoot \|\| prototypeProjectDraftTarget\.projectRoot/.test(appSource),
+    "Runtime review decisions must prefer the canonical bound project root",
+  );
   assert(/outputPath:\s*reviewMediaPath/.test(app), "Review decision outputPath must use the project-relative media path");
   assert(!/outputPath:\s*item\.mediaPath/.test(app), "Review decisions must not write raw item.mediaPath into Project.vibe");
   assert(/onRunProjectRealChain=\{runProjectRealChain\}/.test(appSource), "DirectorMode must pass runtime status run-check handler to the project panel");
@@ -907,6 +953,19 @@ function assertCreatorPanelContract() {
   assert(/storyboardStatusTone[\s\S]*strategy === "omni_reference" \? "ok" : "warn"/.test(minimalStoryFlowSource), "storyboard reference UI should not mark missing storyboard images as ready");
   assert(/没有拿到结果图，可以再次生成重试/.test(p6RealImage2ActionSource), "real Image2 UI action should tell the creator a failed result can be retried");
   assert(/如果网络中断，可以稍后再次生成/.test(p6RealImage2ActionSource), "real Image2 running copy should set retry expectation for long network requests");
+  assert(/useP6RealImage2Action/.test(appSource), "App must mount the P6 single-shot Image2 action");
+  assert(/realSampleAction=\{realSampleAction\}/.test(app), "Agent reference status must come from the P6 single-shot action");
+  assert(/onCreateP6RealSample=\{runP6RealImage2OneShot\}/.test(app), "Agent reference confirmation must execute the P6 single-shot action");
+  assert(!/onCreateP6RealSample=\{runImage2AssetGeneration\}/.test(app), "Agent reference confirmation must not execute the bulk asset-generation route");
+  assert(/function p6RealImage2ActionResult\([\s\S]*providerCalled:\s*oneShotState\?\.summary\?\.providerCalled === true[\s\S]*outputPath: ok && oneShotState\?\.summary\?\.outputExists/.test(p6RealImage2ActionSource), "P6 single-shot callback must return provider and output facts to the shared execution controller");
+  assert(/return p6RealImage2ActionResult\(nextActionState, submitted\)/.test(p6RealImage2ActionSource), "P6 single-shot completion must return a structured terminal result");
+  assert(/const reusablePreparedState = Boolean\([\s\S]*nextState\.status === "prepared"[\s\S]*nextState\.status === "handoff_prepared"[\s\S]*nextState\.status === "trigger_plan_prepared"[\s\S]*if \(!reusablePreparedState\)[\s\S]*prepareProjectImage2OneShot/.test(p6RealImage2ActionSource), "P6 single-shot action must not treat a read-only status receipt as persisted preparation");
+  assert(/if \(nextState\.status !== "handoff_prepared" && nextState\.status !== "trigger_plan_prepared"\)[\s\S]*小样包还没有准备完成/.test(p6RealImage2ActionSource), "P6 single-shot action must not prepare submit permission before a durable handoff exists");
+  assert(/restoredActionState\(oneShotState\)/.test(p6RealImage2ActionSource), "P6 single-shot action must restore persisted review state after restart");
+  assert(/oneShot:\s*projectImage2OneShotState\.summary/.test(appSource), "App must merge the persisted P6 one-shot result into the current Preview projection");
+  assert(/reviewableOutput:\s*boolean/.test(p6RealImage2ActionSource), "P6 single-shot action must expose a structured reviewable-output fact");
+  assert(/realSampleAction\?\.reviewableOutput === true/.test(agentPanelSource), "Agent reference review state must recognize a hash-bound P6 one-shot output");
+  assert(/referenceReviewCount:\s*referenceReviewCountForAgent/.test(agentPanelSource), "Agent current-task projection must receive the structured P6 review count");
   assert(/import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorModeShell(?:AgentKernel(?:V\d+)?)?"/.test(appSource), "App must mount the extracted DirectorModeShell");
   assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/MinimalAgentPanel"/.test(directorModeSource), "DirectorMode must mount the extracted MinimalAgentPanel");
   assert(!/\?agent-kernel-v\d+/.test(directorModeSource), "DirectorMode must not pin Agent UI imports with fixed query strings");
@@ -1013,6 +1072,8 @@ function assertCreatorPanelContract() {
   assert(/recoveryTargetShotIds:\s*effectiveActionState\.recoveryTargetShotIds/.test(seedanceSubmitActionSource), "Seedance action view should return blocked shot ids to the Agent panel");
   assert(/state\.summary\?\.relayQueue[\s\S]*state as ProjectRealChainUiState & \{ relayQueue\?: ProjectSeedanceSubmitResult\["relayQueue"\] \}[\s\S]*\.relayQueue/.test(seedanceSubmitActionSource), "Seedance action state should read persisted relay queues from both summary and top-level runtime status");
   assert(/function\s+realChainStillNeedsReview[\s\S]*needsReviewCount[\s\S]*reviewOverlayShots[\s\S]*returned_with_review_overlay[\s\S]*relayQueue\.status === "complete"[\s\S]*!realChainStillNeedsReview\(state\)[\s\S]*suggestedActionLabel:\s*"查看交付"/.test(seedanceSubmitActionSource), "Seedance action state must stop showing completed approved queues as pending review");
+  assert(/function previewItemHasVideoEvidence[\s\S]*item\.videoStatus[\s\S]*item\.submitId[\s\S]*item\.outputVideoPath[\s\S]*isVideoMediaPath\(item\.mediaPath\)[\s\S]*previewItems \|\| \[\]\)\.filter\(previewItemHasVideoEvidence\)/.test(seedanceSubmitActionSource), "Seedance restore must not classify a reviewable Image2 image hold as a returned video");
+  assert(/item\.kind !== "video_clip" && item\.kind !== "image_hold"/.test(minimalPreviewSource), "Preview review decisions must support hash-bound image holds as well as returned videos");
   assert(/actionState\.status === "running" \|\| actionState\.status === "blocked" \|\| actionState\.canResume/.test(seedanceSubmitActionSource), "Seedance action state must keep local QA blockers visible instead of being overwritten by an idle persisted queue");
   assert(/消息里建议补参考，不会提交视频/.test(agentPanelSource), "Agent Panel should explain blocker recovery without implying video submission");
   assert(/videoFocusScopeLabel[\s\S]*正在等视频结果[\s\S]*videoFocusSelectionHint[\s\S]*点确认只查询结果，不会重复提交/.test(agentPanelSource), "Agent Panel should show the active video task instead of the selected shot while waiting for queued video");
@@ -1582,6 +1643,90 @@ assert(persistedOneShotReturnedSummary.providerObservationMode === "actual_provi
 assert(persistedOneShotReturnedSummary.semanticQaStatus === "needs_review", "persisted one-shot return should keep semantic QA status");
 assert(persistedOneShotReturnedSummary.returnSource === "actual_provider_return_ingest", "persisted one-shot return should keep return source");
 assert(persistedOneShotReturnedSummary.formalPromotionBlockedReason, "persisted one-shot return should keep promotion blocker reason");
+
+const p6SubmitOnlyReturnedSummary = deriveProjectImage2OneShotStatus({
+  ...oneShotReturnedPayload,
+  expectedOutputPath: undefined,
+  outputPath: oneShotReadyPayload.expectedOutputPath,
+});
+assert(p6SubmitOnlyReturnedSummary.expectedOutputPath === oneShotReadyPayload.expectedOutputPath, "P6 submit outputPath should restore as the expected one-shot output path");
+
+const p6OneShotPreview = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "blocked",
+    projectId: "real-demo-e2e-005",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+    previewItems: [{
+      id: "missing_S07",
+      shotId: "S07",
+      order: 1,
+      status: "missing",
+      outputExists: false,
+      reviewRequired: false,
+    }],
+  },
+  previewPlan: {
+    clips: [{ shotId: "S07", order: 1, durationSeconds: 5 }],
+  },
+  oneShot: p6SubmitOnlyReturnedSummary,
+  projectId: "real-demo-e2e-005",
+  projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+});
+assert(p6OneShotPreview.queue.length === 1, "P6 one-shot preview should replace the same-shot missing placeholder");
+assert(p6OneShotPreview.queue[0].kind === "image_hold", "P6 one-shot preview should render as an image hold");
+assert(p6OneShotPreview.queue[0].status === "needs_review", "P6 one-shot preview must remain in needs_review");
+assert(p6OneShotPreview.queue[0].mediaPath === persistedOneShotReturnedSummary.imageUrl, "P6 one-shot preview should use the runtime-served image URL");
+assert(p6OneShotPreview.queue[0].sourceReceiptId === oneShotPreparePayload.receipt.receiptId, "P6 one-shot preview should keep the prepare receipt identity for review");
+assert(p6OneShotPreview.queue[0].outputHash === oneShotReturnedPayload.outputSha256, "P6 one-shot preview should keep the hash-bound output identity for review");
+
+const p6OneShotReviewState = {
+  status: persistedOneShotReturnedSummary.uiStatus,
+  summary: persistedOneShotReturnedSummary,
+  receipt: persistedOneShotReturnedSummary.receipt,
+};
+const approvedP6OneShotState = approveProjectImage2OneShotUiState(p6OneShotReviewState, {
+  shotId: "S07",
+  sourceReceiptId: oneShotPreparePayload.receipt.receiptId,
+  outputHash: oneShotReturnedPayload.outputSha256,
+});
+assert(approvedP6OneShotState.status === "verified", "matching P6 review evidence should verify the one-shot output");
+assert(approvedP6OneShotState.summary?.reviewRequired === false, "verified P6 output should leave the review queue");
+assert(approvedP6OneShotState.summary?.imageUrl === persistedOneShotReturnedSummary.imageUrl, "P6 approval must retain the real preview image");
+assert(approvedP6OneShotState.summary?.outputSha256 === persistedOneShotReturnedSummary.outputSha256, "P6 approval must retain the hash-bound output identity");
+assert(approvedP6OneShotState.summary?.providerRequestId === persistedOneShotReturnedSummary.providerRequestId, "P6 approval must retain provider evidence");
+assert(approvedP6OneShotState.summary?.formalPromotionBlocked === true, "P6 approval must not imply Visual Memory or formal promotion authorization");
+const approvedP6OneShotPreview = buildCurrentProjectPreviewProjection({
+  summary: {
+    reviewShotIds: ["S07"],
+  },
+  previewPlan: {
+    clips: [{ shotId: "S07", order: 1, durationSeconds: 5 }],
+  },
+  oneShot: approvedP6OneShotState.summary,
+});
+assert(approvedP6OneShotPreview.queue[0]?.kind === "image_hold", "approved P6 output should remain visible in Preview");
+assert(approvedP6OneShotPreview.queue[0]?.status === "verified", "approved P6 output should project verified status");
+assert(approvedP6OneShotPreview.queue[0]?.reviewRequired === false, "approved P6 output must leave the Preview review queue");
+
+const mismatchedP6OneShotState = approveProjectImage2OneShotUiState(p6OneShotReviewState, {
+  shotId: "S07",
+  sourceReceiptId: oneShotPreparePayload.receipt.receiptId,
+  outputHash: "sha256:different-output",
+});
+assert(mismatchedP6OneShotState === p6OneShotReviewState, "mismatched output evidence must not verify a P6 result");
+
+const lateP6OneShotStatus = {
+  ...p6OneShotReviewState,
+  summary: {
+    ...persistedOneShotReturnedSummary,
+    hashBoundActual: false,
+    providerReturnIngested: false,
+  },
+};
+assert(
+  reconcileProjectImage2OneShotUiState(approvedP6OneShotState, lateP6OneShotStatus) === approvedP6OneShotState,
+  "a late same-output status response must not downgrade an approved P6 result",
+);
 
 const persistedOneShotHandoffGuard = guardProjectImage2OneShotUiStateForCurrentProject(
   { status: persistedOneShotHandoffSummary.uiStatus, summary: persistedOneShotHandoffSummary, receipt: persistedOneShotHandoffSummary.receipt },

@@ -73,6 +73,26 @@ export function createRuntimeApiWorkbenchProjection({
     return projectRuntimePathCandidates(source, value).some((candidate) => existsSync(candidate));
   }
 
+  function projectFolderComparableAssetPath(source, value) {
+    if (typeof value !== "string" || !value.trim()) return undefined;
+    try {
+      const realRoot = realpathSync(source.runRootPath);
+      for (const candidate of projectRuntimePathCandidates(source, value)) {
+        if (!existsSync(candidate)) continue;
+        const realCandidate = realpathSync(candidate);
+        if (!isPathInsideRealRoot(realCandidate, realRoot)) continue;
+        const relative = path.relative(realRoot, realCandidate).replace(/\\/g, "/");
+        if (relative && !relative.startsWith("../") && !path.isAbsolute(relative)) {
+          return normalizeRelativePath(relative);
+        }
+      }
+    } catch {
+      // Keep unreadable or missing asset paths out of folder-scan dedupe.
+    }
+    const portable = portableWorkbenchPath(value);
+    return portable && !path.isAbsolute(portable) ? portable : undefined;
+  }
+
   function projectFact(name, filePath, usedFor = []) {
     const relativePath = repoRelativePath(filePath);
     const present = existsSync(filePath);
@@ -985,7 +1005,7 @@ export function createRuntimeApiWorkbenchProjection({
         id: asset.id,
         type: asset.type,
         name: asset.name,
-        path: asset.path || "",
+        path: projectFolderComparableAssetPath(source, asset.path) || asset.path || "",
         status: asset.status === "missing" ? "missing" : asset.status === "rejected" ? "rejected" : "exists",
         lockedStatus: asset.status === "locked"
           ? "locked"

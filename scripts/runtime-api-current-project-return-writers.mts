@@ -26,7 +26,6 @@ function pathInsideTextRoot(candidatePath, rootPath, normalizeRelativePath) {
 }
 
 export function createRuntimeApiCurrentProjectReturnWriters({
-  repoRootRealPath,
   scopedRepoPath,
   normalizeRelativePath,
   oneShotPathInsideRoot,
@@ -37,7 +36,6 @@ export function createRuntimeApiCurrentProjectReturnWriters({
   renameSync,
   realpathSync,
 } = {}) {
-  if (!repoRootRealPath) throw new Error("repoRootRealPath is required.");
   if (typeof scopedRepoPath !== "function") throw new Error("scopedRepoPath is required.");
   if (typeof normalizeRelativePath !== "function") throw new Error("normalizeRelativePath is required.");
   if (typeof oneShotPathInsideRoot !== "function") throw new Error("oneShotPathInsideRoot is required.");
@@ -67,8 +65,7 @@ export function createRuntimeApiCurrentProjectReturnWriters({
     const sandboxRealPath = realpathSync(sandboxPath);
     const shotRealPath = realpathSync(shotPath);
     if (!isPathInsideRealRoot(dirRealPath, sandboxRealPath)
-      || !isPathInsideRealRoot(dirRealPath, shotRealPath)
-      || !isPathInsideRealRoot(sandboxRealPath, repoRootRealPath)) {
+      || !isPathInsideRealRoot(dirRealPath, shotRealPath)) {
       throw new Error(`Refusing to write through unsafe executor real path: ${relativePath}`);
     }
     if (existsSync(filePath)) {
@@ -83,6 +80,17 @@ export function createRuntimeApiCurrentProjectReturnWriters({
   function writeOneShotExecutorJson(relativePath, payload, sandboxRoot, shotRoot) {
     const filePath = assertOneShotExecutorSandboxWritePath(relativePath, sandboxRoot, shotRoot);
     atomicWriteJson(filePath, payload, writeFileSync, renameSync);
+  }
+
+  function claimOneShotExecutorJson(relativePath, payload, sandboxRoot, shotRoot) {
+    const filePath = assertOneShotExecutorSandboxWritePath(relativePath, sandboxRoot, shotRoot);
+    try {
+      writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+      return true;
+    } catch (error) {
+      if (error?.code === "EEXIST") return false;
+      throw error;
+    }
   }
 
   function writeOneShotExecutorBytes(relativePath, bytes, sandboxRoot, shotRoot) {
@@ -141,6 +149,7 @@ export function createRuntimeApiCurrentProjectReturnWriters({
     oneShotExecutorPathInsideSandbox,
     assertOneShotExecutorSandboxWritePath,
     writeOneShotExecutorJson,
+    claimOneShotExecutorJson,
     writeOneShotExecutorBytes,
     assertCurrentProjectRuntimeWritePath,
     writeCurrentProjectRuntimeJson,

@@ -26,6 +26,39 @@ export type ProjectReviewDecisionStatus = {
   blockers?: string[];
 };
 
+function normalizeReviewPath(value: string) {
+  let normalized = value.trim().replace(/\\/g, "/").replace(/\/+/g, "/");
+  if (normalized.startsWith("/private/var/")) normalized = normalized.slice("/private".length);
+  if (/^\/[a-zA-Z]:\//.test(normalized)) normalized = normalized.slice(1);
+  return normalized.replace(/\/+$/, "");
+}
+
+function reviewPathIsAbsolute(value: string) {
+  return value.startsWith("/") || /^[a-zA-Z]:\//.test(value);
+}
+
+export function projectRelativeReviewMediaPath(mediaPath: string | undefined, projectRoot?: string) {
+  let candidate = mediaPath?.trim() || "";
+  if (!candidate) return undefined;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.pathname.endsWith("/api/runtime/files")) {
+      candidate = parsed.searchParams.get("path")?.trim() || candidate;
+    } else if (parsed.protocol === "file:") {
+      candidate = decodeURIComponent(parsed.pathname);
+    }
+  } catch {
+    // Plain project paths are expected here.
+  }
+  const normalizedCandidate = normalizeReviewPath(candidate).replace(/^\.\//, "");
+  const root = projectRoot ? normalizeReviewPath(projectRoot) : "";
+  if (root && normalizedCandidate.startsWith(`${root}/`)) {
+    return normalizedCandidate.slice(root.length + 1) || undefined;
+  }
+  if (reviewPathIsAbsolute(normalizedCandidate)) return undefined;
+  return normalizedCandidate.split("/").includes("..") ? undefined : normalizedCandidate || undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

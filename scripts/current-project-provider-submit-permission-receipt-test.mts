@@ -259,11 +259,15 @@ try {
   assert(readyTrigger.response.status === 200 && readyTrigger.payload.status === "trigger_plan_prepared", "ready trigger should pass");
   assertNoProvider(readyTrigger.payload, "ready trigger");
   assert(readyTrigger.payload.submitPermissionReceipt?.status === "pending_action_time_confirmation", "submit permission receipt should be pending");
+  assert(readyTrigger.payload.submitPermissionReceipt.permissionReceiptId, "permission receipt should have a single-use id");
   assert(readyTrigger.payload.submitPermissionReceipt.credential.credentialRef === "secret-store://providers/openai-image2/default", "credentialRef should be saved as ref");
   assert(readyTrigger.payload.submitPermissionReceipt.credential.secretMaterialPresent === false, "secret material must not be present");
   assert(readyTrigger.payload.submitPermissionReceipt.credential.credentialMaterialRead === false, "credential material must not be read");
   assert(readyTrigger.payload.submitPermissionReceipt.submitIntent.maxProviderCallsPerReceipt === 1, "max calls should be pinned");
   assert(readyTrigger.payload.submitPermissionReceipt.submitIntent.providerSubmitAllowed === 0, "submit allowed must stay zero");
+  assert(readyTrigger.payload.submitPermissionReceipt.projectFactHash === readyTrigger.payload.receipt.projectFactHash, "permission should bind projectFactHash");
+  assert(readyTrigger.payload.submitPermissionReceipt.actionId === readyTrigger.payload.receipt.actionId, "permission should bind actionId");
+  assert(readyTrigger.payload.submitPermissionReceipt.promptSha256 === readyTrigger.payload.receipt.promptSha256, "permission should bind promptSha256");
   assert(readyTrigger.payload.persistedState.submitPermissionReceiptPresent === true, "permission receipt should be persisted");
   assert(existsSync(repoPath(readyTrigger.payload.submitPermissionReceiptStatePath)), "permission receipt file should exist");
   const persistedReady = readJson(repoPath(readyTrigger.payload.submitPermissionReceiptStatePath));
@@ -273,6 +277,7 @@ try {
   const readyStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=PSP01`);
   assert(readyStatus.response.status === 200 && readyStatus.payload.submitPermissionReceipt?.status === "pending_action_time_confirmation", "status should reload submit permission receipt");
   assert(readyStatus.payload.persistedState.submitPermissionReceiptPresent === true, "status should show permission receipt present");
+  assert(readyStatus.payload.submitPermissionReceipt.actionId === readyStatus.payload.actionId, "status should expose only the current action permission");
   assertNoProvider(readyStatus.payload, "ready status");
 
   await stopServer(child);
@@ -284,6 +289,8 @@ try {
   const reloadStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=PSP01`);
   assert(reloadStatus.response.status === 200 && reloadStatus.payload.submitPermissionReceipt?.status === "pending_action_time_confirmation", "reloaded server should read submit permission receipt");
   assert(reloadStatus.payload.persistedState.submitPermissionReceiptPresent === true, "reloaded status should show permission receipt present");
+  assert(reloadStatus.payload.submitPermissionReceipt.projectFactHash === reloadStatus.payload.projectFactHash, "reloaded permission should retain current projectFactHash");
+  assert(reloadStatus.payload.submitPermissionReceipt.promptSha256 === reloadStatus.payload.promptSha256, "reloaded permission should retain current promptSha256");
   assertNoProvider(reloadStatus.payload, "reload status");
 
   const missingPrepare = await prepareAndConfirm(baseUrl, "PSP02");

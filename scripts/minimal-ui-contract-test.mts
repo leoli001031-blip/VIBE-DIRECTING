@@ -167,6 +167,7 @@ const realPilotDiagnosticsPath = "src/ui/diagnostics/RealPilotDiagnostics.tsx";
 const settingsShellPath = "src/ui/diagnostics/SettingsShell.tsx";
 const currentProjectRuntimeHookPath = "src/ui/app/useCurrentProjectRuntimePanels.ts";
 const currentProjectRuntimeClientPath = "src/core/projectCurrentBindingClient.ts";
+const projectReviewDecisionClientPath = "src/core/projectReviewDecisionClient.ts";
 const projectAgentStagedPlanDraftPath = "src/project/projectAgentStagedPlanDraft.ts";
 const localRuntimeApiServerPath = "scripts/local-runtime-api-server.mts";
 const stylesPath = "src/styles.css";
@@ -231,6 +232,7 @@ const realPilotDiagnosticsSource = stripComments(readText(realPilotDiagnosticsPa
 const settingsShellSource = stripComments(readText(settingsShellPath));
 const currentProjectRuntimeHookSource = stripComments(readText(currentProjectRuntimeHookPath));
 const currentProjectRuntimeClientSource = stripComments(readText(currentProjectRuntimeClientPath));
+const projectReviewDecisionClientSource = stripComments(readText(projectReviewDecisionClientPath));
 const projectAgentStagedPlanDraftSource = stripComments(readText(projectAgentStagedPlanDraftPath));
 const localRuntimeApiServerSource = stripComments(readText(localRuntimeApiServerPath));
 const extractedDiagnosticsSources = [
@@ -714,7 +716,8 @@ checkMessage(requireWithin(appBody, /onRetryReviewItem=\{\(item\)\s*=>\s*applyCr
 checkMessage(requireWithin(appBody, /onLockReviewItem=\{\(item,\s*target\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"lock",\s*target\)\}/, "App must route lock target through Project.vibe review decisions"));
 checkMessage(requireWithin(appBody, /if \(item\.assetId && rejectMode\)/, "Asset-backed rejects may use the fast asset-status path"));
 check(!/item\.assetId && \(promotionMode \|\| rejectMode\)/.test(appBody), "Review Tray locks must not bypass Project.vibe review decisions");
-checkMessage(requireWithin(appSource, /function projectRelativeReviewMediaPath/, "Review decisions must normalize media paths before writing Project.vibe"));
+checkMessage(requireWithin(projectReviewDecisionClientSource, /export function projectRelativeReviewMediaPath/, "Review decisions must normalize media paths before writing Project.vibe"));
+checkMessage(requireWithin(appBody, /projectRelativeReviewMediaPath\(/, "App must use the normalized project-relative review media path"));
 checkMessage(requireWithin(appBody, /outputPath:\s*reviewMediaPath/, "Review decision outputPath must use the normalized project-relative media path"));
 check(!/outputPath:\s*item\.mediaPath/.test(appBody), "Review decisions must not write raw item.mediaPath into Project.vibe");
 checkMessage(requireWithin(appBody, /assetKind:\s*promotionMode\s*\?\s*lockAssetKind\s*:\s*"reference"[\s\S]*assetLabel[\s\S]*usedByShotIds/, "App must promote Review Tray locks with selected asset kind, label, and shot usage"));

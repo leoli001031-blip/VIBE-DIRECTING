@@ -78,6 +78,14 @@ assert(
   evidence.actualProviderObservationMatches(validObservation, "runs/S01/output.png", "sha256:abc", expectedContext) === true,
   "complete actual provider observation should match",
 );
+assert(
+  evidence.actualProviderObservationMatches({
+    ...validObservation,
+    provider: "apikey-fun-gpt55-responses-image",
+    providerOperation: "image.generate",
+  }, "runs/S01/output.png", "sha256:abc", expectedContext) === true,
+  "configured apikey.fun image provider observation should match without requiring image2 in its provider id",
+);
 
 for (const [label, patch] of [
   ["mode", { providerObservationMode: "mock_readiness_evidence" }],

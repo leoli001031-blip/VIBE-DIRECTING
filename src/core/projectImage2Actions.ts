@@ -365,8 +365,18 @@ export async function submitProjectP6RealImage2OneShot(
   if (submitPermissionReceipt?.status !== "pending_action_time_confirmation") {
     return { status: "blocked", receipt, message: "请先生成许可回执。" };
   }
+  if (!receipt.actionId
+    || submitPermissionReceipt.actionId !== receipt.actionId
+    || submitPermissionReceipt.projectId !== receipt.projectId
+    || submitPermissionReceipt.projectRoot !== receipt.projectRoot
+    || submitPermissionReceipt.projectFactHash !== receipt.projectFactHash) {
+    return { status: "blocked", receipt, message: "许可回执已过期，请重新准备本次生成。" };
+  }
   if (input.confirmation.confirmed !== true || input.confirmation.phrase !== "submit-p6-image2") {
     return { status: "blocked", receipt, message: "请先明确确认本次生成。" };
+  }
+  if (input.confirmation.actionId !== receipt.actionId) {
+    return { status: "blocked", receipt, message: "本次确认与当前生成动作不一致，请重新确认。" };
   }
 
   try {

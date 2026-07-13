@@ -62,7 +62,7 @@ for (const movedFunction of [
   assert(!serverSource.includes(movedFunction), `local runtime server should import moved handoff code: ${movedFunction}`);
 }
 
-function createFixture({ lockedReferences = false } = {}) {
+function createFixture({ lockedReferences = false, bindingProjectIdOnly = false } = {}) {
   const workingRoot = mkdtempSync(path.join(tmpdir(), "vibe-image2-handoff-"));
   const repoRoot = path.join(workingRoot, "repo");
   const runRootRelativePath = "projects/handoff";
@@ -88,6 +88,9 @@ function createFixture({ lockedReferences = false } = {}) {
     reportRelativePath: `${runRootRelativePath}/reports/image2_start_long_chain_report.json`,
     projectRootMode: "test_fixture",
     sourceLabel: "runtime image2 handoff fixture",
+    requestProjectId: bindingProjectIdOnly ? "handoff_binding_fixture" : undefined,
+    requestProjectIdSource: bindingProjectIdOnly ? "binding" : undefined,
+    binding: bindingProjectIdOnly ? { projectId: "handoff_binding_fixture" } : undefined,
   };
   const lockedVisualMemory = {
     schemaVersion: "runtime_image2_handoff_test_visual_memory_v1",
@@ -117,8 +120,15 @@ function createFixture({ lockedReferences = false } = {}) {
   };
   writeJson(source.projectVibePath, {
     schemaVersion: "runtime_image2_handoff_test_project_vibe_v1",
-    projectId: "handoff_fixture",
-    runId: "handoff_fixture_run",
+    ...(bindingProjectIdOnly ? {} : {
+      projectId: "handoff_fixture",
+      runId: "handoff_fixture_run",
+    }),
+    manifest: {
+      projectId: "handoff_fixture",
+      title: "Image2 handoff fixture",
+      version: "0.1.0",
+    },
   });
   writeJson(source.storyFlowPath, {
     schemaVersion: "runtime_image2_handoff_test_story_flow_v1",
@@ -132,6 +142,12 @@ function createFixture({ lockedReferences = false } = {}) {
       scenes: [],
       style: { id: "style_draft", status: "candidate", path: `${runRootRelativePath}/assets/style.md` },
     });
+  if (lockedReferences) {
+    writeText(path.join(runRootPath, "assets/char_locked.png"), "locked character fixture\n");
+    writeText(path.join(runRootPath, "assets/scene_locked.png"), "locked scene fixture\n");
+    writeText(path.join(runRootPath, "assets/prop_locked.png"), "locked prop fixture\n");
+    writeText(path.join(runRootPath, "assets/style_locked.md"), "locked style fixture\n");
+  }
   writeJson(source.sourceIndexPath, { refs: [source.projectVibeRelativePath, source.storyFlowRelativePath, source.visualMemoryRelativePath] });
   writeText(path.join(runRootPath, "prompt_requests/S01_start_frame_prompt.md"), "# S01\n\nPrepare-only handoff fixture.\n");
   writeJson(source.runManifestPath, {
@@ -166,8 +182,8 @@ function createFixture({ lockedReferences = false } = {}) {
     scopedRepoPath: boundary.scopedRepoPath,
     readJsonIfPresent,
     projectIdentityFromSource: () => ({
-      projectId: "handoff_fixture",
-      runId: "handoff_fixture_run",
+      projectId: bindingProjectIdOnly ? undefined : "handoff_fixture",
+      runId: bindingProjectIdOnly ? undefined : "handoff_fixture_run",
       projectRoot: runRootRelativePath,
       projectVibePath: source.projectVibeRelativePath,
     }),
@@ -226,6 +242,31 @@ function createFixture({ lockedReferences = false } = {}) {
     requestInput,
     cleanup: () => rmSync(workingRoot, { recursive: true, force: true }),
   };
+}
+
+{
+  const fixture = createFixture({ lockedReferences: true, bindingProjectIdOnly: true });
+  try {
+    const { confirm } = prepareAndConfirm(fixture);
+    assert(confirm.receipt.projectId === "handoff_binding_fixture", "canonical Project.vibe should bind one-shot receipt identity from the current project binding");
+    const expectedOutputs = [{
+      shotId: confirm.selectedShotId,
+      expectedOutputPath: confirm.expectedOutputPath,
+      providerObservationPath: confirm.providerObservationPath,
+      semanticQaPath: confirm.semanticQaPath,
+    }];
+    const input = fixture.requestInput("prepare-trigger", {
+      credentialRef: "vault:image2/openai/default",
+      expectedOutputs,
+      submitPermissionReceiptRequired: true,
+    });
+    const trigger = fixture.api.currentProjectImage2OneShotPrepareTriggerResponse(input, {}, fixture.source);
+    assert(trigger.status === "trigger_plan_prepared", "binding-backed project identity should allow permission receipt preparation");
+    assert(trigger.submitPermissionReceipt?.projectId === "handoff_binding_fixture", "submit permission receipt should retain the binding-backed project identity");
+    assertHardLocks(trigger, "binding-backed prepare-trigger");
+  } finally {
+    fixture.cleanup();
+  }
 }
 
 function assertHardLocks(response, label) {
@@ -311,6 +352,42 @@ function prepareAndConfirm(fixture) {
 {
   const fixture = createFixture({ lockedReferences: true });
   try {
+    const prepareInput = fixture.requestInput("prepare");
+    const prepare = fixture.api.currentProjectImage2OneShotResponse("prepare", prepareInput, {}, fixture.source);
+    writeText(path.join(fixture.source.runRootPath, "prompt_requests/S01_start_frame_prompt.md"), "# S01\n\nChanged after prepare.\n");
+    const confirmInput = fixture.requestInput("confirm", { receipt: prepare.receipt });
+    const confirm = fixture.api.currentProjectImage2OneShotResponse("confirm", confirmInput, {}, fixture.source);
+    assert(confirm.status === "blocked", "confirm should reject a prepare receipt after prompt mutation");
+    assert(confirm.providerCalled === false, "stale prompt confirmation must not call provider");
+    assert(confirm.persistedState.handoffPresent === false, "stale prompt confirmation must not persist a handoff");
+  } finally {
+    fixture.cleanup();
+  }
+}
+
+{
+  const fixture = createFixture({ lockedReferences: true });
+  try {
+    prepareAndConfirm(fixture);
+    const projectVibe = readJsonIfPresent(fixture.source.projectVibePath);
+    projectVibe.manifest.title = "Changed after handoff";
+    writeJson(fixture.source.projectVibePath, projectVibe);
+    const input = fixture.requestInput("prepare-trigger", {
+      credentialRef: "vault:image2/openai/default",
+      submitPermissionReceiptRequired: true,
+    });
+    const trigger = fixture.api.currentProjectImage2OneShotPrepareTriggerResponse(input, {}, fixture.source);
+    assert(trigger.status === "blocked", "prepare-trigger should reject a handoff after Project.vibe fact mutation");
+    assert(trigger.providerCalled === false, "stale fact prepare-trigger must not call provider");
+    assert(trigger.persistedState.submitPermissionReceiptPresent === false, "stale fact prepare-trigger must not persist permission");
+  } finally {
+    fixture.cleanup();
+  }
+}
+
+{
+  const fixture = createFixture({ lockedReferences: true });
+  try {
     const { confirm } = prepareAndConfirm(fixture);
     const expectedOutputs = [{
       shotId: confirm.selectedShotId,
@@ -326,6 +403,7 @@ function prepareAndConfirm(fixture) {
     const trigger = fixture.api.currentProjectImage2OneShotPrepareTriggerResponse(input, {}, fixture.source);
     assert(trigger.status === "trigger_plan_prepared", "prepare-trigger should prepare trigger plan after persisted receipt and handoff");
     assert(trigger.submitPermissionReceipt?.status === "pending_action_time_confirmation", "submit permission receipt should wait for action-time confirmation");
+    assert(trigger.submitPermissionReceipt.permissionReceiptId, "submit permission receipt should have a single-use id");
     assert(trigger.persistedState.triggerPlanPresent === true, "prepare-trigger should report persisted trigger plan");
     assert(trigger.persistedState.submitPermissionReceiptPresent === true, "prepare-trigger should report persisted submit permission receipt");
     assertHardLocks(trigger, "successful prepare-trigger");
@@ -335,6 +413,12 @@ function prepareAndConfirm(fixture) {
     assert(trigger.submitPermissionReceipt.hardLocks.canSubmitProvider === false, "submit receipt must hard-lock provider submit");
     assert(trigger.submitPermissionReceipt.hardLocks.liveSubmitAllowed === false, "submit receipt must hard-lock live submit");
     assert(trigger.submitPermissionReceipt.hardLocks.projectVibeMutationAllowed === false, "submit receipt must hard-lock project.vibe mutation");
+    assert(trigger.projectFactHash === trigger.receipt.projectFactHash, "trigger should retain the current project fact hash");
+    assert(trigger.actionId === trigger.receipt.actionId, "trigger should retain the prepared action id");
+    assert(trigger.promptSha256 === trigger.receipt.promptSha256, "trigger should retain the prepared prompt hash");
+    assert(trigger.submitPermissionReceipt.projectFactHash === trigger.projectFactHash, "permission should bind the current project fact hash");
+    assert(trigger.submitPermissionReceipt.actionId === trigger.actionId, "permission should bind the prepared action id");
+    assert(trigger.submitPermissionReceipt.promptSha256 === trigger.promptSha256, "permission should bind the prepared prompt hash");
     const triggerPlan = readJsonIfPresent(fixture.boundary.scopedRepoPath(trigger.triggerPlanPath));
     const triggerPlanState = readJsonIfPresent(fixture.boundary.scopedRepoPath(trigger.statePaths.triggerPlanStatePath));
     const submitReceipt = readJsonIfPresent(fixture.boundary.scopedRepoPath(trigger.submitPermissionReceiptStatePath));

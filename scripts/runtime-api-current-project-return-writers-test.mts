@@ -82,7 +82,11 @@ const writers = createRuntimeApiCurrentProjectReturnWriters({
 
 writers.writeOneShotExecutorJson(`${shotRoot}/state/provider_observation.json`, { ok: true }, sandboxRoot, shotRoot);
 writers.writeOneShotExecutorBytes(`${shotRoot}/outputs/start.png`, Buffer.from("png-bytes"), sandboxRoot, shotRoot);
+const claimPath = `${shotRoot}/state/provider-submit-claims/permission-1.json`;
+assert(writers.claimOneShotExecutorJson(claimPath, { owner: "first" }, sandboxRoot, shotRoot) === true, "first one-shot claim should acquire the path");
+assert(writers.claimOneShotExecutorJson(claimPath, { owner: "second" }, sandboxRoot, shotRoot) === false, "second one-shot claim should fail without replacing the first claim");
 assert(JSON.parse(readFileSync(path.join(repoRoot, shotRoot, "state/provider_observation.json"), "utf8")).ok === true, "one-shot json write should persist payload");
+assert(JSON.parse(readFileSync(path.join(repoRoot, claimPath), "utf8")).owner === "first", "exclusive one-shot claim must preserve the first writer");
 assert(readFileSync(path.join(repoRoot, shotRoot, "outputs/start.png"), "utf8") === "png-bytes", "one-shot bytes write should persist bytes");
 assert(writers.oneShotExecutorPathInsideSandbox(`${shotRoot}/outputs/start.png`, sandboxRoot, shotRoot) === true, "one-shot output should be inside sandbox and shot root");
 assert(writers.oneShotExecutorPathInsideSandbox(`${sandboxRoot}/other/start.png`, sandboxRoot, shotRoot) === false, "non-shot output should fail inside check");
@@ -125,6 +129,7 @@ for (const name of [
   "oneShotExecutorPathInsideSandbox",
   "assertOneShotExecutorSandboxWritePath",
   "writeOneShotExecutorJson",
+  "claimOneShotExecutorJson",
   "writeOneShotExecutorBytes",
   "assertCurrentProjectRuntimeWritePath",
   "writeCurrentProjectRuntimeJson",

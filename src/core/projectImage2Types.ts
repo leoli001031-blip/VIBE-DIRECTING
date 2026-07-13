@@ -118,12 +118,27 @@ export type ProjectImage2OneShotUiStatus =
 export type ProjectImage2OneShotReceipt = {
   receiptId?: string;
   status?: string;
+  projectId?: string;
+  projectRoot?: string;
+  projectFactHash?: string;
+  actionId?: string;
   selectedShotId?: string;
   selectedShotIds?: string[];
   imageCount?: number;
+  providerId?: string;
+  providerSlot?: string;
+  requiredMode?: string;
   expectedOutputPath?: string;
   promptPath?: string;
   promptText?: string;
+  promptSha256?: string;
+  visualReferenceInputs?: Array<{
+    id?: string;
+    type?: string;
+    name?: string;
+    path?: string;
+    sha256?: string;
+  }>;
   providerObservationPath?: string;
   semanticQaPath?: string;
   triggerPlanPath?: string;
@@ -132,9 +147,27 @@ export type ProjectImage2OneShotReceipt = {
 };
 
 export type ProjectImage2OneShotPermissionReceipt = {
+  permissionReceiptId?: string;
   receiptId?: string;
   handoffId?: string;
   status?: string;
+  projectId?: string;
+  projectRoot?: string;
+  projectFactHash?: string;
+  actionId?: string;
+  providerId?: string;
+  providerSlot?: string;
+  requiredMode?: string;
+  selectedShotIds?: string[];
+  expectedOutputs?: Array<{
+    shotId?: string;
+    expectedOutputPath?: string;
+    providerObservationPath?: string;
+    semanticQaPath?: string;
+  }>;
+  referenceInputs?: ProjectImage2OneShotReceipt["visualReferenceInputs"];
+  promptPath?: string;
+  promptSha256?: string;
   blockers?: string[];
   credential?: {
     credentialRef?: string;
@@ -161,10 +194,18 @@ export type ProjectImage2OneShotStatus = {
   uiStatus: ProjectImage2OneShotUiStatus;
   projectId?: string;
   projectRoot?: string;
+  projectFactHash?: string;
+  actionId?: string;
   selectedShotId?: string;
+  selectedShotIds?: string[];
   expectedOutputPath?: string;
+  expectedOutputs?: ProjectImage2OneShotPermissionReceipt["expectedOutputs"];
   promptPath?: string;
   promptText?: string;
+  promptSha256?: string;
+  providerId?: string;
+  providerSlot?: string;
+  requiredMode?: string;
   providerObservationPath?: string;
   semanticQaPath?: string;
   triggerPlanPath?: string;
@@ -173,6 +214,7 @@ export type ProjectImage2OneShotStatus = {
   submitPermissionReceiptRequested?: boolean;
   submitPermissionReceiptPresent?: boolean;
   submitPermissionReceiptStatePath?: string;
+  submitPermissionReceiptClaimStatePath?: string;
   submitPermissionReceipt?: ProjectImage2OneShotPermissionReceipt;
   permissionBlockers?: string[];
   credentialRef?: string;
@@ -184,6 +226,9 @@ export type ProjectImage2OneShotStatus = {
   actualImage2Triggered?: boolean;
   providerReturnIngested: boolean;
   providerRequestId?: string;
+  sourceReceiptId?: string;
+  reviewReceiptId?: string;
+  reviewRecoveredFromProjectVibe?: boolean;
   outputSha256?: string;
   hashBoundActual: boolean;
   providerObservationMode: string;
@@ -310,6 +355,7 @@ export type ProjectP6RealImage2SubmitInput = {
   providerId?: string;
   confirmation: {
     receiptId: string;
+    actionId: string;
     confirmedAt: string;
     phrase: "submit-p6-image2";
     confirmed: boolean;
@@ -409,10 +455,19 @@ export type ProjectImage2OneShotPayload = {
   };
   projectId?: string;
   projectRoot?: string;
+  projectFactHash?: string;
+  actionId?: string;
   selectedShotId?: string;
+  selectedShotIds?: string[];
   expectedOutputPath?: string;
+  outputPath?: string;
+  expectedOutputs?: ProjectImage2OneShotPermissionReceipt["expectedOutputs"];
   promptPath?: string;
   promptText?: string;
+  promptSha256?: string;
+  providerId?: string;
+  providerSlot?: string;
+  requiredMode?: string;
   providerObservationPath?: string;
   semanticQaPath?: string;
   triggerPlanPath?: string;
@@ -420,6 +475,7 @@ export type ProjectImage2OneShotPayload = {
   receipt?: ProjectImage2OneShotReceipt;
   submitPermissionReceiptRequested?: boolean;
   submitPermissionReceiptStatePath?: string;
+  submitPermissionReceiptClaimStatePath?: string;
   submitPermissionReceipt?: ProjectImage2OneShotPermissionReceipt;
   credentialRef?: string;
   maxProviderCallsPerReceipt?: number;
@@ -442,6 +498,9 @@ export type ProjectImage2OneShotPayload = {
   actualImage2Triggered?: boolean;
   providerReturnIngested?: boolean;
   providerRequestId?: string;
+  sourceReceiptId?: string;
+  reviewReceiptId?: string;
+  reviewRecoveredFromProjectVibe?: boolean;
   outputSha256?: string;
   hashBoundActual?: boolean;
   providerObservationMode?: string;

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   loadProjectRealChainStatus,
+  type ProjectRealChainPreviewItem,
   type ProjectRealChainUiState,
   type ProjectRuntimeIdentity,
 } from "../../core/projectCurrentRuntimeClient";
@@ -34,6 +35,24 @@ function creatorFacingVideoMessage(value: string | undefined, fallback: string) 
     .replace(/回流结果/g, "视频结果")
     .replace(/视频已回流/g, "视频已返回")
     .replace(/回来后/g, "结果出来后");
+}
+
+function isVideoMediaPath(value: unknown) {
+  return typeof value === "string" && /\.(?:mp4|mov|m4v|webm)(?:\?|$)/i.test(value);
+}
+
+function previewItemHasVideoEvidence(item: ProjectRealChainPreviewItem) {
+  return Boolean(
+    item.videoStatus
+    || item.submitId
+    || item.submit_id
+    || item.queueInfo
+    || item.queue_info
+    || item.outputVideoPath
+    || item.localMediaPaths?.some(isVideoMediaPath)
+    || String(item.mediaType || "").toLowerCase().includes("video")
+    || isVideoMediaPath(item.mediaPath)
+  );
 }
 
 export type SeedanceVideoSubmitActionStatus = "idle" | "running" | "blocked" | "submitted" | "needs_review";
@@ -305,8 +324,8 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
       };
     }
   }
-  const items = state.summary?.previewItems || [];
-    const hasSubmittedVideo = items.some((item) => {
+  const items = (state.summary?.previewItems || []).filter(previewItemHasVideoEvidence);
+  const hasSubmittedVideo = items.some((item) => {
     const statusText = `${item.status || ""} ${item.previewStatus || ""} ${item.videoStatus || ""}`;
     return Boolean(item.submitId || item.outputVideoPath || item.mediaPath)
       || /submitting|queued|submitted|running|generating|polling|success|returned|review/i.test(statusText);

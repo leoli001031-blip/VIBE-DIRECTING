@@ -53,7 +53,7 @@ const secretPatterns = [
   { id: "bearer_token", pattern: /\bBearer\s+[A-Za-z0-9._-]{12,}\b/gi },
   { id: "api_key_field", pattern: /["']?(?:apiKey|api_key|api-key)["']?\s*[:=]\s*["']?(?!\[REDACTED\]|REDACTED|\*\*\*\*|redacted_)[A-Za-z0-9._~+/-]{8,}["']?/gi },
   { id: "authorization_header", pattern: /"authorization"\s*:\s*"(?!\[REDACTED\]|REDACTED|\*\*\*\*)[^"]{8,}"/gi },
-  { id: "reference_audio_absolute_path", pattern: /(?:referenceAudioPath|refAudioPath|speakerWavPath|speakerAudioPath|reference[-_ ]?audio|voice[-_ ]?reference|audio[-_ ]?reference)[^\n\r]{0,160}(?:\/Users\/|\/private\/|\/tmp\/|~\/|[A-Za-z]:[\\/])/gi },
+  { id: "reference_audio_absolute_path", pattern: /(?:referenceAudioPath|refAudioPath|speakerWavPath|speakerAudioPath|reference[-_ ]?audio|voice[-_ ]?reference|audio[-_ ]?reference)[^\n\r]{0,160}(?:\/Users\/|\/private\/|\/tmp\/|~\/|\b[A-Za-z]:[\\/])/gi },
 ];
 
 const findings = [];

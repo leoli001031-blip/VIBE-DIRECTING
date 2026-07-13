@@ -746,6 +746,7 @@ async function runP6StartFrame(input: {
         providerId: "lanyi-image2",
         confirmation: {
           receiptId: `confirm_${input.shotId}_${Date.now()}`,
+          actionId: permission.payload.receipt.actionId,
           confirmedAt: new Date().toISOString(),
           phrase: "submit-p6-image2",
           confirmed: true,
