@@ -22,7 +22,7 @@ export interface SeedanceLivePreflightOptions {
 }
 
 export interface SeedanceLivePreflightReport {
-  schemaVersion: "seedance_live_preflight_v2";
+  schemaVersion: "seedance_live_preflight_v3";
   generatedAt: string;
   ready: boolean;
   status: "ready_for_video_authorization" | "blocked";
@@ -52,8 +52,9 @@ export interface SeedanceLivePreflightReport {
   };
   checks: {
     storyboardReferenceGenerationExpected: boolean;
-    imageProviderKeyRequired: boolean;
-    imageProviderKeyConfigured: boolean;
+    generationServiceKeyRequired: true;
+    generationServiceKeyConfigured: boolean;
+    providerBackedTextQaExpected: true;
     jimengCliCommand: string;
     jimengCliFound: boolean;
     jimengCredentialFileFound: boolean;
@@ -66,6 +67,7 @@ export interface SeedanceLivePreflightReport {
     runtimeExternalNetworkCallMade: false;
     videoSubmitted: false;
     maxProviderSubmitCountAfterAuthorization: 1;
+    initialLiveProviderOperations: Array<"director_text_qa" | "storyboard_image_generation" | "seedance_video_submit">;
     queryMustReuseExternalTaskId: true;
     retryRequiresNewConfirmation: true;
   };
@@ -222,8 +224,12 @@ export function runSeedanceLivePreflight(
     .filter(Boolean);
   const storyboardReferenceGenerationExpected = selectedShots.length !== 1
     || selectedReferenceStrategies.some((strategy) => strategy === "storyboard_narrative" || strategy === "storyboard_rapid_cut");
-  const imageProviderKeyRequired = storyboardReferenceGenerationExpected;
-  const imageProviderKeyConfigured = imageProviderKeyRequired ? configuredImageProviderKey(deps) : false;
+  const generationServiceKeyConfigured = configuredImageProviderKey(deps);
+  const initialLiveProviderOperations: SeedanceLivePreflightReport["executionPolicy"]["initialLiveProviderOperations"] = [
+    "director_text_qa",
+    ...(storyboardReferenceGenerationExpected ? ["storyboard_image_generation" as const] : []),
+    "seedance_video_submit",
+  ];
   const credentialFileFound = jimengCredentialFileFound(deps);
 
   const blockers = [
@@ -235,7 +241,7 @@ export function runSeedanceLivePreflight(
     selectedShotId && selectedShots.length !== 1 ? "P6-D 真实试运行只能选择 1 个镜头。" : "",
     usableReferenceAssets.length ? "" : "当前项目还没有可用于 Seedance 的角色/场景/道具图片参考。",
     relayQueue?.activeItems.length ? `已有视频任务在排队或生成：${relayQueue.activeItems.map((item) => stringValue(item.title) || stringValue(item.id) || stringValue(item.submitId)).filter(Boolean).join(", ")}` : "",
-    !imageProviderKeyRequired || imageProviderKeyConfigured ? "" : "当前镜头需要生成故事板参考，请先配置图片/Responses Key。",
+    generationServiceKeyConfigured ? "" : "packaged 视频提交前的文本 QA 和生成准备需要先配置图片/Responses Key。",
     cli.ready ? "" : `找不到即梦 CLI：${cli.command}。`,
     credentialFileFound ? "" : "未发现本地即梦登录凭据；请先单独完成 dreamina 登录。",
     videoResolution === "720p" ? "" : "提交前请使用 720p，避免误触高成本分辨率。",
@@ -248,12 +254,13 @@ export function runSeedanceLivePreflight(
     relayQueue?.completedItems.length ? `已有 ${relayQueue.completedItems.length} 段视频回流，可先去预览/导出页复核。` : "",
     modelVersion.includes("_vip") ? "当前显式选择了 VIP 档位；只有用户明确要求时才使用该高成本档位。" : "",
     storyboardReferenceGenerationExpected ? "" : "该单镜头按全能参考路径预检，不会额外生成故事板图片。",
+    `取得视频授权后，初次提交预计依次执行：${initialLiveProviderOperations.join(" -> ")}。`,
     "本脚本只做本地只读预检，不调用 provider、不联网、不创建视频，也不代表已取得真实视频授权。",
   ].filter(Boolean);
 
   const ready = blockers.length === 0;
   return {
-    schemaVersion: "seedance_live_preflight_v2",
+    schemaVersion: "seedance_live_preflight_v3",
     generatedAt: (deps.now?.() || new Date()).toISOString(),
     ready,
     status: ready ? "ready_for_video_authorization" : "blocked",
@@ -283,8 +290,9 @@ export function runSeedanceLivePreflight(
     } : undefined,
     checks: {
       storyboardReferenceGenerationExpected,
-      imageProviderKeyRequired,
-      imageProviderKeyConfigured,
+      generationServiceKeyRequired: true,
+      generationServiceKeyConfigured,
+      providerBackedTextQaExpected: true,
       jimengCliCommand: cli.command,
       jimengCliFound: cli.ready,
       jimengCredentialFileFound: credentialFileFound,
@@ -297,6 +305,7 @@ export function runSeedanceLivePreflight(
       runtimeExternalNetworkCallMade: false,
       videoSubmitted: false,
       maxProviderSubmitCountAfterAuthorization: 1,
+      initialLiveProviderOperations,
       queryMustReuseExternalTaskId: true,
       retryRequiresNewConfirmation: true,
     },

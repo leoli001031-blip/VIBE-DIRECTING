@@ -47,7 +47,7 @@ file existed before or after the preflight.
 ## No-submit report
 
 `npm run seedance-live-preflight` returned
-`schemaVersion=seedance_live_preflight_v2`, `ready=true`, and
+`schemaVersion=seedance_live_preflight_v3`, `ready=true`, and
 `status=ready_for_video_authorization`.
 
 The machine-readable execution policy records:
@@ -58,13 +58,29 @@ The machine-readable execution policy records:
 - `runtimeExternalNetworkCallMade=false`
 - `videoSubmitted=false`
 - `maxProviderSubmitCountAfterAuthorization=1`
+- `initialLiveProviderOperations=[director_text_qa, seedance_video_submit]`
 - `queryMustReuseExternalTaskId=true`
 - `retryRequiresNewConfirmation=true`
+
+### Completion-audit correction
+
+The first v2 report tied the Responses credential only to optional storyboard
+image generation. That was too narrow: the packaged route resolves the same
+generation service and runs provider-backed director text QA before Dreamina,
+even on the one-shot `omni_reference` path. It could therefore report ready on
+a machine that the packaged submit route would immediately block.
+
+The v3 report makes the generation-service credential mandatory, exposes the
+text-QA operation in the expected live call graph, and still separately proves
+that no storyboard image is expected. The corrected actual preflight remained
+`ready=true` with the status-only credential checks configured. It made no
+network call and created no media.
 
 The preflight now fails closed when the selected shot is omitted, more than one
 shot is selected, duration is outside 5-8 seconds, resolution is not 720p, the
 queue already has active work, the Jimeng CLI or local credential file is
-missing, or the project lacks a usable selected-shot reference.
+missing, the packaged generation-service Key is not configured, or the project
+lacks a usable selected-shot reference.
 
 The default changed from VIP to standard `seedance2.0`. An explicit VIP choice
 is reported as a cost warning. The client, runtime route, Agent capability, and
@@ -74,8 +90,11 @@ preflight now share the standard model default.
 
 - The preflight checks only that `dreamina` is discoverable and that the local
   credential file exists and is non-empty. It does not read or print the file.
-- The selected single-shot path does not require an extra storyboard image, so
-  the preflight does not resolve or inspect the image API credential.
+- The selected single-shot path does not generate an extra storyboard image.
+  The packaged submit route still requires the configured Responses service
+  because it runs one provider-backed director text-QA operation before
+  Dreamina. The status check exposes only configured/not-configured; it does not
+  print or persist the raw key.
 - `dreamina --help` was the only direct CLI invocation during discovery. No
   generator, account, credit, login, task-list, or query command was run against
   the real provider.
@@ -121,7 +140,9 @@ in the adapter matrix are fake strings or local test fixtures.
 P6-D may perform one real run only after a separate explicit video
 authorization. The authorized action must remain exactly one 5-second standard
 Seedance 2.0 720p submission for `P6S01` through the packaged App confirmation
-boundary.
+boundary. Its initial external call graph is one provider-backed director text
+QA followed by one Seedance video submit; no storyboard-image generation is
+expected for this target.
 
 After submit:
 

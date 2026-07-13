@@ -109,8 +109,9 @@ try {
   assert.equal(ready.project.usableReferenceAssetCount, 1);
   assert.equal(ready.submitDefaults.durationSeconds, 5);
   assert.equal(ready.checks.storyboardReferenceGenerationExpected, false);
-  assert.equal(ready.checks.imageProviderKeyRequired, false);
-  assert.equal(ready.checks.imageProviderKeyConfigured, false);
+  assert.equal(ready.checks.generationServiceKeyRequired, true);
+  assert.equal(ready.checks.generationServiceKeyConfigured, true);
+  assert.equal(ready.checks.providerBackedTextQaExpected, true);
   assert.equal(ready.checks.jimengCliFound, true);
   assert.equal(ready.checks.jimengCredentialFileFound, true);
   assert.deepEqual(ready.executionPolicy, {
@@ -120,6 +121,7 @@ try {
     runtimeExternalNetworkCallMade: false,
     videoSubmitted: false,
     maxProviderSubmitCountAfterAuthorization: 1,
+    initialLiveProviderOperations: ["director_text_qa", "seedance_video_submit"],
     queryMustReuseExternalTaskId: true,
     retryRequiresNewConfirmation: true,
   });
@@ -139,6 +141,15 @@ try {
   }, deps(root));
   assert.equal(tooShort.ready, false);
   assert(tooShort.blockers.some((blocker) => blocker.includes("只允许 5-8 秒")));
+
+  const missingGenerationKey = runSeedanceLivePreflight({
+    durationSeconds: 5,
+    projectRootInput: readyProjectRoot,
+    repoRoot: root,
+    selectedShotId: "shot_a",
+  }, deps(root, false));
+  assert.equal(missingGenerationKey.ready, false);
+  assert(missingGenerationKey.blockers.includes("packaged 视频提交前的文本 QA 和生成准备需要先配置图片/Responses Key。"));
 
   writeJson(path.join(readyProjectRoot, "reports/video_relay_queue.json"), {
     items: [
@@ -179,8 +190,12 @@ try {
 
   assert.equal(missingKey.ready, false);
   assert.equal(missingKey.checks.storyboardReferenceGenerationExpected, true);
-  assert.equal(missingKey.checks.imageProviderKeyRequired, true);
-  assert(missingKey.blockers.includes("当前镜头需要生成故事板参考，请先配置图片/Responses Key。"));
+  assert.deepEqual(missingKey.executionPolicy.initialLiveProviderOperations, [
+    "director_text_qa",
+    "storyboard_image_generation",
+    "seedance_video_submit",
+  ]);
+  assert(missingKey.blockers.includes("packaged 视频提交前的文本 QA 和生成准备需要先配置图片/Responses Key。"));
 
   console.log("seedance-live-preflight:test passed");
 } finally {
