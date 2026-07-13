@@ -4,7 +4,9 @@ import {
 } from "../agent-core/timelineDocument";
 import type {
   VibeAgentTimelineDocument,
+  VibeAgentTimelineEntry,
 } from "../agent-core/types";
+import { restoreAgentVideoExecutionReceipt } from "../core/agentVideoExecutionAdapter";
 import {
   readProjectVibeSidecarText,
   writeProjectVibeSidecarText,
@@ -40,6 +42,69 @@ export interface ProjectAgentTimelineWriteResult {
   path: string;
   timeline?: VibeAgentTimelineDocument;
   errors: string[];
+}
+
+export function bindProjectAgentTimelineEntriesToIdentity(
+  entries: VibeAgentTimelineEntry[],
+  input: {
+    projectId: string;
+    projectRoot?: string;
+    projectFactHash: string;
+  },
+): VibeAgentTimelineEntry[] {
+  const projectRoot = normalizeRecoveryRoot(input.projectRoot);
+  return entries.map((entry) => ({
+    ...entry,
+    details: {
+      ...(entry.details || {}),
+      projectId: input.projectId.trim(),
+      projectRoot,
+      projectFactHash: input.projectFactHash.trim(),
+    },
+  }));
+}
+
+export function migrateProjectAgentTimelineEntriesToProjectRoot(
+  entries: VibeAgentTimelineEntry[],
+  input: {
+    projectId: string;
+    sourceProjectRoot?: string;
+    targetProjectRoot: string;
+    projectFactHash: string;
+  },
+): VibeAgentTimelineEntry[] {
+  const sourceRoot = normalizeRecoveryRoot(input.sourceProjectRoot);
+  return entries.flatMap((entry) => {
+    const details = isRecord(entry.details) ? entry.details : {};
+    const entryProjectId = textValue(details.projectId);
+    const entryProjectRoot = normalizeRecoveryRoot(textValue(details.projectRoot));
+    const entryFactHash = textValue(details.projectFactHash) || textValue(details.sourceFactHash);
+    if (timelineEntryCanDriveRecovery(entry) && (!entryProjectId || !entryFactHash)) return [];
+    if (entryProjectId && entryProjectId !== input.projectId) return [];
+    if (entryFactHash && entryFactHash !== input.projectFactHash) return [];
+    if (
+      entryProjectRoot
+      && entryProjectRoot !== sourceRoot
+      && !(!sourceRoot && isBrowserDraftProjectRoot(entryProjectRoot))
+    ) return [];
+    if (details.executionReceipt != null) {
+      const receipt = restoreAgentVideoExecutionReceipt(details.executionReceipt, {
+        projectId: input.projectId,
+        projectRoot: input.targetProjectRoot,
+        projectFactHash: input.projectFactHash,
+      });
+      if (!receipt.ok) return [];
+    }
+    return [{
+      ...entry,
+      details: {
+        ...details,
+        projectId: input.projectId,
+        projectRoot: normalizeRecoveryRoot(input.targetProjectRoot),
+        projectFactHash: input.projectFactHash,
+      },
+    }];
+  });
 }
 
 function isBrowserDraftProjectRoot(projectRoot?: string) {
@@ -123,20 +188,20 @@ export async function saveProjectAgentTimeline(
       runtimeWriteError = error instanceof Error ? error.message : String(error);
     }
   }
+  if (runtimeWriteOk) {
+    return {
+      ok: true,
+      status: "written",
+      path: runtimeWritePath || projectAgentTimelinePath,
+      timeline: normalizedTimeline,
+      errors: [],
+    };
+  }
   const writeResult = await writeProjectVibeSidecarText(
     target,
     projectAgentTimelinePath,
     serialized,
   );
-  if (runtimeWriteOk) {
-    return {
-      ok: true,
-      status: "written",
-      path: runtimeWritePath || writeResult.path,
-      timeline: normalizedTimeline,
-      errors: [],
-    };
-  }
   return {
     ok: writeResult.ok,
     status: writeResult.ok ? "written" : writeResult.status === "unavailable" ? "unavailable" : "error",
@@ -227,4 +292,26 @@ function normalizeProjectAgentRoot(value: string) {
   const runtimeRootIndex = normalized.indexOf(".vibe-runtime/");
   if (runtimeRootIndex >= 0) return normalized.slice(runtimeRootIndex);
   return normalized;
+}
+
+function normalizeRecoveryRoot(value?: string) {
+  return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function textValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function timelineEntryCanDriveRecovery(entry: VibeAgentTimelineEntry) {
+  return entry.type === "confirmation_request"
+    || entry.type === "action_result"
+    || entry.lifecycle === "waiting_for_confirmation"
+    || entry.lifecycle === "running"
+    || entry.status === "waiting"
+    || Boolean(entry.actionKind)
+    || Boolean(entry.details?.executionReceipt);
 }

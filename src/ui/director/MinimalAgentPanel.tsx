@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
-import { ArrowRight, CheckCircle2, ChevronDown, ExternalLink, LockKeyhole, MessageCircle, Pencil, Plus, RotateCcw, Search, Send, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, CircleDashed, Clapperboard, ExternalLink, FolderOpen, Images, LockKeyhole, MessageCircle, PackageCheck, Pencil, Plus, RotateCcw, Search, Send, Sparkles, Video, X } from "lucide-react";
 import {
   agentWebSearchSourceLabel,
   buildAgentWebResearchSuggestion,
@@ -28,6 +28,8 @@ import {
   stripDirectorAgentPermissionControlPhrases,
 } from "../../core/directorAgentPermissionIntent";
 import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
+import type { ExportActionState } from "../../core/exportAction";
+import type { ExportWorkerState } from "../../core/exportWorker";
 import {
   type DirectorAgentToolAvailability,
   type DirectorAgentToolHandoff,
@@ -55,12 +57,12 @@ import {
   type AgentCurrentTaskStep,
 } from "../../core/agentCurrentTaskProjection";
 import {
+  restoreAgentVideoExecutionReceipt,
   runAgentVideoExecution,
   type AgentVideoExecutionAction,
   type AgentVideoExecutionAdapterResult,
   type AgentVideoExecutionContext,
   type AgentVideoExecutionOperation,
-  type AgentVideoExecutionReceipt,
   type AgentVideoLiveCapability,
   type RunAgentVideoExecutionInput,
 } from "../../core/agentVideoExecutionAdapter";
@@ -95,7 +97,11 @@ import type {
   VibeAgentPermissionMode,
   VibeAgentTimelineEntry,
 } from "../../agent-core/types";
-import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
+import {
+  bindProjectAgentTimelineEntriesToIdentity,
+  type ProjectAgentActionLogItem,
+  type ProjectAgentStagedPlanDraft,
+} from "../../project";
 import { videoBlockerRecoveryIntent } from "../../core/videoBlockerRecovery";
 import {
   agentProjectionBadges,
@@ -148,7 +154,6 @@ import {
 import {
   directorSkillSummaryForShot,
 } from "./directorSkillUi";
-import { agentProjectRequirementCopy } from "./agentProjectRequirementCopy";
 import type { DirectorView } from "./directorTypes";
 import type { ProjectStatusViewModel } from "../app/projectStatusViewModel";
 import type { CreatorAgentCommand } from "./creatorDeskTypes";
@@ -883,6 +888,23 @@ function minimalAgentMessageLifecycleLabel(lifecycle?: MinimalAgentMessage["life
 
 type MinimalAgentConfirmationExecutionMode = "dry_run" | "live" | undefined;
 
+function minimalAgentConfirmationExecutionModeForCapabilities(
+  message: MinimalAgentMessage,
+  input: {
+    referenceLiveAdapterReady: boolean;
+    videoLiveAdapterReady: boolean;
+    queryVideoLiveAdapterReady: boolean;
+    exportLiveAdapterReady: boolean;
+  },
+): MinimalAgentConfirmationExecutionMode {
+  if (!minimalAgentMessageRequestsActionConfirmation(message)) return undefined;
+  if (message.actionKind === "prepare_reference_generation") return input.referenceLiveAdapterReady ? "live" : "dry_run";
+  if (message.actionKind === "prepare_video_submit") return input.videoLiveAdapterReady ? "live" : "dry_run";
+  if (message.actionKind === "query_video_result") return input.queryVideoLiveAdapterReady ? "live" : "dry_run";
+  if (message.actionKind === "prepare_export") return input.exportLiveAdapterReady ? "live" : "dry_run";
+  return undefined;
+}
+
 function minimalAgentDryRunConfirmationDescriptor(message: MinimalAgentMessage) {
   if (message.actionKind === "prepare_reference_generation") {
     return {
@@ -1098,6 +1120,10 @@ function minimalAgentMessageIsProjectDraftEdit(message: MinimalAgentMessage) {
   return /改项目|修改项目|更新项目|重排/.test(actionFact)
     || (explicitShotCountEdit && /确认后才写入|不生成参考|不提交视频/.test(combinedCopy))
     || (/storyShotCount|故事结构|镜头数|镜头/.test(changedFacts) && /改项目|修改项目|更新项目|重排|修改当前故事|更新当前故事/.test(combinedCopy));
+}
+
+function minimalAgentMessageIsStructuredProjectDraftEdit(message: MinimalAgentMessage) {
+  return message.actionKind === "revise_story_or_shot" || message.actionKind === "update_shot_strategy";
 }
 
 function minimalAgentMessageIsLocalProjectSetup(message: MinimalAgentMessage) {
@@ -1983,7 +2009,7 @@ function latestPendingProjectEditConfirmationMessage(entries: VibeAgentTimelineE
   const messages = entries.map(minimalAgentMessageFromTimelineEntry);
   const activeMessages = messages.filter((_, index) => !minimalAgentConfirmationSuperseded(messages, index));
   return [...activeMessages].reverse().find((message) =>
-    minimalAgentMessageIsWaitingConfirmation(message) && minimalAgentMessageIsProjectDraftEdit(message)
+    minimalAgentMessageIsWaitingConfirmation(message) && minimalAgentMessageIsStructuredProjectDraftEdit(message)
   );
 }
 
@@ -2019,24 +2045,6 @@ function mergeVibeAgentTimelineEntries(
   const entriesById = new Map(current.map((entry) => [entry.id, entry]));
   for (const entry of additions) entriesById.set(entry.id, entry);
   return Array.from(entriesById.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-}
-
-function bindAgentTimelineEntriesToProject(
-  entries: VibeAgentTimelineEntry[],
-  input: { projectId: string; projectRoot?: string; projectFactHash: string },
-) {
-  return entries.map((entry) => {
-    if (stringValue(entry.details?.projectFactHash)) return entry;
-    return {
-      ...entry,
-      details: {
-        ...(entry.details || {}),
-        projectId: input.projectId,
-        projectRoot: input.projectRoot,
-        projectFactHash: input.projectFactHash,
-      },
-    };
-  });
 }
 
 function agentVideoPermissionDisplayLabel(contract: AgentVideoPermissionContract, userIntent = "") {
@@ -2592,6 +2600,13 @@ type DirectProductActionToolName = Extract<
   "generate_references" | "submit_video" | "query_video" | "export_showcase" | "export_project"
 >;
 
+function directProductActionKind(toolName: DirectProductActionToolName): VibeAgentTimelineEntry["actionKind"] {
+  if (toolName === "generate_references") return "prepare_reference_generation";
+  if (toolName === "submit_video") return "prepare_video_submit";
+  if (toolName === "query_video") return "query_video_result";
+  return "prepare_export";
+}
+
 function buildDirectProductActionTimelineEntry(input: {
   createdAt: string;
   phase: "started" | "running" | "completed" | "failed" | "blocked";
@@ -2631,12 +2646,13 @@ function buildDirectProductActionTimelineEntry(input: {
           ? "needs_user_input"
           : "failed",
     toolName: input.toolName,
+    actionKind: directProductActionKind(input.toolName),
     status: input.phase === "started" || input.phase === "running" ? "waiting" : input.phase === "completed" ? "done" : "blocked",
     facts: [
       ...visibleFacts,
       { label: "下一步", value: input.next },
     ],
-    details: { next: input.next, sourceFactHash: input.sourceFactHash },
+    details: { next: input.next, sourceFactHash: input.sourceFactHash, directProductPhase: input.phase },
   };
 }
 
@@ -2650,35 +2666,6 @@ function agentActionLogItemIsPrematureReferenceReview(item: AgentActionLogItem, 
   ].map((part) => stringValue(part)).join(" ");
   return /参考已生成|参考图已经回到参考页|\d+\s*项参考需要复核|去参考页复核|等你复核/.test(text)
     && !/参考可用/.test(text);
-}
-
-function agentActionLogItemShowsReferenceReady(item: AgentActionLogItem) {
-  if (item.tone !== "done") return false;
-  const text = [
-    item.title,
-    item.result,
-    item.nextStep,
-    item.resultView?.label,
-  ].map((part) => stringValue(part)).join(" ");
-  if (/本地验证|合同验证|未生成真实参考/.test(text)) return false;
-  return /参考可用/.test(text)
-    || (/生成参考/.test(text) && /可复核|去参考|参考页/.test(text));
-}
-
-function prototypeAgentRunShowsReferenceReady(run?: PrototypeAgentDemoRun) {
-  const result = run?.result;
-  if (!result || run?.status === "error" || result.status === "error") return false;
-  const text = [
-    result.label,
-    result.status,
-    result.storageLabel,
-    result.projectRecordLabel,
-    result.projectImpactLabel,
-    result.projectTaskLabel,
-  ].map((part) => stringValue(part)).join(" ");
-  if (/本地验证|合同验证|未生成真实参考/.test(text)) return false;
-  return /参考可用/.test(text)
-    || (/生成参考|补参考|参考待复核/.test(text) && /可复核|参考页/.test(text));
 }
 
 function referenceDirectProductActionState(status: string | undefined, message: string | undefined) {
@@ -4518,6 +4505,12 @@ function runtimeProjectRootIsLocalFolder(projectRoot?: string) {
     && !normalized.startsWith("browser-local:");
 }
 
+function exportWorkerReadyForAgentConfirmation(worker?: ExportWorkerState) {
+  if (!worker || worker.blockers.length) return false;
+  if (worker.readiness === "ready") return true;
+  return Boolean(worker.manifest.mvpPackage.reportIncluded && worker.manifest.files.length > 0);
+}
+
 function normalizeAgentGenerationProjectRoot(projectRoot?: string) {
   return projectRoot?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
 }
@@ -4647,16 +4640,68 @@ function agentCurrentTaskConfirmationMessage(
     .find((message) => agentCurrentTaskStepFromMessage(message) === projection.step);
 }
 
+function agentCurrentTaskEffectLabel(projection: AgentCurrentTaskProjection) {
+  if (projection.step === "draft_story") return "整理创作意图，不启动生成";
+  if (projection.step === "confirm_story") return "保存当前故事并推进项目状态";
+  if (projection.effect === "state_only") return "只更新项目位置与绑定状态";
+  if (projection.effect === "generation_job") return "建立这一步的受控任务与回执";
+  if (projection.effect === "local_export") return "只写入本地交付资料包";
+  return "等待你的下一句指令";
+}
+
+function agentCurrentTaskBoundaryLabel(projection: AgentCurrentTaskProjection) {
+  if (projection.step === "confirm_story" || projection.step === "choose_save_location") {
+    return "不会生成参考、提交视频或导出。";
+  }
+  if (projection.step === "prepare_references") return "不会提交视频或导出。";
+  if (projection.step === "submit_video") return "不会绕过参考前提，也不会重复提交已有任务。";
+  if (projection.step === "export") return "不会调用图片或视频 Provider。";
+  return "不会在没有明确确认时执行。";
+}
+
+function agentCurrentTaskTone(projection: AgentCurrentTaskProjection) {
+  if (projection.blockers.length) return "blocked";
+  if (projection.source === "pipeline_job" && !projection.requiresConfirmation) return "running";
+  if (projection.requiresConfirmation) return "waiting";
+  if (projection.step === "idle") return "ready";
+  return "working";
+}
+
+function agentCurrentTaskStatusLabel(projection: AgentCurrentTaskProjection) {
+  const tone = agentCurrentTaskTone(projection);
+  if (tone === "blocked") return "需要处理";
+  if (tone === "running") return "处理中";
+  if (tone === "waiting") return "等待确认";
+  if (tone === "ready") return "可以继续";
+  return "正在整理";
+}
+
+function AgentCurrentTaskIcon({ step }: { step: AgentCurrentTaskStep }) {
+  if (step === "draft_story") return <Sparkles size={18} aria-hidden="true" />;
+  if (step === "confirm_story") return <Clapperboard size={18} aria-hidden="true" />;
+  if (step === "choose_save_location") return <FolderOpen size={18} aria-hidden="true" />;
+  if (step === "prepare_references") return <Images size={18} aria-hidden="true" />;
+  if (step === "submit_video") return <Video size={18} aria-hidden="true" />;
+  if (step === "export") return <PackageCheck size={18} aria-hidden="true" />;
+  return <CircleDashed size={18} aria-hidden="true" />;
+}
+
 function agentCurrentTaskStepFromTimelineEntry(entry: VibeAgentTimelineEntry): AgentCurrentTaskStep | undefined {
   return agentCurrentTaskStepFromStructuredAction(entry);
 }
 
-function agentCurrentTaskConfirmationFromTimelineEntry(entry: VibeAgentTimelineEntry): AgentCurrentTaskConfirmation | undefined {
+function agentCurrentTaskConfirmationFromTimelineEntry(
+  entry: VibeAgentTimelineEntry,
+  executionMode?: MinimalAgentConfirmationExecutionMode,
+): AgentCurrentTaskConfirmation | undefined {
   if (entry.type !== "confirmation_request") return undefined;
   if (entry.status !== "waiting" && entry.lifecycle !== "waiting_for_confirmation") return undefined;
   const step = agentCurrentTaskStepFromTimelineEntry(entry);
   if (!step) return undefined;
-  const message = minimalAgentMessageFromTimelineEntry(entry);
+  const message = minimalAgentConfirmationMessageForExecutionMode(
+    minimalAgentMessageFromTimelineEntry(entry),
+    executionMode,
+  );
   return {
     confirmationId: entry.id,
     step,
@@ -4672,10 +4717,13 @@ function agentCurrentTaskConfirmationFromTimelineEntry(entry: VibeAgentTimelineE
   };
 }
 
-function agentCurrentTaskCompletedStepsFromTimelineEntries(entries: VibeAgentTimelineEntry[]): AgentCurrentTaskCompletedStep[] {
+function agentCurrentTaskCompletedStepsFromTimelineEntries(
+  entries: VibeAgentTimelineEntry[],
+  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
+): AgentCurrentTaskCompletedStep[] {
   const completed = new Map<AgentCurrentTaskStep, AgentCurrentTaskCompletedStep>();
   for (const entry of entries) {
-    const executionReceipt = agentVideoExecutionReceiptFromTimelineEntry(entry);
+    const executionReceipt = agentVideoExecutionReceiptFromTimelineEntry(entry, identity);
     const executionResult = isPlainRecord(entry.details?.executionResult) ? entry.details.executionResult : undefined;
     const executionStatus = stringValue(executionResult?.status);
     const outcomeStatus = stringValue(entry.details?.outcomeStatus);
@@ -4686,9 +4734,19 @@ function agentCurrentTaskCompletedStepsFromTimelineEntries(entries: VibeAgentTim
     if (!done) continue;
     const step = agentCurrentTaskStepFromTimelineEntry(entry);
     if (!step) continue;
+    const projectId = executionReceipt?.projectId || stringValue(entry.details?.projectId);
+    const projectRoot = executionReceipt?.projectRoot || stringValue(entry.details?.projectRoot);
+    const projectFactHash = executionReceipt?.projectFactHash || stringValue(entry.details?.sourceFactHash) || stringValue(entry.details?.projectFactHash);
+    if (
+      projectId !== identity.projectId
+      || normalizeAgentGenerationProjectRoot(projectRoot) !== normalizeAgentGenerationProjectRoot(identity.projectRoot)
+      || projectFactHash !== identity.projectFactHash
+    ) continue;
     completed.set(step, {
       step,
-      projectFactHash: executionReceipt?.projectFactHash || stringValue(entry.details?.sourceFactHash),
+      projectId,
+      projectRoot,
+      projectFactHash,
       executionMode: executionReceipt?.executionMode,
       actionId: entry.actionId,
       completedAt: entry.createdAt,
@@ -4730,18 +4788,22 @@ function agentVideoDryRunOutcomeLabel(action: AgentVideoExecutionAction) {
   return "导出执行合同已验证；未写入导出文件。";
 }
 
-function agentVideoExecutionReceiptFromTimelineEntry(entry: VibeAgentTimelineEntry) {
+function agentVideoExecutionReceiptFromTimelineEntry(
+  entry: VibeAgentTimelineEntry,
+  identity?: { projectId: string; projectRoot?: string; projectFactHash: string },
+) {
   const value = entry.details?.executionReceipt;
-  if (!isPlainRecord(value) || value.schemaVersion !== "agent_video_execution_receipt/0.1.0") return undefined;
-  return value as unknown as AgentVideoExecutionReceipt;
+  const restored = restoreAgentVideoExecutionReceipt(value, identity);
+  return restored.ok ? restored.receipt : undefined;
 }
 
 function agentTimelineHasValidatedExecution(
   entries: VibeAgentTimelineEntry[],
   action: AgentVideoExecutionAction,
+  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
 ) {
   return entries.some((entry) => {
-    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry);
+    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry, identity);
     return receipt?.executionMode === "dry_run"
       && receipt.status === "validated"
       && receipt.action === action
@@ -4750,19 +4812,48 @@ function agentTimelineHasValidatedExecution(
   });
 }
 
+function agentTimelineHasSucceededLiveExecution(
+  entries: VibeAgentTimelineEntry[],
+  action: AgentVideoExecutionAction,
+  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
+) {
+  const expectedToolName = action === "prepare_references"
+    ? "generate_references"
+    : action === "submit_video"
+      ? "submit_video"
+      : "export_project";
+  return entries.some((entry) => {
+    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry, identity);
+    if (receipt) {
+      return receipt.executionMode === "live"
+        && receipt.status === "succeeded"
+        && receipt.action === action;
+    }
+    const projectId = stringValue(entry.details?.projectId);
+    const projectRoot = stringValue(entry.details?.projectRoot);
+    const sourceFactHash = stringValue(entry.details?.sourceFactHash);
+    return entry.toolName === expectedToolName
+      && entry.status === "done"
+      && entry.lifecycle === "succeeded"
+      && entry.details?.directProductPhase === "completed"
+      && projectId === identity.projectId
+      && normalizeAgentGenerationProjectRoot(projectRoot) === normalizeAgentGenerationProjectRoot(identity.projectRoot)
+      && sourceFactHash === identity.projectFactHash;
+  });
+}
+
 function agentTimelineLiveExecutionCoversProjectedState(
   entries: VibeAgentTimelineEntry[],
   action: AgentVideoExecutionAction,
   phase: "started" | "running" | "completed" | "failed" | "blocked",
-  projectFactHash: string,
+  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
 ) {
   const receipt = [...entries]
     .reverse()
-    .map(agentVideoExecutionReceiptFromTimelineEntry)
+    .map((entry) => agentVideoExecutionReceiptFromTimelineEntry(entry, identity))
     .find((item) => item
       && item.executionMode === "live"
-      && item.action === action
-      && (!projectFactHash || item.projectFactHash === projectFactHash));
+      && item.action === action);
   if (!receipt) return false;
   if (phase === "started" || phase === "running") {
     return receipt.status === "running" || receipt.status === "timed_out" || receipt.status === "succeeded";
@@ -4803,6 +4894,7 @@ function agentVideoExecutionToolResult(result: AgentVideoExecutionAdapterResult)
 type ConfiguredAgentVideoExecutionInput = Omit<RunAgentVideoExecutionInput, "liveCapability" | "execute"> & {
   perform?: (context: AgentVideoExecutionContext) => unknown | Promise<unknown>;
 };
+const defaultAgentVideoExecutionOperation: AgentVideoExecutionOperation = "execute";
 
 function configuredAgentVideoLiveCapability(action: AgentVideoExecutionAction): AgentVideoLiveCapability {
   if (action === "prepare_references") {
@@ -4894,6 +4986,8 @@ export function MinimalAgentPanel({
   agentCommand,
   projectObservation,
   projectStatusView,
+  exportAction,
+  exportWorker,
   videoPermissionContract,
   onVideoPermissionContractChange,
   storyboardProjectPlanInput,
@@ -4901,7 +4995,7 @@ export function MinimalAgentPanel({
   onPendingAgentActionChange,
   onReferencePlanningFocusChange,
   onEditingPendingConfirmationChange,
-  onVisiblePendingConfirmationLabelChange,
+  onCurrentTaskProjectionChange,
 }: {
   runtimeState: ProjectRuntimeState;
   projectFactHash?: string;
@@ -4983,6 +5077,8 @@ export function MinimalAgentPanel({
   agentCommand?: CreatorAgentCommand;
   projectObservation?: ProjectObservationProjection;
   projectStatusView?: ProjectStatusViewModel;
+  exportAction?: ExportActionState;
+  exportWorker?: ExportWorkerState;
   videoPermissionContract?: AgentVideoPermissionContract;
   onVideoPermissionContractChange?: (contract: AgentVideoPermissionContract) => void;
   storyboardProjectPlanInput?: StoryboardReferenceProjectPlannerInput;
@@ -4990,7 +5086,7 @@ export function MinimalAgentPanel({
   onPendingAgentActionChange?: (pending: boolean) => void;
   onReferencePlanningFocusChange?: (active: boolean) => void;
   onEditingPendingConfirmationChange?: (active: boolean) => void;
-  onVisiblePendingConfirmationLabelChange?: (label: string) => void;
+  onCurrentTaskProjectionChange?: (projection: AgentCurrentTaskProjection | undefined) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -5043,12 +5139,15 @@ export function MinimalAgentPanel({
       : undefined,
     projectFactHash,
   };
+  const agentGenerationProjectIdentityRef = useRef(agentGenerationProjectIdentity);
+  agentGenerationProjectIdentityRef.current = agentGenerationProjectIdentity;
   const [agentVideoDryRunLedger, setAgentVideoDryRunLedger] = useState<AgentVideoGenerationJobLedger>(() => createAgentVideoGenerationJobLedger({
     ledgerId: "minimal_agent_video_dry_run",
     ...agentGenerationProjectIdentity,
     createdAt: "1970-01-01T00:00:00.000Z",
   }));
   const agentVideoExecutionLedgerRef = useRef(agentVideoDryRunLedger);
+  const agentVideoExecutionInFlightRef = useRef(new Map<string, ReturnType<typeof runConfiguredAgentVideoExecution>>());
 
   useEffect(() => {
     setAgentVideoDryRunLedger((current) => {
@@ -5120,14 +5219,14 @@ export function MinimalAgentPanel({
     onPendingAgentActionChange?.(false);
     onReferencePlanningFocusChange?.(false);
     onEditingPendingConfirmationChange?.(false);
-    onVisiblePendingConfirmationLabelChange?.("");
+    onCurrentTaskProjectionChange?.(undefined);
     setComposerEditingConfirmationLabel("");
   }, [
     newVideoResetKey,
+    onCurrentTaskProjectionChange,
     onEditingPendingConfirmationChange,
     onPendingAgentActionChange,
     onReferencePlanningFocusChange,
-    onVisiblePendingConfirmationLabelChange,
   ]);
 
   useEffect(() => {
@@ -5157,11 +5256,7 @@ export function MinimalAgentPanel({
   const hasMultiShotSelection = scopedShotIds.length > 1;
   const hasSectionSelection = Boolean(sectionId && !scopedShotIds.length && !asset);
   const hasActiveSelection = hasBoundSelection || hasSectionSelection;
-  const projectStatusWaitingForReferenceConfirmation = projectStatusView?.stage === "等待你确认"
-    && /确认生成参考/.test(`${projectStatusView.doing || ""} ${projectStatusView.nextAction || ""} ${projectStatusView.waitingFor || ""}`);
-  const timelineReferenceGenerationActionId = projectStatusWaitingForReferenceConfirmation
-    ? latestWaitingReferenceGenerationConfirmationActionId(agentTimelineEntries)
-    : "";
+  const timelineReferenceGenerationActionId = latestWaitingReferenceGenerationConfirmationActionId(agentTimelineEntries);
   const restoredReferenceGenerationActionId = restoredAgentStagedPlanDraft?.status === "active"
     && restoredAgentStagedPlanDraft.action?.kind === "prepare_reference_generation"
     ? restoredAgentStagedPlanDraft.action.actionId
@@ -5200,8 +5295,13 @@ export function MinimalAgentPanel({
     && referencePlanningGenerationRequestText(referencePlanningIntentText),
   );
   const savedStoryReferencePlanStatusActive = Boolean(
-    projectStatusView?.stage === "故事已保存"
-      && /参考/.test(`${projectStatusView.doing} ${projectStatusView.nextAction} ${projectStatusView.waitingFor}`),
+    localProjectReady
+      && runtimeProjectRootIsLocalFolder(runtimeState.project.root)
+      && runtimeState.storyFlow.shots.length > 0
+      && (
+        runtimeState.visualMemory.summary.missing > 0
+        || projectObservation?.references.status === "missing"
+      ),
   );
   const referencePlanningContinueIntentActive = Boolean(
     !attachments.length
@@ -5212,7 +5312,6 @@ export function MinimalAgentPanel({
   const savedStoryIdleReferenceFocusActive = Boolean(
     referencePlanningFocusActive
       && savedStoryReferencePlanStatusActive
-      && projectStatusView?.stage === "故事已保存"
       && !text.trim()
       && !attachments.length,
   );
@@ -5222,8 +5321,7 @@ export function MinimalAgentPanel({
     : [];
   const storyReferenceDeferredFocusActive = Boolean(
     !referencePlanningContextActive
-      && projectStatusView?.stage === "故事已保存"
-      && /开始补参考|不生成参考|先整理故事/.test(`${projectStatusView.doing} ${projectStatusView.nextAction} ${projectStatusView.waitingFor}`)
+      && savedStoryReferencePlanStatusActive
       && !text.trim()
       && !attachments.length,
   );
@@ -5238,23 +5336,24 @@ export function MinimalAgentPanel({
   const storyReferencePlanningIntentActive = Boolean(
     !referencePlanningContextActive
       && !storyReferenceDeferredFocusActive
-      && (projectStatusView?.stage === "故事已保存" || storyReferencePlanOnlyIntentActive)
+      && (savedStoryReferencePlanStatusActive || storyReferencePlanOnlyIntentActive)
       && !attachments.length
       && !storyShotCountRevisionIntentActive
       && referencePlanningPreparationRequestText(referencePlanningIntentText),
   );
-  const actionLogShowsReferenceReady = agentActionLog.some(agentActionLogItemShowsReferenceReady);
-  const localPrototypeShowsReferenceReady = prototypeAgentRunShowsReferenceReady(localPrototypeAgentDemo);
   const composerExecutionTimelineEntries = mergeVibeAgentTimelineEntries(
     mergeVibeAgentTimelineEntries(visibleAgentTimelineEntries, agentTimelineEntries),
     restoredAgentTimelineEntries || [],
   );
-  const composerTimelineShowsReferenceReady = localPrototypeShowsReferenceReady || actionLogShowsReferenceReady || composerExecutionTimelineEntries.some((entry) =>
-    entry.toolName === "generate_references" && /参考可用/.test(`${entry.title} ${entry.body} ${entry.details?.next || ""}`),
+  const composerTimelineShowsReferenceReady = agentTimelineHasSucceededLiveExecution(
+    composerExecutionTimelineEntries,
+    "prepare_references",
+    agentGenerationProjectIdentity,
   );
   const composerTimelineHasReferenceValidation = agentTimelineHasValidatedExecution(
     composerExecutionTimelineEntries,
     "prepare_references",
+    agentGenerationProjectIdentity,
   );
   const storyHasMissingReferencesForComposer = Boolean(
     (
@@ -5297,17 +5396,17 @@ export function MinimalAgentPanel({
       ]
     : [];
   const pendingTimelineConfirmationMessageForContext = latestVisibleTimelineConfirmationMessage(visibleAgentTimelineEntries, false, restoredReferenceGenerationActionId);
-  const pendingTimelineConfirmationLabelForContext = pendingTimelineConfirmationMessageForContext
-    ? minimalAgentConfirmationAction(pendingTimelineConfirmationMessageForContext, "确认执行").label
-    : "";
+  const pendingTimelineConfirmationStepForContext = pendingTimelineConfirmationMessageForContext
+    ? agentCurrentTaskStepFromMessage(pendingTimelineConfirmationMessageForContext)
+    : undefined;
   const localProjectSetupComposerIntentActive = Boolean(
-    projectStatusView?.stage === "需要保存位置"
+    (!localProjectReady || !runtimeProjectRootIsLocalFolder(runtimeState.project.root))
       && text.trim()
       && !attachments.length
       && runtimeState.storyFlow.shots.length > 0
       && intentNeedsLocalProjectBeforeTooling(text),
   );
-  const localProjectSetupConfirmationContextActive = pendingTimelineConfirmationLabelForContext === "选择保存位置"
+  const localProjectSetupConfirmationContextActive = pendingTimelineConfirmationStepForContext === "choose_save_location"
     || localProjectSetupComposerIntentActive
     || Boolean(
       localProjectBusy
@@ -5317,7 +5416,7 @@ export function MinimalAgentPanel({
         && runtimeState.storyFlow.shots.length > 0,
     )
     || Boolean(
-      projectStatusView?.stage === "需要保存位置"
+      (!localProjectReady || !runtimeProjectRootIsLocalFolder(runtimeState.project.root))
         && !text.trim()
         && !attachments.length
         && runtimeState.storyFlow.shots.length > 0,
@@ -5358,7 +5457,7 @@ export function MinimalAgentPanel({
     : [];
   const pendingReferenceGenerationConfirmationMessage = pendingTimelineConfirmationMessageForContext;
   const pendingReferenceGenerationConfirmationChips = pendingReferenceGenerationConfirmationMessage
-    && minimalAgentConfirmationAction(pendingReferenceGenerationConfirmationMessage, "确认执行").label === "确认生成参考"
+    && agentCurrentTaskStepFromMessage(pendingReferenceGenerationConfirmationMessage) === "prepare_references"
     ? [
         { label: "范围", value: "当前故事" },
         { label: "参考", value: projectObservation?.references.label || "参考不完整" },
@@ -5466,7 +5565,6 @@ export function MinimalAgentPanel({
     !newStoryComposerScopeActive
       && (
         pendingStoryShotCountRevisionConfirmationCount
-        || /^确认重排/.test(pendingTimelineConfirmationLabelForContext)
         || Boolean(restoredAgentStagedPlanDraft?.status === "active" && restoredAgentStagedPlanDraft.action?.kind === "revise_story_or_shot")
       ),
   );
@@ -5562,13 +5660,11 @@ export function MinimalAgentPanel({
     : planPhase === "confirmed" && localPrototypeAgentDemo
       ? localPrototypeAgentDemo
       : latestPrototypeAgentDemo || localPrototypeAgentDemo;
-  const prototypeShowsReferenceReady = localPrototypeShowsReferenceReady || prototypeAgentRunShowsReferenceReady(prototypeAgentDemo);
   const prototypeAgentProjection = buildPrototypeAgentDemoProjection(prototypeAgentDemo);
   const realSampleBusy = realSampleAction?.status === "running";
   const endFrameBusy = endFrameAction?.status === "running";
   const videoBusy = videoSendAction?.status === "running";
-  const videoSubmitCancelled = videoSendAction?.status === "blocked" && /已取消，本次没有发送/.test(videoSendAction.message || "");
-  const videoSubmissionBlocked = videoSendAction?.status === "blocked" && !videoSubmitCancelled;
+  const videoSubmissionBlocked = videoSendAction?.status === "blocked";
   const videoBlockedRecoveryIntent = videoSubmissionBlocked ? videoBlockerRecoveryIntent(videoSendAction?.message) : "";
   const videoBlockedRecoveryTargetShots = (videoSendAction?.recoveryTargetShotIds || [])
     .map((shotId) => runtimeState.storyFlow.shots.find((item) => item.id === shotId))
@@ -5696,9 +5792,7 @@ export function MinimalAgentPanel({
   const activeVideoPermissionContract = localVideoPermissionContract;
   const runtimeProjectRootReadyForTools = runtimeProjectRootIsLocalFolder(runtimeState.project.root);
   const localProjectReadyForTools = Boolean(localProjectReady && runtimeProjectRootReadyForTools);
-  const projectStatusStage = projectStatusView?.stage || "";
-  const visibleProjectNeedsLocalFolder = projectStatusStage === "需要本地项目" || projectStatusStage === "需要保存位置";
-  const agentVisibleProjectReadyForTools = localProjectReadyForTools && !visibleProjectNeedsLocalFolder;
+  const agentVisibleProjectReadyForTools = localProjectReadyForTools;
   const persistedStoryContextActive = Boolean(
     runtimeState.storyFlow.shots.length > 0
       || selectedShots.length > 0
@@ -5710,22 +5804,31 @@ export function MinimalAgentPanel({
       || persistedStoryContextActive,
   );
   const agentCommandKind = agentCommand?.kind;
-  const projectStatusExportCopy = `${projectStatusView?.nextAction || ""} ${projectStatusView?.waitingFor || ""}`;
   const readyNewVideoDraftForAgent = Boolean(
     runtimeState.storyFlow.shots.length === 0
       && !newVideoDraftBusyForAgent
       && newVideoDraftReadyForAgent,
   );
   const activeNewVideoDraftConfirmation = readyNewVideoDraftForAgent;
-  const exportReadyForConfirmation = projectStatusStage === "等待确认导出" || projectStatusStage === "可以导出";
+  const exportActionStopsConfirmation = Boolean(
+    exportAction
+      && exportAction.status !== "idle",
+  );
+  const exportReadyForConfirmation = Boolean(
+    currentView === "export"
+      && !exportActionStopsConfirmation
+      && exportWorkerReadyForAgentConfirmation(exportWorker),
+  );
   const exportResultIsPrimary = Boolean(
-    projectStatusStage === "导出已完成"
-      || exportReadyForConfirmation
-      || (projectStatusStage === "视频结果已出" && /交付|导出/.test(projectStatusExportCopy)),
+    currentView === "export"
+      && (
+        exportAction?.status === "running"
+        || exportAction?.status === "ready"
+        || exportReadyForConfirmation
+      ),
   );
   const videoQueryMode = videoCanResume
-    || agentCommandKind === "resume_video"
-    || /查询/.test(videoSendAction?.suggestedActionLabel || "");
+    || agentCommandKind === "resume_video";
   const showEndpointEndFrameControls = usesEndpointEndFrame(shot) || selectedShots.some(usesEndpointEndFrame);
   const videoResultIsPrimary = !exportResultIsPrimary && (videoQueryMode || videoBusy || videoAlreadySent);
   const readOnlyAgentStatusInspection = agentActionIsStatusInspection(agentActionEnvelope);
@@ -6030,20 +6133,28 @@ export function MinimalAgentPanel({
     mergeVibeAgentTimelineEntries(visibleAgentTimelineEntries, agentTimelineEntries),
     restoredAgentTimelineEntries || [],
   );
-  const timelineShowsReferenceReady = agentReadinessTimelineEntries.some((entry) => {
-    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry);
-    if (receipt?.executionMode === "dry_run") return false;
-    return entry.toolName === "generate_references" && /参考可用|参考已生成|等待复核/.test(`${entry.title} ${entry.body} ${entry.details?.next || ""}`);
-  });
-  const timelineHasReferenceValidation = agentTimelineHasValidatedExecution(agentReadinessTimelineEntries, "prepare_references");
-  const referencesUsableForAgent = referencesReadyAfterReview || timelineShowsReferenceReady || actionLogShowsReferenceReady || prototypeShowsReferenceReady;
+  const timelineShowsReferenceReady = agentTimelineHasSucceededLiveExecution(
+    agentReadinessTimelineEntries,
+    "prepare_references",
+    agentGenerationProjectIdentity,
+  );
+  const timelineHasReferenceValidation = agentTimelineHasValidatedExecution(
+    agentReadinessTimelineEntries,
+    "prepare_references",
+    agentGenerationProjectIdentity,
+  );
+  const referencesUsableForAgent = referencesReadyAfterReview || timelineShowsReferenceReady;
   const referenceExecutionSatisfiedForAgent = referencesUsableForAgent || timelineHasReferenceValidation;
-  const timelineShowsVideoReady = agentReadinessTimelineEntries.some((entry) => {
-    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry);
-    if (receipt?.executionMode === "dry_run") return false;
-    return entry.toolName === "submit_video" && /视频已生成|视频结果|等待复核/.test(`${entry.title} ${entry.body} ${entry.details?.next || ""}`);
-  });
-  const timelineHasVideoValidation = agentTimelineHasValidatedExecution(agentReadinessTimelineEntries, "submit_video");
+  const timelineShowsVideoReady = agentTimelineHasSucceededLiveExecution(
+    agentReadinessTimelineEntries,
+    "submit_video",
+    agentGenerationProjectIdentity,
+  );
+  const timelineHasVideoValidation = agentTimelineHasValidatedExecution(
+    agentReadinessTimelineEntries,
+    "submit_video",
+    agentGenerationProjectIdentity,
+  );
   const referenceMissingCountForAgent = referenceExecutionSatisfiedForAgent ? 0 : referenceMissingCount;
   const referenceReviewCountForAgent = referencesUsableForAgent ? 0 : referenceReviewCount;
   const referenceReadyCountForAgent = referencesUsableForAgent ? Math.max(referenceLockedCount, 1) : referenceLockedCount;
@@ -7023,8 +7134,6 @@ export function MinimalAgentPanel({
         !localProjectReadyForTools
         || projectRequiredForWorkflow
         || projectBlockedWithoutFooterResolver
-        || projectStatusView?.stage === "需要本地项目"
-        || projectStatusView?.stage === "需要保存位置"
       ) && intentNeedsLocalProjectBeforeTooling(userIntent);
       if (userIntentNeedsLocalProject) {
         rememberLocalProjectBlockForIntent(userIntent);
@@ -7508,12 +7617,11 @@ export function MinimalAgentPanel({
     rememberAgentTimelineEntries([entry]);
   }
 
-  function rememberAgentTimelineEntries(entries: VibeAgentTimelineEntry[]) {
-    const boundEntries = bindAgentTimelineEntriesToProject(entries, {
-      projectId: runtimeState.sourceIndex.projectId,
-      projectRoot: localProjectReadyForTools ? runtimeState.project.root : undefined,
-      projectFactHash,
-    });
+  function rememberAgentTimelineEntries(
+    entries: VibeAgentTimelineEntry[],
+    identity = agentGenerationProjectIdentityRef.current,
+  ) {
+    const boundEntries = bindProjectAgentTimelineEntriesToIdentity(entries, identity);
     setAgentTimelineEntries((current) => mergeVibeAgentTimelineEntries(current, boundEntries));
     void onRememberAgentTimelineEntries?.(boundEntries);
   }
@@ -7581,7 +7689,7 @@ export function MinimalAgentPanel({
       agentTimelineEntries,
       "prepare_references",
       projectedState.phase,
-      projectFactHash,
+      agentGenerationProjectIdentity,
     )) return;
     const alreadyVisible = agentTimelineEntries.some((entry) =>
       entry.toolName === "generate_references"
@@ -7627,7 +7735,7 @@ export function MinimalAgentPanel({
       agentTimelineEntries,
       "submit_video",
       projectedState.phase,
-      projectFactHash,
+      agentGenerationProjectIdentity,
     )) return;
     const alreadyVisible = agentTimelineEntries.some((entry) =>
       entry.toolName === projectedState.toolName
@@ -7664,6 +7772,7 @@ export function MinimalAgentPanel({
     confirmationReceiptId: string;
     sourceTimelineId?: string;
     executionMode: "dry_run" | "live";
+    projectFactHash?: string;
     retry?: boolean;
     prompt?: string;
     timeoutMs?: number;
@@ -7671,45 +7780,80 @@ export function MinimalAgentPanel({
   }) {
     const generatedAt = new Date().toISOString();
     const baseActionId = input.actionId.trim() || `agent_video_${input.action}`;
-    const previousJob = [...agentVideoExecutionLedgerRef.current.jobs]
-      .reverse()
-      .find((job) => job.actionId === baseActionId);
-    const retryOfActionId = input.retry && previousJob && ["failed", "cancelled"].includes(previousJob.status)
-      ? baseActionId
-      : undefined;
-    const actionId = retryOfActionId
-      ? `${baseActionId}_retry_${generatedAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}`
-      : baseActionId;
-    const result = await runConfiguredAgentVideoExecution({
-      plan: agentCurrentTaskPipelinePlan,
-      ledger: agentVideoExecutionLedgerRef.current,
-      action: input.action,
-      operation: input.operation,
-      actionId,
-      retryOfActionId,
-      sourceConfirmationId: input.confirmationReceiptId,
-      sourceTimelineId: input.sourceTimelineId,
-      executionMode: input.executionMode,
-      liveExecutionAllowed: input.executionMode === "live",
-      generatedAt,
-      prompt: input.prompt,
-      timeoutMs: input.timeoutMs,
-      perform: input.perform,
-      onLedgerSnapshot: async (ledgerSnapshot) => {
-        if (input.executionMode === "live" && !onRememberAgentGenerationJobLedger) {
-          throw new Error("Live execution requires project-backed generation job persistence.");
-        }
-        await onRememberAgentGenerationJobLedger?.(ledgerSnapshot);
-        agentVideoExecutionLedgerRef.current = ledgerSnapshot;
-        setAgentVideoDryRunLedger(ledgerSnapshot);
-      },
-      onTimelineEntries: (entries) => {
-        rememberAgentTimelineEntries(entries);
-      },
-    });
-    agentVideoExecutionLedgerRef.current = result.ledger;
-    setAgentVideoDryRunLedger(result.ledger);
-    return result;
+    const executionIdentity = {
+      ...agentGenerationProjectIdentityRef.current,
+      projectFactHash: input.projectFactHash?.trim()
+        || agentGenerationProjectIdentityRef.current.projectFactHash,
+    };
+    agentGenerationProjectIdentityRef.current = executionIdentity;
+    const inFlightKey = [
+      executionIdentity.projectId,
+      executionIdentity.projectRoot || "",
+      executionIdentity.projectFactHash,
+      input.operation || defaultAgentVideoExecutionOperation,
+      baseActionId,
+    ].join("::");
+    const existingExecution = agentVideoExecutionInFlightRef.current.get(inFlightKey);
+    if (existingExecution) return existingExecution;
+    const execution = (async () => {
+      let executionLedger = agentVideoExecutionLedgerRef.current;
+      if (!agentGenerationLedgerMatchesProject(executionLedger, executionIdentity)) {
+        executionLedger = createAgentVideoGenerationJobLedger({
+          ledgerId: executionLedger.ledgerId || "minimal_agent_video_dry_run",
+          ...executionIdentity,
+          createdAt: generatedAt,
+        });
+        agentVideoExecutionLedgerRef.current = executionLedger;
+        setAgentVideoDryRunLedger(executionLedger);
+      }
+      const previousJob = [...executionLedger.jobs]
+        .reverse()
+        .find((job) => job.actionId === baseActionId);
+      const retryOfActionId = input.retry && previousJob && ["failed", "cancelled"].includes(previousJob.status)
+        ? baseActionId
+        : undefined;
+      const actionId = retryOfActionId
+        ? `${baseActionId}_retry_${generatedAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}`
+        : baseActionId;
+      const result = await runConfiguredAgentVideoExecution({
+        plan: agentCurrentTaskPipelinePlan,
+        ledger: executionLedger,
+        action: input.action,
+        operation: input.operation,
+        actionId,
+        retryOfActionId,
+        sourceConfirmationId: input.confirmationReceiptId,
+        sourceTimelineId: input.sourceTimelineId,
+        executionMode: input.executionMode,
+        liveExecutionAllowed: input.executionMode === "live",
+        generatedAt,
+        prompt: input.prompt,
+        timeoutMs: input.timeoutMs,
+        perform: input.perform,
+        onLedgerSnapshot: async (ledgerSnapshot) => {
+          if (input.executionMode === "live" && !onRememberAgentGenerationJobLedger) {
+            throw new Error("Live execution requires project-backed generation job persistence.");
+          }
+          await onRememberAgentGenerationJobLedger?.(ledgerSnapshot);
+          agentVideoExecutionLedgerRef.current = ledgerSnapshot;
+          setAgentVideoDryRunLedger(ledgerSnapshot);
+        },
+        onTimelineEntries: (entries) => {
+          rememberAgentTimelineEntries(entries, executionIdentity);
+        },
+      });
+      agentVideoExecutionLedgerRef.current = result.ledger;
+      setAgentVideoDryRunLedger(result.ledger);
+      return result;
+    })();
+    agentVideoExecutionInFlightRef.current.set(inFlightKey, execution);
+    try {
+      return await execution;
+    } finally {
+      if (agentVideoExecutionInFlightRef.current.get(inFlightKey) === execution) {
+        agentVideoExecutionInFlightRef.current.delete(inFlightKey);
+      }
+    }
   }
 
   async function runFooterAgentVideoExecution(input: {
@@ -7740,7 +7884,7 @@ export function MinimalAgentPanel({
     action: DirectorAgentActionEnvelope | undefined,
     userIntent: string,
     preparedHandoff?: DirectorAgentToolHandoff,
-    options: { retry?: boolean } = {},
+    options: { retry?: boolean; projectFactHash?: string } = {},
   ): Promise<ConfirmedAgentToolRunOutcome> {
     const confirmedToolVideoPermissionContract = agentVideoPermissionContractForAction(
       action,
@@ -7782,6 +7926,7 @@ export function MinimalAgentPanel({
         confirmationReceiptId: input.targetConfirmationReceiptId || confirmationReceiptId,
         sourceTimelineId: preparedHandoff?.handoffId,
         executionMode: input.live ? "live" : "dry_run",
+        projectFactHash: options.projectFactHash,
         retry: options.retry,
         prompt: userIntent,
         timeoutMs: input.timeoutMs,
@@ -7947,6 +8092,12 @@ export function MinimalAgentPanel({
       if (previewResult?.agentKernelTurn) {
         setLatestAgentKernelTurn(previewResult.agentKernelTurn);
       }
+      if (previewResult?.projectFactHash) {
+        agentGenerationProjectIdentityRef.current = {
+          ...agentGenerationProjectIdentityRef.current,
+          projectFactHash: previewResult.projectFactHash,
+        };
+      }
       const authoritativeAgentActionEnvelope = previewResult?.agentActionEnvelope || agentActionEnvelope;
       if (authoritativeAgentActionEnvelope) {
         setAgentActionEnvelope(authoritativeAgentActionEnvelope);
@@ -7959,7 +8110,12 @@ export function MinimalAgentPanel({
       rememberConfirmedToolStart(authoritativeAgentActionEnvelope, {
         existingEntries: previewResult?.agentTimelineEntries,
       });
-      const rawToolRunOutcome = await runConfirmedAgentTool(authoritativeAgentActionEnvelope, userIntent, authoritativeAgentToolHandoff);
+      const rawToolRunOutcome = await runConfirmedAgentTool(
+        authoritativeAgentActionEnvelope,
+        userIntent,
+        authoritativeAgentToolHandoff,
+        { projectFactHash: previewResult?.projectFactHash },
+      );
       const toolRunOutcome = confirmedProjectWriteOutcomeForLocalState(rawToolRunOutcome, authoritativeAgentToolHandoff, agentVisibleProjectReadyForTools);
       rememberConfirmedToolOutcome(authoritativeAgentActionEnvelope, toolRunOutcome);
       const confirmedRun = confirmedToolRunResult(authoritativeAgentToolHandoff, toolRunOutcome, previewResult || undefined, agentVisibleProjectReadyForTools);
@@ -8340,10 +8496,6 @@ export function MinimalAgentPanel({
   const footerDirectActionBoundaryNotice = projectRequiredForWorkflow || projectBlockedWithoutFooterResolver
     ? ""
     : footerDirectActionBoundaryFor(footerDirectAction);
-  const projectRequirement = agentProjectRequirementCopy({
-    localProjectBusy,
-    canCreateLocalProject: canResolveProjectFromFooter,
-  });
   const stateAwareAgentTimelineEntries = useMemo(
     () => visibleAgentTimelineEntries.filter((entry) =>
       !minimalAgentReferenceReviewMessageIsPremature(minimalAgentMessageFromTimelineEntry(entry), referenceHasReviewableAssets)
@@ -8385,7 +8537,7 @@ export function MinimalAgentPanel({
     .find((message): message is MinimalAgentMessage => Boolean(
       message
       && minimalAgentMessageIsWaitingConfirmation(message)
-      && minimalAgentMessageIsProjectDraftEdit(message),
+      && minimalAgentMessageIsStructuredProjectDraftEdit(message),
     ));
   const activeProjectEditConfirmationLabel = activeProjectEditConfirmationMessage
     ? minimalAgentConfirmationAction(activeProjectEditConfirmationMessage, "确认修改").label
@@ -8493,8 +8645,6 @@ export function MinimalAgentPanel({
         !localProjectReadyForTools
         || projectRequiredForWorkflow
         || projectBlockedWithoutFooterResolver
-        || projectStatusView?.stage === "需要本地项目"
-        || projectStatusView?.stage === "需要保存位置"
       )
       && !composerIntentCanStartNewVideoWithoutProject
       && intentNeedsLocalProjectBeforeTooling(visibleComposerInputText)
@@ -8738,136 +8888,12 @@ export function MinimalAgentPanel({
     agentActionIsProjectDraftEdit(agentActionEnvelope)
     && workflowCanConfirm(workflow)
   );
-  const primaryOperation = (() => {
-    if (projectRequiredForWorkflow && !preparedProjectEditCanConfirmWithoutLocalProject) {
-      const label = projectRequirement.label;
-      const disabledReason = projectRequirement.detail;
-      return {
-        label,
-        disabled: !canResolveProjectFromFooter,
-        disabledReason,
-        statusLine: canResolveProjectFromFooter ? `下一步：${label}` : disabledReason,
-        perform: () => {
-          void startLocalProjectSetupFromMessage();
-        },
-      };
-    }
-    if (activeNewVideoDraftConfirmation || visibleNewVideoDraftConfirmation) {
-      const confirmDraftFromAgent = onConfirmNewVideoDraftFromAgent || (() => onStartNewVideoDraftFromAgent?.(NEW_VIDEO_DRAFT_CONFIRM_LABEL));
-      const disabled = Boolean((!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent) || hasComposerInput || attachments.length || isPreparingPlan);
-      const disabledReason = isPreparingPlan
-        ? "正在整理，稍等一下。"
-        : hasComposerInput || attachments.length
-          ? "先发送或清空当前输入，再确认草案。"
-          : (!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent)
-            ? "当前不能从消息里确认草案。"
-            : "";
-      return {
-        label: NEW_VIDEO_DRAFT_CONFIRM_LABEL,
-        disabled,
-        disabledReason,
-        statusLine: disabled ? disabledReason : `下一步：${NEW_VIDEO_DRAFT_CONFIRM_LABEL}`,
-        perform: () => {
-          void confirmDraftFromAgent();
-        },
-      };
-    }
-    if (visibleTimelineConfirmationMessage && currentTimelineConfirmationLabel && canConfirm) {
-      const disabled = Boolean(hasComposerInput || attachments.length || isPreparingPlan);
-      const disabledReason = isPreparingPlan
-        ? "正在整理，稍等一下。"
-        : hasComposerInput || attachments.length
-          ? "先发送或清空当前输入，再确认当前消息。"
-          : "";
-      return {
-        label: currentTimelineConfirmationLabel,
-        disabled,
-        disabledReason,
-        statusLine: disabled ? disabledReason : `等待确认：${currentTimelineConfirmationLabel}`,
-        perform: () => {
-          void confirmPlan();
-        },
-      };
-    }
-    if (projectBlockedWithoutFooterResolver) {
-      return {
-        label: "发送",
-        disabled: true,
-        disabledReason: "继续写想法也可以；生成参考、视频或导出前需要保存位置。",
-        statusLine: hasComposerInput
-          ? "想法已写好；生成前再选择保存位置。"
-          : "等待输入：先写一句想法，确认前不会生成。",
-        perform: () => {
-          void prepareChange();
-        },
-      };
-    }
-    if (footerDirectAction) {
-      return {
-        label: footerDirectAction.label,
-        disabled: footerDirectAction.disabled,
-        disabledReason: footerDirectAction.disabledReason,
-        statusLine: footerDirectAction.disabled ? footerDirectAction.disabledReason : footerDirectActionBoundaryNotice || `下一步：${footerDirectAction.label}`,
-        perform: footerDirectAction.perform,
-      };
-    }
-    if (composerPrimaryIsFresh) {
-      const label = isPreparingPlan ? "整理中" : "发送";
-      const disabledReason = !hasComposerInput
-        ? "先写一句，或拖入文件。"
-        : `${status || "正在整理"}，稍等一下。`;
-      return {
-        label,
-        disabled: !hasComposerInput || isPreparingPlan,
-        disabledReason,
-        statusLine: !hasComposerInput || isPreparingPlan ? disabledReason : status || "等待输入",
-        perform: () => {
-          void prepareChange();
-        },
-      };
-    }
-    if (readOnlyStatusInspection) {
-      return {
-        label: "继续",
-        disabled: false,
-        disabledReason: "",
-        statusLine: status || "等待输入",
-        perform: () => {
-          void continueFromStatusInspection();
-        },
-      };
-    }
-    const disabled = confirmationBlocked || (!canConfirm && !canPreviewPrototypeDemo && !canConfirmFeedback);
-    const disabledReason = actionBlocked && agentActionEnvelope
-      ? agentActionEnvelope.userFacingMessage
-      : handoffPreflightBlocked && displayedAgentToolHandoff
-        ? agentToolPreflightLabel(displayedAgentToolHandoff) || "先处理阻断。"
-        : "当前不能发送。";
-    return {
-      label: agentReviewPrimaryLabel(agentActionEnvelope),
-      disabled,
-      disabledReason,
-      statusLine: disabled ? disabledReason : status || "等待输入",
-      perform: () => {
-        void confirmPlan();
-      },
-    };
-  })();
-  const primaryDisabled = primaryOperation.disabled;
-  const primaryLabel = primaryOperation.label;
-  const primaryDisabledReason = primaryOperation.disabledReason;
-  const statusLineText = primaryOperation.statusLine;
-  const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan ? "等待输入：" : "暂不能继续：";
-  const primaryAriaLabel = primaryDisabled
-    ? `${primaryLabel}：${primaryDisabledReason}`
-    : primaryLabel;
   const canContinuePendingNewVideoDraft = Boolean(
     newVideoDraftPendingForAgent
       && onContinueNewVideoDraftFromAgent
       && !hasComposerInput
       && !attachments.length,
   );
-  const agentNextActionAvailable = !hasComposerInput && primaryLabel !== "发送" && !readOnlyStatusInspection;
   const statusReadyNewVideoDraftConfirmation = Boolean(
     !latestNewVideoDraftCommitted
       && !projectStoryAlreadyCommittedForDraftConfirmation
@@ -8904,6 +8930,7 @@ export function MinimalAgentPanel({
       localProjectReady: localProjectReadyForTools,
       referenceMissingCount: referenceMissingCountForAgent,
       videoSubmitted: videoSubmittedForAgent,
+      videoNeedsQuery: videoQueryMode,
     }),
     [
       localProjectReadyForTools,
@@ -8913,6 +8940,7 @@ export function MinimalAgentPanel({
       newVideoDraftShotCountForAgent,
       referenceMissingCountForAgent,
       runtimeState.storyFlow.shots.length,
+      videoQueryMode,
       videoSubmittedForAgent,
     ],
   );
@@ -8921,7 +8949,15 @@ export function MinimalAgentPanel({
       const timelineMessages = visibleAgentTimelineEntries.map(minimalAgentMessageFromTimelineEntry);
       return visibleAgentTimelineEntries
         .map((entry, index) => {
-          const confirmation = agentCurrentTaskConfirmationFromTimelineEntry(entry);
+          const confirmation = agentCurrentTaskConfirmationFromTimelineEntry(
+            entry,
+            minimalAgentConfirmationExecutionModeForCapabilities(timelineMessages[index]!, {
+              referenceLiveAdapterReady,
+              videoLiveAdapterReady,
+              queryVideoLiveAdapterReady,
+              exportLiveAdapterReady,
+            }),
+          );
           if (!confirmation) return undefined;
           const message = timelineMessages[index];
           if (message && minimalAgentConfirmationMessageIsStaleAfterLaterResult(timelineMessages, message)) return undefined;
@@ -8929,11 +8965,22 @@ export function MinimalAgentPanel({
         })
         .filter((confirmation): confirmation is AgentCurrentTaskConfirmation => Boolean(confirmation));
     },
-    [visibleAgentTimelineEntries],
+    [
+      exportLiveAdapterReady,
+      queryVideoLiveAdapterReady,
+      referenceLiveAdapterReady,
+      videoLiveAdapterReady,
+      visibleAgentTimelineEntries,
+    ],
   );
   const agentCurrentTaskCompletedSteps = useMemo(
-    () => agentCurrentTaskCompletedStepsFromTimelineEntries(visibleAgentTimelineEntries),
-    [visibleAgentTimelineEntries],
+    () => agentCurrentTaskCompletedStepsFromTimelineEntries(visibleAgentTimelineEntries, agentGenerationProjectIdentity),
+    [
+      agentGenerationProjectIdentity.projectFactHash,
+      agentGenerationProjectIdentity.projectId,
+      agentGenerationProjectIdentity.projectRoot,
+      visibleAgentTimelineEntries,
+    ],
   );
   const agentCurrentTaskProjection = useMemo(
     () => buildAgentCurrentTaskProjection({
@@ -8993,19 +9040,231 @@ export function MinimalAgentPanel({
       visibleNewVideoDraftConfirmation,
     ],
   );
-  const primaryOperationConfirmationLabel = !hasComposerInput && primaryLabel !== "发送" && !readOnlyStatusInspection && (
-    activeNewVideoDraftConfirmation
-      || visibleNewVideoDraftConfirmation
-      || projectRequiredForWorkflow
-      || Boolean(footerDirectActionBoundaryNotice)
-      || Boolean(workflowCanConfirm(workflow))
-      || Boolean(agentActionEnvelope)
+  useEffect(() => {
+    onCurrentTaskProjectionChange?.(agentCurrentTaskProjection);
+  }, [agentCurrentTaskProjection, onCurrentTaskProjectionChange]);
+  useEffect(() => () => {
+    onCurrentTaskProjectionChange?.(undefined);
+  }, [onCurrentTaskProjectionChange]);
+  function footerDirectActionStepFor(action?: typeof availableFooterDirectAction): AgentCurrentTaskStep | undefined {
+    if (!action) return undefined;
+    if (
+      action === referenceReviewFooterAction
+      || action === videoBlockedRecoveryFooterAction
+      || action === referenceFooterAction
+      || action === endFrameFooterAction
+    ) {
+      return "prepare_references";
+    }
+    if (action === videoSubmitFooterAction || action === videoResumeFooterAction) return "submit_video";
+    if (action === exportFooterAction) return "export";
+    return undefined;
+  }
+  const footerDirectActionStep = footerDirectActionStepFor(footerDirectAction);
+  const projectedFooterDirectAction = footerDirectAction && (
+    footerDirectActionStep === agentCurrentTaskProjection.step
+    || (!footerDirectActionStep && agentCurrentTaskProjection.step === "idle")
   )
-    ? primaryLabel
+    ? footerDirectAction
+    : undefined;
+  const preparedAgentConfirmationCanDispatch = canConfirm || canPreviewPrototypeDemo || canConfirmFeedback;
+  const preparedAgentConfirmationOwnsPrimaryAction = Boolean(
+    agentActionEnvelope?.requiresUserConfirmation
+      && preparedAgentConfirmationCanDispatch,
+  );
+  const projectedBlockerReason = agentCurrentTaskProjection.blockers[0] || "";
+  const primaryOperation = (() => {
+    if (
+      agentCurrentTaskProjection.source === "pipeline_job"
+      && !agentCurrentTaskProjection.requiresConfirmation
+    ) {
+      const disabledReason = projectedBlockerReason || `${agentCurrentTaskProjection.label}正在执行。`;
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled: true,
+        disabledReason,
+        statusLine: disabledReason,
+        perform: () => undefined,
+      };
+    }
+    if (agentCurrentTaskProjection.step === "draft_story" && newVideoDraftPlanningForAgent) {
+      const disabledReason = "AI 正在拆镜头，等草案出来后再继续。";
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled: true,
+        disabledReason,
+        statusLine: disabledReason,
+        perform: () => undefined,
+      };
+    }
+    if (agentCurrentTaskProjection.step === "choose_save_location") {
+      const disabled = Boolean(!canResolveProjectFromFooter || hasComposerInput || attachments.length || isPreparingPlan || projectedBlockerReason);
+      const disabledReason = isPreparingPlan
+        ? "正在整理，稍等一下。"
+        : hasComposerInput || attachments.length
+          ? "先发送或清空当前输入，再选择保存位置。"
+          : projectedBlockerReason
+            ? projectedBlockerReason
+            : !canResolveProjectFromFooter
+              ? "当前环境不能直接选文件夹，请从项目入口选择保存位置。"
+              : "";
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : `下一步：${agentCurrentTaskProjection.label}`,
+        perform: () => {
+          void startLocalProjectSetupFromMessage();
+        },
+      };
+    }
+    if (
+      agentCurrentTaskProjection.step === "confirm_story"
+      && agentCurrentTaskProjection.confirmationKind === "project_edit"
+    ) {
+      const canDispatchProjectEdit = Boolean(workflow ? canConfirm : activeProjectEditConfirmationMessage);
+      const disabled = Boolean(hasComposerInput || attachments.length || isPreparingPlan || projectedBlockerReason || !canDispatchProjectEdit);
+      const disabledReason = isPreparingPlan
+        ? "正在整理，稍等一下。"
+        : hasComposerInput || attachments.length
+          ? "先发送或清空当前输入，再确认这条修改。"
+          : projectedBlockerReason
+            ? projectedBlockerReason
+            : !canDispatchProjectEdit
+              ? "当前不能确认这条修改。"
+              : "";
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : `等待确认：${agentCurrentTaskProjection.label}`,
+        perform: () => {
+          if (workflow) {
+            void confirmPlan();
+          } else if (activeProjectEditConfirmationMessage) {
+            void confirmRestoredProjectEditFromMessage(activeProjectEditConfirmationMessage);
+          }
+        },
+      };
+    }
+    if (agentCurrentTaskProjection.step === "confirm_story") {
+      const confirmDraftFromAgent = onConfirmNewVideoDraftFromAgent || (() => onStartNewVideoDraftFromAgent?.(NEW_VIDEO_DRAFT_CONFIRM_LABEL));
+      const disabled = Boolean((!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent) || hasComposerInput || attachments.length || isPreparingPlan || projectedBlockerReason);
+      const disabledReason = isPreparingPlan
+        ? "正在整理，稍等一下。"
+        : hasComposerInput || attachments.length
+          ? "先发送或清空当前输入，再确认草案。"
+          : projectedBlockerReason
+            ? projectedBlockerReason
+            : (!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent)
+              ? "当前不能从消息里确认草案。"
+              : "";
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : `下一步：${agentCurrentTaskProjection.label}`,
+        perform: () => {
+          void confirmDraftFromAgent();
+        },
+      };
+    }
+    if (projectedFooterDirectAction && !preparedAgentConfirmationOwnsPrimaryAction) {
+      const disabled = Boolean(projectedFooterDirectAction.disabled || projectedBlockerReason);
+      const disabledReason = projectedBlockerReason || projectedFooterDirectAction.disabledReason;
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled,
+        disabledReason,
+        statusLine: disabled
+          ? disabledReason
+          : footerDirectActionBoundaryFor(projectedFooterDirectAction) || `下一步：${agentCurrentTaskProjection.label}`,
+        perform: projectedFooterDirectAction.perform,
+      };
+    }
+    if (agentCurrentTaskProjection.requiresConfirmation) {
+      const disabled = Boolean(hasComposerInput || attachments.length || isPreparingPlan || projectedBlockerReason || !preparedAgentConfirmationCanDispatch);
+      const disabledReason = isPreparingPlan
+        ? "正在整理，稍等一下。"
+        : hasComposerInput || attachments.length
+          ? "先发送或清空当前输入，再确认当前消息。"
+          : projectedBlockerReason
+            ? projectedBlockerReason
+            : !preparedAgentConfirmationCanDispatch
+              ? "当前不能确认这条消息。"
+              : "";
+      return {
+        label: agentCurrentTaskProjection.label,
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : `等待确认：${agentCurrentTaskProjection.label}`,
+        perform: () => {
+          void confirmPlan();
+        },
+      };
+    }
+    if (composerPrimaryIsFresh) {
+      const label = isPreparingPlan ? "整理中" : "发送";
+      const disabledReason = !hasComposerInput
+        ? "先写一句，或拖入文件。"
+        : `${status || "正在整理"}，稍等一下。`;
+      return {
+        label,
+        disabled: !hasComposerInput || isPreparingPlan,
+        disabledReason,
+        statusLine: !hasComposerInput || isPreparingPlan ? disabledReason : status || "等待输入",
+        perform: () => {
+          void prepareChange();
+        },
+      };
+    }
+    if (readOnlyStatusInspection) {
+      return {
+        label: "继续",
+        disabled: false,
+        disabledReason: "",
+        statusLine: status || "等待输入",
+        perform: () => {
+          void continueFromStatusInspection();
+        },
+      };
+    }
+    const disabled = confirmationBlocked || (!canConfirm && !canPreviewPrototypeDemo && !canConfirmFeedback);
+    const disabledReason = actionBlocked && agentActionEnvelope
+      ? agentActionEnvelope.userFacingMessage
+      : handoffPreflightBlocked && displayedAgentToolHandoff
+        ? agentToolPreflightLabel(displayedAgentToolHandoff) || "先处理阻断。"
+        : "当前不能发送。";
+    return {
+      label: agentReviewPrimaryLabel(agentActionEnvelope),
+      disabled,
+      disabledReason,
+      statusLine: disabled ? disabledReason : status || "等待输入",
+      perform: () => {
+        void confirmPlan();
+      },
+    };
+  })();
+  const primaryDisabled = primaryOperation.disabled;
+  const primaryLabel = primaryOperation.label;
+  const primaryDisabledReason = primaryOperation.disabledReason;
+  const statusLineText = primaryOperation.statusLine;
+  const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan ? "等待输入：" : "暂不能继续：";
+  const primaryAriaLabel = primaryDisabled
+    ? `${primaryLabel}：${primaryDisabledReason}`
+    : primaryLabel;
+  const agentNextActionAvailable = Boolean(
+    !hasComposerInput
+      && agentCurrentTaskProjection.requiresConfirmation
+      && primaryLabel !== "发送"
+      && !readOnlyStatusInspection,
+  );
+  const primaryOperationConfirmationLabel = agentNextActionAvailable
+    ? agentCurrentTaskProjection.label
     : "";
   const emptyComposerConfirmationLabel = footerNewVideoDraftConfirmationLabel
-    || currentTimelineConfirmationLabel
-    || primaryOperationConfirmationLabel;
+    || primaryOperationConfirmationLabel
+    || currentTimelineConfirmationLabel;
   const emptyComposerPendingConfirmationLabel = !hasVisibleComposerInput && !canContinuePendingNewVideoDraft
     ? emptyComposerConfirmationLabel
     : "";
@@ -9103,8 +9362,6 @@ export function MinimalAgentPanel({
       !localProjectReadyForTools
       || projectRequiredForWorkflow
       || projectBlockedWithoutFooterResolver
-      || projectStatusView?.stage === "需要本地项目"
-      || projectStatusView?.stage === "需要保存位置"
     ) && !typedIntentCanStartNewVideoWithoutProject && intentNeedsLocalProjectBeforeTooling(currentTypedIntent);
     if (composerNeedsLocalProject) {
       liveComposerValueRef.current = "";
@@ -9113,7 +9370,7 @@ export function MinimalAgentPanel({
       return;
     }
     const continueDirectAction = currentTypedIntent && isContinueIntent(currentTypedIntent) && !attachments.length && !composerNeedsLocalProject
-      ? availableFooterDirectAction
+      ? projectedFooterDirectAction
       : undefined;
     if (continueDirectAction) {
       setText("");
@@ -9181,8 +9438,8 @@ export function MinimalAgentPanel({
     primaryOperation.perform();
   }
   const activeFooterConfirmationLabel = footerNewVideoDraftConfirmationLabel
-    || currentTimelineConfirmationLabel
-    || primaryOperationConfirmationLabel;
+    || primaryOperationConfirmationLabel
+    || currentTimelineConfirmationLabel;
   const visibleConfirmationActionAvailable = agentNextActionAvailable
     || visibleNewVideoDraftConfirmation
     || Boolean(visibleTimelineConfirmationMessage && !hasComposerInput && !isPreparingPlan);
@@ -9229,10 +9486,10 @@ export function MinimalAgentPanel({
     ? "确认生成参考"
     : composerVideoIntentShouldConfirmReferencesFirst
     ? "先补参考"
-    : exportReadyForConfirmation
+    : agentCurrentTaskProjection.step === "export" && agentCurrentTaskProjection.requiresConfirmation
     ? "确认导出"
-    : /生成参考|补齐参考|参考生成/.test(activeFooterConfirmationLabel)
-    ? activeFooterConfirmationLabel
+    : agentCurrentTaskProjection.step === "prepare_references" && agentCurrentTaskProjection.requiresConfirmation
+    ? agentCurrentTaskProjection.label
     : agentBoundarySummaryLabel;
   const displayedAgentBoundaryDetail = composerToolIntentShouldYieldToProjectEditConfirmation
     ? `当前还有「${activeProjectEditConfirmationLabel}」待确认；发送后会先保留这条修改确认，不会生成参考、提交视频或导出。`
@@ -9627,8 +9884,22 @@ export function MinimalAgentPanel({
       { label: "正在看", value: "待确认草案" },
       { label: "镜头", value: `${pendingDraftShotCount} 个` },
       { label: "下一步", value: pendingDraftSelectionNextLabel },
-    ];
+  ];
   const shouldUseExplicitTimelineSelectionContext = Boolean(explicitTimelineSelectionContext && !composerPermissionContract && !pendingDraftShotCount && !storyLevelReferenceContextActive && !skillSaveContextActive);
+  const projectedVideoQueryContextActive = Boolean(
+    !hasVisibleComposerInput
+      && !attachments.length
+      && videoQueryMode
+      && agentCurrentTaskProjection.step === "submit_video"
+      && agentCurrentTaskProjection.label === "查询视频结果",
+  );
+  const projectedVideoQuerySelectionChips = projectedVideoQueryContextActive
+    ? [
+        { label: "任务", value: agentCurrentTaskProjection.label },
+        { label: "提交", value: "不会重复提交" },
+        { label: "状态", value: agentCurrentTaskProjection.requiresConfirmation ? "等待确认" : "查询中" },
+      ]
+    : [];
   const visibleCompactSelectionHint = pendingDraftShotCount
     ? pendingDraftSelectionHint
     : composerPermissionContract
@@ -9645,6 +9916,10 @@ export function MinimalAgentPanel({
       ? `重排为 ${storyShotCountRevisionFocusCount} 个镜头，确认前不生成参考或提交视频。`
     : localProjectSetupConfirmationContextActive
       ? "故事已确认；先选择保存位置，之后再补参考或视频。"
+    : projectedVideoQueryContextActive
+      ? agentCurrentTaskProjection.requiresConfirmation
+        ? `等待确认：${agentCurrentTaskProjection.label}`
+        : `${agentCurrentTaskProjection.label}正在执行。`
     : exportResultIsPrimary
       ? displayedCompactSelectionHint
 	    : editingReferenceGenerationConfirmationActive
@@ -9723,6 +9998,8 @@ export function MinimalAgentPanel({
         ]
     : localProjectSetupConfirmationChips.length
       ? localProjectSetupConfirmationChips
+    : projectedVideoQuerySelectionChips.length
+      ? projectedVideoQuerySelectionChips
     : editingReferenceGenerationConfirmationChips.length
       ? editingReferenceGenerationConfirmationChips
     : composerVideoReferencePreflightChips.length
@@ -9828,12 +10105,12 @@ export function MinimalAgentPanel({
   ));
   const fullAgentThreadMessages: MinimalAgentMessage[] = minimalAgentMessagesFromTimelineEntries(visibleAgentTimelineEntries);
   function currentConfirmationExecutionMode(message: MinimalAgentMessage): MinimalAgentConfirmationExecutionMode {
-    if (!minimalAgentMessageRequestsActionConfirmation(message)) return undefined;
-    if (message.actionKind === "prepare_reference_generation") return referenceLiveAdapterReady ? "live" : "dry_run";
-    if (message.actionKind === "prepare_video_submit") return videoLiveAdapterReady ? "live" : "dry_run";
-    if (message.actionKind === "query_video_result") return queryVideoLiveAdapterReady ? "live" : "dry_run";
-    if (message.actionKind === "prepare_export") return exportLiveAdapterReady ? "live" : "dry_run";
-    return undefined;
+    return minimalAgentConfirmationExecutionModeForCapabilities(message, {
+      referenceLiveAdapterReady,
+      videoLiveAdapterReady,
+      queryVideoLiveAdapterReady,
+      exportLiveAdapterReady,
+    });
   }
   function visiblePendingDraftShotFacts(message: MinimalAgentMessage, facts: Array<{ label: string; value: string }>, includeMissingShotFact = true) {
     if (!pendingDraftShotCount || !isNewVideoDraftConfirmationLabel(minimalAgentConfirmationAction(message, NEW_VIDEO_DRAFT_CONFIRM_LABEL).label)) {
@@ -10241,10 +10518,7 @@ export function MinimalAgentPanel({
     }
     fullAgentThreadMessages.push(restoredStagedPlanConfirmationMessage);
   }
-  const threadShowsReferenceReady = fullAgentThreadMessages.some((message) =>
-    message.role !== "user" && /参考可用/.test(minimalAgentMessageSearchText(message))
-  );
-  const threadReferencesUsableForAgent = referenceExecutionSatisfiedForAgent || threadShowsReferenceReady;
+  const threadReferencesUsableForAgent = referenceExecutionSatisfiedForAgent;
   const stateAwareAgentThreadMessages = fullAgentThreadMessages.filter((message) =>
     !minimalAgentReferenceReviewMessageIsStale(message, threadReferencesUsableForAgent)
     && !(projectStoryAlreadyCommittedForDraftConfirmation && minimalAgentMessageIsNewVideoDraftConfirmation(message))
@@ -10318,13 +10592,6 @@ export function MinimalAgentPanel({
   const showStandaloneAgentActionLog = standaloneAgentActionLogAllowed && !visibleAgentActionLogMirroredInThread;
   const totalHiddenAgentThreadMessageCount = hiddenAgentThreadMessageCount;
   const latestAgentThreadMessageId = agentThreadMessages.at(-1)?.id || "";
-  useEffect(() => {
-    const thread = agentThreadRef.current;
-    if (!thread || !latestAgentThreadMessageId) return;
-    window.requestAnimationFrame(() => {
-      thread.scrollTop = thread.scrollHeight;
-    });
-  }, [latestAgentThreadMessageId, agentThreadMessages.length]);
   const activeConfirmationMessage = agentCurrentTaskConfirmationMessage(
     agentCurrentTaskProjection,
     agentThreadMessages,
@@ -10333,13 +10600,6 @@ export function MinimalAgentPanel({
   const activeConfirmationActionLabel = activeConfirmationMessage
     ? agentCurrentTaskProjection.label
     : "";
-  const visiblePendingConfirmationLabelForParent = hasVisibleComposerInput
-    ? composerEditingConfirmationLabel || (composerEditingPendingConfirmation ? agentCurrentTaskProjection.label : "")
-    : activeConfirmationActionLabel;
-  useEffect(() => {
-    onVisiblePendingConfirmationLabelChange?.(visiblePendingConfirmationLabelForParent);
-    return () => onVisiblePendingConfirmationLabelChange?.("");
-  }, [onVisiblePendingConfirmationLabelChange, visiblePendingConfirmationLabelForParent]);
   const visibleConfirmationLocksWorkMode = Boolean(activeConfirmationMessageId && displayedAgentBoundaryConfirmationLabel && !hasVisibleComposerInput);
   const lockedWorkModeDetail = displayedAgentBoundaryConfirmationLabel
     ? `确认卡已锁定「${displayedAgentBoundaryConfirmationLabel}」的范围和后果；要改边界，点确认卡里的「再改一下」或直接输入改法。`
@@ -10382,6 +10642,19 @@ export function MinimalAgentPanel({
         : message
     ))
     : agentThreadMessagesForProjectedTask;
+  const orderedDisplayedAgentThreadMessages = activeConfirmationMessageId
+    ? [
+      ...displayedAgentThreadMessages.filter((message) => message.id === activeConfirmationMessageId),
+      ...displayedAgentThreadMessages.filter((message) => message.id !== activeConfirmationMessageId),
+    ]
+    : displayedAgentThreadMessages;
+  useEffect(() => {
+    const thread = agentThreadRef.current;
+    if (!thread || !latestAgentThreadMessageId) return;
+    window.requestAnimationFrame(() => {
+      thread.scrollTop = activeConfirmationMessageId ? 0 : thread.scrollHeight;
+    });
+  }, [activeConfirmationMessageId, latestAgentThreadMessageId, orderedDisplayedAgentThreadMessages.length]);
   const showVisibleSkillStack = showSkillStack
     && !visibleConfirmationLocksWorkMode
     && !composerEditingPendingConfirmation
@@ -10462,14 +10735,20 @@ export function MinimalAgentPanel({
     setStatus("去参考页检查画面。");
   }
   function pointToMainReferenceAction() {
-    if (agentNextActionAvailable && /参考|生成/.test(primaryLabel)) {
+    if (agentNextActionAvailable && agentCurrentTaskProjection.step === "prepare_references") {
       handleNext();
       return;
     }
     setStatus(referenceGenerationBlockedByProject ? "先选择保存位置。" : `在消息中确认「${primaryLabel}」，我再生成参考。`);
   }
   function pointToMainVideoAction() {
-    if (agentNextActionAvailable && /视频|发送|查询|补参考/.test(primaryLabel)) {
+    if (
+      agentNextActionAvailable
+      && (
+        agentCurrentTaskProjection.step === "prepare_references"
+        || agentCurrentTaskProjection.step === "submit_video"
+      )
+    ) {
       handleNext();
       return;
     }
@@ -10592,6 +10871,25 @@ export function MinimalAgentPanel({
           </section>
         </div>
       </div>
+      <section
+        className={`signal-current-task ${agentCurrentTaskTone(agentCurrentTaskProjection)}`}
+        aria-label="AI 导演当前任务"
+        aria-live="polite"
+        data-current-task-step={agentCurrentTaskProjection.step}
+        data-current-task-source={agentCurrentTaskProjection.source}
+      >
+        <div className="signal-current-task-icon" aria-hidden="true">
+          {agentCurrentTaskProjection.blockers.length
+            ? <AlertTriangle size={18} />
+            : <AgentCurrentTaskIcon step={agentCurrentTaskProjection.step} />}
+        </div>
+        <div className="signal-current-task-copy">
+          <span>当前任务</span>
+          <strong>{agentCurrentTaskProjection.label}</strong>
+          <small>{agentCurrentTaskEffectLabel(agentCurrentTaskProjection)}</small>
+        </div>
+        <em>{agentCurrentTaskStatusLabel(agentCurrentTaskProjection)}</em>
+      </section>
       {showVisibleSkillStack && (
         <section className="minimal-agent-skill-stack" aria-label="当前导演技能">
           <details className="minimal-agent-skill-disclosure" open={skillSaveContextActive || undefined}>
@@ -10746,7 +11044,7 @@ export function MinimalAgentPanel({
           </section>
         )}
       </details>
-      {displayedAgentThreadMessages.length > 0 && (
+      {orderedDisplayedAgentThreadMessages.length > 0 && (
         <section ref={agentThreadRef} className="minimal-agent-thread" aria-label="和 AI 导演的对话" aria-live="polite">
           <span>和 AI 导演的对话</span>
           {totalHiddenAgentThreadMessageCount > 0 && (
@@ -10754,7 +11052,7 @@ export function MinimalAgentPanel({
               前面的记录已保存，这里只显示最近一次推进。
             </small>
           )}
-          {displayedAgentThreadMessages.map((timelineMessage) => {
+          {orderedDisplayedAgentThreadMessages.map((timelineMessage) => {
             const confirmationExecutionMode = currentConfirmationExecutionMode(timelineMessage);
             const message = minimalAgentConfirmationMessageForExecutionMode(timelineMessage, confirmationExecutionMode);
             const messageBody = minimalAgentMessageBody(message);
@@ -10762,8 +11060,13 @@ export function MinimalAgentPanel({
             const messageConfirmationFacts = visibleMessageConfirmationFacts(message);
             const showMessageConfirmationFacts = messageConfirmationFacts.length > 0
               && !minimalAgentMessageInlineConfirmationFactsAreRedundant(message);
+            const messageIsCurrentConfirmation = message.id === activeConfirmationMessageId;
             return (
-            <article key={message.id} className={`minimal-agent-message ${message.role}`}>
+            <article
+              key={message.id}
+              className={`minimal-agent-message ${message.role} ${messageIsCurrentConfirmation ? "is-current-confirmation" : ""}`}
+              aria-current={messageIsCurrentConfirmation ? "step" : undefined}
+            >
               <div className="minimal-agent-message-head">
                 <div className="minimal-agent-message-title">
                   <small className="minimal-agent-message-stage">{minimalAgentMessageStageLabel(message)}</small>
@@ -10909,14 +11212,26 @@ export function MinimalAgentPanel({
               {message.id === latestCompletedToolActionMessageId && (() => {
                 const resultView = completedToolActionView(message);
                 const nextIntent = agentMessageNextIntent(message);
-                const resultNextAction = availableFooterDirectAction && !availableFooterDirectAction.disabled
-                  ? availableFooterDirectAction
+                const resultNextAction = projectedFooterDirectAction && !projectedFooterDirectAction.disabled
+                  ? projectedFooterDirectAction
                   : undefined;
+                const resultNextRequiresConfirmation = Boolean(
+                  resultNextAction
+                    && agentCurrentTaskProjection.requiresConfirmation,
+                );
                 const resultNextLabel = resultNextAction?.label || "按建议继续";
                 const resultNextTitle = resultNextAction
                   ? footerDirectActionBoundaryFor(resultNextAction) || `执行下一步：${resultNextAction.label}`
                   : `把「${nextIntent}」发给 AI 导演，并保留当前选中内容。`;
                 const continueFromCompletedToolAction = () => {
+                  if (resultNextAction && resultNextRequiresConfirmation) {
+                    setStatus(footerDirectActionBoundaryFor(resultNextAction) || `等待确认：${resultNextAction.label}`);
+                    void prepareChange(
+                      resultNextAction.label,
+                      currentComposerSelectionOverride(resultNextAction.label),
+                    );
+                    return;
+                  }
                   if (resultNextAction) {
                     setStatus(footerDirectActionBoundaryFor(resultNextAction) || `下一步：${resultNextAction.label}`);
                     resultNextAction.perform();
@@ -11140,9 +11455,19 @@ export function MinimalAgentPanel({
                 };
                 return (
                   <div className="minimal-agent-message-actions">
-                    {confirmationBoundary && (
+                    <small className="minimal-agent-confirmation-effect">
+                      <span>确认后会</span>
+                      <strong>{agentCurrentTaskEffectLabel(agentCurrentTaskProjection)}</strong>
+                    </small>
+                    {confirmationBoundary ? (
                       <small className="minimal-agent-confirmation-boundary">
-                        {confirmationBoundary}
+                        <span>不会</span>
+                        <strong>{confirmationBoundary}</strong>
+                      </small>
+                    ) : (
+                      <small className="minimal-agent-confirmation-boundary">
+                        <span>不会</span>
+                        <strong>{agentCurrentTaskBoundaryLabel(agentCurrentTaskProjection)}</strong>
                       </small>
                     )}
                     {confirmationPreflightNotice && (

@@ -62,6 +62,7 @@ export type ProjectAgentStagedPlanRestoreStatus =
   | "cleared"
   | "expired"
   | "project_mismatch"
+  | "root_mismatch"
   | "fact_hash_mismatch"
   | "action_context_mismatch"
   | "invalid"
@@ -165,21 +166,21 @@ export async function saveProjectAgentStagedPlanDraft(
       runtimeWriteError = error instanceof Error ? error.message : String(error);
     }
   }
+  if (runtimeWriteOk) {
+    return {
+      ok: true,
+      status: "written",
+      targetId: target.storageKey || draft.projectId,
+      path: runtimeWritePath || projectAgentStagedPlanDraftPath,
+      content: serialized,
+      errors: [],
+    };
+  }
   const writeResult = await writeProjectVibeSidecarText(
     target,
     projectAgentStagedPlanDraftPath,
     serialized,
   );
-  if (runtimeWriteOk && !writeResult.ok) {
-    return {
-      ...writeResult,
-      ok: true,
-      status: "written",
-      path: runtimeWritePath || writeResult.path,
-      content: serialized,
-      errors: [],
-    };
-  }
   if (!writeResult.ok && runtimeWriteError) {
     return {
       ...writeResult,
@@ -270,6 +271,47 @@ export async function openProjectAgentStagedPlanDraft(
   });
 }
 
+export function migrateProjectAgentStagedPlanDraftToProjectRoot(
+  draft: ProjectAgentStagedPlanDraft,
+  input: {
+    project: ProjectVibeDocument;
+    sourceProjectRoot?: string;
+    targetProjectRoot: string;
+    projectPath?: string;
+    now?: string | Date;
+  },
+): ProjectAgentStagedPlanRestoreResult {
+  const sourceRestore = restoreProjectAgentStagedPlanDraft(draft, {
+    project: input.project,
+    projectRoot: input.sourceProjectRoot,
+    now: input.now,
+  });
+  if (!sourceRestore.ok || !sourceRestore.draft) return sourceRestore;
+  const targetRoot = normalizeProjectRoot(input.targetProjectRoot);
+  if (!targetRoot) {
+    return { ok: false, status: "root_mismatch", path: projectAgentStagedPlanDraftPath, draft, errors: ["A local project root is required for staged-plan migration."] };
+  }
+  const migratedDraft: ProjectAgentStagedPlanDraft = {
+    ...sourceRestore.draft,
+    projectRoot: targetRoot,
+    projectPath: input.projectPath || sourceRestore.draft.projectPath,
+    action: sourceRestore.draft.action
+      ? {
+          ...sourceRestore.draft.action,
+          sourceContext: {
+            ...sourceRestore.draft.action.sourceContext,
+            projectRoot: targetRoot,
+          },
+        }
+      : undefined,
+  };
+  return restoreProjectAgentStagedPlanDraft(migratedDraft, {
+    project: input.project,
+    projectRoot: targetRoot,
+    now: input.now,
+  });
+}
+
 function openProjectAgentStagedPlanDraftText(
   content: string,
   input: {
@@ -338,15 +380,15 @@ export function restoreProjectAgentStagedPlanDraft(
   }
   const expectedProjectRoot = normalizeProjectRoot(input.projectRoot);
   const draftProjectRoot = normalizeProjectRoot(draft.projectRoot);
-  if (expectedProjectRoot && draftProjectRoot && expectedProjectRoot !== draftProjectRoot) {
-    return { ok: false, status: "project_mismatch", path, draft, errors: ["Agent staged plan belongs to another project root."] };
+  if (expectedProjectRoot !== draftProjectRoot) {
+    return { ok: false, status: "root_mismatch", path, draft, errors: ["Agent staged plan belongs to another project root."] };
   }
   const sourceFactHash = hashProjectVibeFacts(input.project);
   if (draft.sourceFactHash !== sourceFactHash) {
     return { ok: false, status: "fact_hash_mismatch", path, draft, errors: ["Project.vibe changed after the Agent staged this plan."] };
   }
   const actionProjectRoot = normalizeProjectRoot(draft.action?.sourceContext.projectRoot);
-  if (expectedProjectRoot && actionProjectRoot && expectedProjectRoot !== actionProjectRoot) {
+  if (expectedProjectRoot !== actionProjectRoot) {
     return { ok: false, status: "action_context_mismatch", path, draft, errors: ["Agent action context belongs to another project root."] };
   }
   return { ok: true, status: "restored", path, draft, errors: [] };
@@ -401,11 +443,12 @@ function textValue(value: unknown): string | undefined {
 }
 
 function normalizeProjectRoot(value?: string) {
-  return value
+  const normalized = value
     ?.trim()
     .replace(/\\/g, "/")
     .replace(/\/+$/g, "")
     .replace(/^\/private\/tmp(?=\/|$)/, "/tmp");
+  return isBrowserDraftProjectRoot(normalized) ? undefined : normalized;
 }
 
 function isBrowserDraftProjectRoot(projectRoot?: string) {

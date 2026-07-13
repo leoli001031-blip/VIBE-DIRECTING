@@ -7,6 +7,7 @@ import {
   type AgentVideoExecutionMode,
   type AgentVideoGenerationJob,
   type AgentVideoGenerationJobLedger,
+  type AgentVideoGenerationJobOperation,
   type AgentVideoGenerationJobStatus,
   type AgentVideoPipelineAction,
   type AgentVideoPipelinePlan,
@@ -17,7 +18,7 @@ import {
 export const AGENT_VIDEO_EXECUTION_RECEIPT_SCHEMA_VERSION = "agent_video_execution_receipt/0.1.0";
 
 export type AgentVideoExecutionAction = Extract<AgentVideoPipelineAction, "prepare_references" | "submit_video" | "export">;
-export type AgentVideoExecutionOperation = "execute" | "query";
+export type AgentVideoExecutionOperation = AgentVideoGenerationJobOperation;
 export type AgentVideoExecutionReceiptStatus =
   | "validated"
   | "running"
@@ -61,6 +62,93 @@ export interface AgentVideoExecutionReceipt {
   createdAt: string;
   updatedAt: string;
   errors: string[];
+}
+
+export type AgentVideoExecutionReceiptRestoreStatus =
+  | "restored"
+  | "project_mismatch"
+  | "root_mismatch"
+  | "fact_hash_mismatch"
+  | "invalid";
+
+export interface AgentVideoExecutionReceiptRestoreResult {
+  ok: boolean;
+  status: AgentVideoExecutionReceiptRestoreStatus;
+  receipt?: AgentVideoExecutionReceipt;
+  errors: string[];
+}
+
+const executionReceiptActions = new Set<AgentVideoExecutionAction>(["prepare_references", "submit_video", "export"]);
+const executionReceiptOperations = new Set<AgentVideoExecutionOperation>(["execute", "query"]);
+const executionReceiptStatuses = new Set<AgentVideoExecutionReceiptStatus>([
+  "validated",
+  "running",
+  "succeeded",
+  "blocked",
+  "failed",
+  "cancelled",
+  "timed_out",
+]);
+
+export function restoreAgentVideoExecutionReceipt(
+  value: unknown,
+  identity?: { projectId: string; projectRoot?: string; projectFactHash: string },
+): AgentVideoExecutionReceiptRestoreResult {
+  const candidate = record(value);
+  if (!candidate) return { ok: false, status: "invalid", errors: ["Execution receipt must be an object."] };
+  const errors: string[] = [];
+  if (candidate.schemaVersion !== AGENT_VIDEO_EXECUTION_RECEIPT_SCHEMA_VERSION) errors.push("Unsupported execution receipt schema.");
+  for (const key of ["receiptId", "confirmationReceiptId", "actionId", "projectId", "projectRoot", "projectFactHash", "createdAt", "updatedAt"] as const) {
+    if (!text(candidate[key])) errors.push(`Execution receipt is missing ${key}.`);
+  }
+  if (!executionReceiptActions.has(candidate.action as AgentVideoExecutionAction)) errors.push("Execution receipt action is invalid.");
+  if (!executionReceiptOperations.has(candidate.operation as AgentVideoExecutionOperation)) errors.push("Execution receipt operation is invalid.");
+  if (candidate.executionMode !== "dry_run" && candidate.executionMode !== "live") errors.push("Execution receipt mode is invalid.");
+  if (!executionReceiptStatuses.has(candidate.status as AgentVideoExecutionReceiptStatus)) errors.push("Execution receipt status is invalid.");
+  if (typeof candidate.providerCalled !== "boolean") errors.push("Execution receipt providerCalled must be a boolean.");
+  if (typeof candidate.liveSubmitAllowed !== "boolean") errors.push("Execution receipt liveSubmitAllowed must be a boolean.");
+  if (!Array.isArray(candidate.outputAssets) || candidate.outputAssets.some((item) => typeof item !== "string")) {
+    errors.push("Execution receipt outputAssets must be a string array.");
+  }
+  if (!Array.isArray(candidate.errors) || candidate.errors.some((item) => typeof item !== "string")) {
+    errors.push("Execution receipt errors must be a string array.");
+  }
+  if (!Number.isInteger(candidate.attempt) || Number(candidate.attempt) < 1) errors.push("Execution receipt attempt must be a positive integer.");
+  if (!validReceiptDate(candidate.createdAt) || !validReceiptDate(candidate.updatedAt)) errors.push("Execution receipt timestamps are invalid.");
+  if (
+    validReceiptDate(candidate.createdAt)
+    && validReceiptDate(candidate.updatedAt)
+    && Date.parse(text(candidate.updatedAt)!) < Date.parse(text(candidate.createdAt)!)
+  ) errors.push("Execution receipt updatedAt cannot precede createdAt.");
+  if (
+    candidate.executionMode === "dry_run"
+    && (candidate.providerCalled === true || candidate.liveSubmitAllowed === true || (Array.isArray(candidate.outputAssets) && candidate.outputAssets.length > 0))
+  ) {
+    errors.push("Dry-run execution receipts cannot claim provider calls, live submission, or output assets.");
+  }
+  if (errors.length) return { ok: false, status: "invalid", errors };
+  const executionReceipt = candidate as unknown as AgentVideoExecutionReceipt;
+  if (identity) {
+    if (executionReceipt.projectId !== identity.projectId) {
+      return { ok: false, status: "project_mismatch", receipt: executionReceipt, errors: ["Execution receipt belongs to another project."] };
+    }
+    if (normalizeReceiptProjectRoot(executionReceipt.projectRoot) !== normalizeReceiptProjectRoot(identity.projectRoot)) {
+      return { ok: false, status: "root_mismatch", receipt: executionReceipt, errors: ["Execution receipt belongs to another project root."] };
+    }
+    if (executionReceipt.projectFactHash !== identity.projectFactHash) {
+      return { ok: false, status: "fact_hash_mismatch", receipt: executionReceipt, errors: ["Execution receipt belongs to older project facts."] };
+    }
+  }
+  return { ok: true, status: "restored", receipt: executionReceipt, errors: [] };
+}
+
+function normalizeReceiptProjectRoot(value?: string) {
+  return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
+}
+
+function validReceiptDate(value: unknown) {
+  const parsed = Date.parse(text(value) || "");
+  return Number.isFinite(parsed);
 }
 
 export interface AgentVideoExecutionContext {
@@ -471,6 +559,7 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     plan: input.plan,
     ledger: input.ledger,
     action: input.action,
+    operation: input.operation || "execute",
     actionId,
     executionMode: input.executionMode,
     generatedAt,
@@ -514,13 +603,16 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
   if (job.executionMode !== input.executionMode) {
     return blockedResult(input, "blocked", ["Existing job execution mode does not match this request."], generatedAt);
   }
+  if (job.operation !== (input.operation || "execute")) {
+    return blockedResult(input, "blocked", ["Existing job operation does not match this request."], generatedAt);
+  }
   if (terminalJobStatuses.has(job.status)) {
     return blockedResult(input, "blocked", [`Agent action already has a terminal job: ${job.jobId}.`], generatedAt);
   }
   let persistenceFailure = await persistCurrentSnapshot();
   if (persistenceFailure) return persistenceFailure;
 
-  if (job.status === "running") {
+  if (job.status === "running" && job.operation !== "query") {
     const runningReceipt = receipt(input, "running", generatedAt, job);
     return {
       status: "running",

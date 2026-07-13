@@ -10797,3 +10797,1355 @@ body:has(.project-control-popover) .new-video-bottom-portal {
     min-width: 86px;
   }
 }
+
+/* P5-B Signal Desk: final presentation layer over the existing Agent-first contracts. */
+.minimal-shell,
+.minimal-shell.preview-shell {
+  --studio-bg: var(--signal-canvas);
+  --studio-paper: var(--signal-surface);
+  --studio-surface: var(--signal-surface-subtle);
+  --studio-surface-strong: #dfe4e0;
+  --studio-ink: var(--signal-ink);
+  --studio-muted: var(--signal-muted);
+  --studio-soft: #69756f;
+  --studio-line: var(--signal-line);
+  --studio-accent: var(--signal-running);
+  --studio-accent-soft: var(--signal-running-soft);
+  --studio-warn: var(--signal-warning);
+  --studio-danger: var(--signal-blocked);
+  background: var(--signal-canvas);
+  color: var(--signal-ink);
+}
+
+.minimal-shell *,
+.minimal-shell *::before,
+.minimal-shell *::after {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+
+.app-shell.minimal-shell:has(.minimal-director.has-agent-rail) {
+  height: 100vh;
+  overflow: clip;
+}
+
+.minimal-topbar,
+.preview-shell .minimal-topbar {
+  grid-template-columns: minmax(360px, 1fr) auto auto;
+  gap: 16px;
+  min-height: 48px;
+  height: 48px;
+  border-bottom: 1px solid var(--signal-line);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: none;
+  color: var(--signal-ink);
+  padding: 0 16px;
+  backdrop-filter: none;
+}
+
+.minimal-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+.identity-signature {
+  height: 18px;
+  opacity: 0.9;
+}
+
+.identity-name,
+.preview-shell .identity-name {
+  color: var(--signal-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.identity-separator {
+  color: var(--signal-line-strong);
+}
+
+.project-title-button {
+  min-height: 36px;
+  color: var(--signal-ink);
+}
+
+.project-title-text {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.project-title-storage,
+.project-title-storage.local,
+.project-title-storage.temporary,
+.project-title-storage.draft {
+  border-color: var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-surface-subtle);
+  color: var(--signal-muted);
+}
+
+.minimal-nav.minimal-nav-menu summary {
+  min-height: 36px;
+  border-radius: 4px;
+  color: var(--signal-muted);
+}
+
+.minimal-nav.minimal-nav-menu summary:hover {
+  background: var(--signal-surface-subtle);
+}
+
+.minimal-nav.minimal-nav-menu summary strong {
+  color: var(--signal-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.minimal-nav-menu-list,
+.project-control-popover {
+  border-color: var(--signal-line);
+  border-radius: 6px;
+  background: var(--signal-surface);
+  box-shadow: 0 18px 48px rgba(30, 34, 32, 0.14);
+}
+
+.minimal-topbar-actions {
+  gap: 6px;
+}
+
+.project-open-action,
+.diagnostics-link,
+.preview-shell .diagnostics-link {
+  min-height: 36px;
+  border-color: transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--signal-muted);
+}
+
+.project-open-action:hover,
+.diagnostics-link:hover,
+.preview-shell .diagnostics-link:hover {
+  background: var(--signal-surface-subtle);
+  color: var(--signal-ink);
+}
+
+.minimal-shell button:focus-visible,
+.minimal-shell textarea:focus-visible,
+.minimal-shell summary:focus-visible,
+.minimal-shell select:focus-visible,
+.minimal-shell input:focus-visible,
+.minimal-shell [tabindex]:focus-visible {
+  outline: 2px solid var(--signal-info);
+  outline-offset: 2px;
+}
+
+.minimal-director.has-agent-rail,
+.minimal-director.preview.has-agent-rail {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr) 352px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  width: 100%;
+  max-width: none;
+  height: calc(100vh - 48px);
+  min-height: 0;
+  margin: 0;
+  overflow: clip;
+  background: var(--signal-canvas);
+  padding: 0;
+}
+
+.director-project-rail {
+  position: sticky;
+  top: 48px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+  border: 0;
+  border-right: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: var(--signal-surface);
+  box-shadow: none;
+  color: var(--signal-ink);
+  padding: 20px 12px 16px;
+}
+
+.director-project-rail-head {
+  gap: 5px;
+  border-bottom: 1px solid var(--signal-line);
+  padding: 0 8px 16px;
+}
+
+.director-project-rail-head span,
+.director-project-rail-sections > span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.director-project-rail-head strong {
+  color: var(--signal-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.director-project-rail-head small,
+.director-project-rail-sections small,
+.director-project-rail-nav small {
+  color: var(--signal-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.director-project-rail-nav {
+  display: grid;
+  gap: 2px;
+}
+
+.director-project-rail-nav button,
+.director-project-rail-sections button {
+  display: grid;
+  gap: 4px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--signal-muted);
+  padding: 8px 10px;
+}
+
+.director-project-rail-nav button:hover,
+.director-project-rail-sections button:hover {
+  background: var(--signal-surface-subtle);
+  color: var(--signal-ink);
+}
+
+.director-project-rail-nav button.active,
+.director-project-rail-sections button.active {
+  border-color: transparent;
+  background: var(--signal-surface-subtle);
+  box-shadow: inset 3px 0 0 var(--signal-running);
+  color: var(--signal-ink);
+}
+
+.director-project-rail-nav button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.director-project-rail-nav button:disabled:not(.active) {
+  color: #7b8680;
+}
+
+.director-project-rail-nav-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.director-project-rail-nav-label svg {
+  flex: 0 0 auto;
+}
+
+.director-project-rail-nav-label b,
+.director-project-rail-sections strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.director-project-rail-sections {
+  gap: 2px;
+  margin-top: auto;
+  border-top: 1px solid var(--signal-line);
+  padding-top: 14px;
+}
+
+.minimal-director.has-agent-rail .minimal-director-main,
+.minimal-director.preview.has-agent-rail .minimal-director-main {
+  align-self: stretch;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  background: var(--signal-canvas);
+  padding: 20px 24px 40px;
+  scrollbar-gutter: stable;
+}
+
+.director-workbar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  border: 0;
+  border-bottom: 1px solid var(--signal-line);
+  background: var(--signal-canvas);
+  padding: 0 0 14px;
+}
+
+.project-status-summary,
+.project-status-summary.ready,
+.project-status-summary.working,
+.project-status-summary.waiting,
+.project-status-summary.blocked {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.72fr) minmax(180px, 1fr);
+  gap: 8px 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.project-status-summary-main,
+.project-status-summary-next {
+  gap: 3px;
+}
+
+.project-status-summary-main span,
+.project-status-summary-next span,
+.project-status-summary-facts small {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.project-status-summary-main strong {
+  color: var(--signal-ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.project-status-summary-next strong,
+.project-status-summary-facts strong {
+  color: var(--signal-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.project-status-summary-main small,
+.project-status-summary-next small {
+  color: var(--signal-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.project-status-summary-boundary {
+  color: var(--signal-warning) !important;
+}
+
+.project-status-summary-facts {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-start;
+  gap: 16px;
+  padding-top: 5px;
+}
+
+.project-status-summary-facts span {
+  min-width: 64px;
+  border-left: 1px solid var(--signal-line);
+  padding-left: 10px;
+}
+
+.director-detail-disclosure {
+  border-color: var(--signal-line);
+}
+
+.director-detail-disclosure > summary {
+  min-height: 38px;
+  color: var(--signal-muted);
+}
+
+.director-empty-project {
+  min-height: 260px;
+  border: 1px dashed var(--signal-line-strong);
+  border-radius: 6px;
+  background: var(--signal-surface);
+}
+
+.new-video-start,
+.new-video-start.is-starting {
+  border-color: var(--signal-line);
+  border-radius: 6px;
+  background: var(--signal-surface);
+  box-shadow: none;
+}
+
+.new-video-start.is-starting,
+.minimal-agent-skill-stack {
+  background-image: none;
+}
+
+.new-video-start > summary {
+  min-height: 48px;
+  border-bottom: 0;
+  padding: 0 16px;
+}
+
+.new-video-start-body {
+  gap: 16px;
+  border-top-color: var(--signal-line);
+  padding: 16px;
+}
+
+.new-video-start-guide {
+  border: 0;
+  border-bottom: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 14px;
+}
+
+.new-video-start-guide li,
+.new-video-next-hint {
+  border-radius: 4px;
+  background: var(--signal-surface-subtle);
+}
+
+.new-video-plan {
+  gap: 14px;
+  border-top-color: var(--signal-line);
+  padding-top: 16px;
+}
+
+.new-video-plan-summary {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr);
+  align-items: start;
+  gap: 12px 20px;
+}
+
+.new-video-next-hint {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-height: 28px;
+  border-color: var(--signal-line);
+  color: var(--signal-muted);
+}
+
+.new-video-next-flow {
+  border-left-color: var(--signal-line);
+}
+
+.new-video-next-flow span {
+  color: var(--signal-muted);
+}
+
+.new-video-storyboard-draft {
+  gap: 12px;
+  border-top-color: var(--signal-line);
+  padding-top: 16px;
+}
+
+.new-video-storyboard-list {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.new-video-storyboard-card {
+  gap: 10px;
+  border-color: var(--signal-line);
+  border-radius: 6px;
+  background: var(--signal-surface);
+  padding: 12px;
+}
+
+.new-video-storyboard-card:hover,
+.new-video-storyboard-card:focus-visible,
+.new-video-storyboard-card.is-selected {
+  border-color: var(--signal-running);
+  box-shadow: 0 0 0 2px var(--signal-running-soft);
+}
+
+.new-video-storyboard-card-index span {
+  border-radius: 4px;
+  background: var(--signal-running-soft);
+  color: var(--signal-running);
+}
+
+.new-video-storyboard-readable > div:not(.new-video-reference-strategy),
+.new-video-storyboard-card-meta,
+.new-video-storyboard-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.new-video-storyboard-assets,
+.new-video-reference-strategy {
+  border-color: var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-surface-subtle);
+}
+
+.new-video-storyboard-card input,
+.new-video-storyboard-card textarea,
+.new-video-storyboard-card select {
+  border-color: var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-surface-raised);
+}
+
+.new-video-storyboard-card input:focus,
+.new-video-storyboard-card textarea:focus,
+.new-video-storyboard-card select:focus {
+  border-color: var(--signal-info);
+  background: var(--signal-surface);
+}
+
+.current-shot-workbench,
+.asset-library-section,
+.asset-edit-surface,
+.minimal-preview,
+.minimal-export,
+.minimal-audio-plan {
+  border-color: var(--signal-line);
+  border-radius: 6px;
+  background: var(--signal-surface);
+  box-shadow: none;
+}
+
+.current-frame-pair .current-frame-image,
+.current-frame-pair .minimal-media-placeholder,
+.submitted-reference-thumb,
+.filmstrip-shot .minimal-shot-image,
+.filmstrip-shot .minimal-media-placeholder {
+  border-color: var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-surface-subtle);
+}
+
+.filmstrip-shot.primary .minimal-shot-image,
+.filmstrip-shot.primary .minimal-media-placeholder {
+  box-shadow: 0 0 0 2px var(--signal-running);
+}
+
+.director-agent-rail {
+  position: sticky;
+  top: 48px;
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-width: 0;
+  border-left: 1px solid var(--signal-line);
+  background: var(--signal-surface);
+}
+
+.director-agent-rail .minimal-agent-panel,
+.preview-shell .director-agent-rail .minimal-agent-panel {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--signal-surface);
+  box-shadow: none;
+  color: var(--signal-muted);
+  padding: 16px;
+  backdrop-filter: none;
+}
+
+.director-agent-rail .minimal-agent-collapse-button {
+  top: 12px;
+  right: 12px;
+  min-width: 34px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--signal-muted);
+  padding: 0 7px;
+}
+
+.director-agent-rail .minimal-agent-collapse-button:hover {
+  background: var(--signal-surface-subtle);
+  color: var(--signal-ink);
+}
+
+.director-agent-rail .minimal-agent-cockpit {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 64px 0 0;
+}
+
+.director-agent-rail .minimal-agent-head span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.director-agent-rail .minimal-agent-head strong {
+  color: var(--signal-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.director-agent-rail .minimal-agent-selection-context {
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.director-agent-rail .minimal-agent-selection-context span {
+  color: var(--signal-muted);
+}
+
+.director-agent-rail .minimal-agent-selection-context p {
+  color: var(--signal-muted);
+  font-size: 12px;
+}
+
+.director-agent-rail .minimal-agent-panel:has(.minimal-agent-message.is-current-confirmation)
+  .minimal-agent-selection-context {
+  display: none;
+}
+
+.director-agent-rail .minimal-agent-context-chips {
+  gap: 4px;
+  overflow: visible;
+}
+
+.director-agent-rail .minimal-agent-context-chips small,
+.minimal-agent-badges small,
+.minimal-agent-message-status,
+.minimal-agent-action-log-view {
+  min-height: 22px;
+  border-color: var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-surface-subtle);
+  color: var(--signal-muted);
+  padding: 2px 6px;
+}
+
+.signal-current-task {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--signal-line);
+  border-bottom: 1px solid var(--signal-line);
+  padding: 14px 0;
+}
+
+.signal-current-task-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--signal-surface-subtle);
+  color: var(--signal-info);
+}
+
+.signal-current-task-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.signal-current-task-copy span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.signal-current-task-copy strong {
+  overflow: hidden;
+  color: var(--signal-ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-current-task-copy small {
+  color: var(--signal-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.signal-current-task > em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 4px;
+  background: var(--signal-warning-soft);
+  color: var(--signal-warning);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.signal-current-task.waiting .signal-current-task-icon {
+  background: var(--signal-warning-soft);
+  color: var(--signal-warning);
+}
+
+.signal-current-task.running .signal-current-task-icon,
+.signal-current-task.running > em,
+.signal-current-task.working .signal-current-task-icon,
+.signal-current-task.working > em {
+  background: var(--signal-running-soft);
+  color: var(--signal-running);
+}
+
+.signal-current-task.ready .signal-current-task-icon,
+.signal-current-task.ready > em {
+  background: var(--signal-success-soft);
+  color: var(--signal-success);
+}
+
+.signal-current-task.blocked .signal-current-task-icon,
+.signal-current-task.blocked > em {
+  background: var(--signal-blocked-soft);
+  color: var(--signal-blocked);
+}
+
+.director-agent-rail .minimal-agent-skill-stack,
+.director-agent-rail .minimal-agent-advanced-controls {
+  flex: 0 0 auto;
+  border: 0;
+  border-bottom: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 10px;
+}
+
+.director-agent-rail .minimal-agent-skill-stack {
+  padding: 0 0 10px;
+}
+
+.minimal-agent-skill-groups,
+.minimal-agent-skill-detail {
+  border-top-color: var(--signal-line);
+}
+
+.director-agent-rail .minimal-agent-thread {
+  flex: 1 1 auto;
+  display: grid;
+  align-content: start;
+  gap: 0;
+  max-height: none;
+  min-height: 132px;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 4px 0 0;
+  scrollbar-gutter: stable;
+}
+
+.minimal-agent-thread > span {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: block;
+  border-bottom: 1px solid var(--signal-line);
+  background: var(--signal-surface);
+  color: var(--signal-muted);
+  padding: 5px 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-thread-history {
+  border-bottom: 1px solid var(--signal-line);
+  color: var(--signal-muted);
+  padding: 8px 0;
+}
+
+.minimal-agent-message,
+.minimal-agent-message.user,
+.minimal-agent-message.assistant,
+.minimal-agent-message.tool,
+.minimal-agent-message.confirmation {
+  display: grid;
+  gap: 9px;
+  max-width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--signal-muted);
+  padding: 12px 0;
+}
+
+.minimal-agent-message.user {
+  background: var(--signal-surface-raised);
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.minimal-agent-message.is-current-confirmation {
+  margin: 12px 0;
+  border: 1px solid var(--signal-confirm);
+  border-radius: 6px;
+  background: var(--signal-surface);
+  box-shadow: inset 3px 0 0 var(--signal-confirm);
+  padding: 14px;
+}
+
+.minimal-agent-message.is-current-confirmation:has(.minimal-agent-confirmation-strip.is-message)
+  > .minimal-agent-plan.is-inline {
+  display: none;
+}
+
+.minimal-agent-message.is-current-confirmation .minimal-agent-message-stage,
+.minimal-agent-message.is-current-confirmation .minimal-agent-message-status {
+  color: var(--signal-confirm);
+}
+
+.minimal-agent-message-head strong {
+  color: var(--signal-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.minimal-agent-message p {
+  color: var(--signal-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.minimal-agent-message em {
+  color: var(--signal-muted);
+  font-weight: 600;
+}
+
+.minimal-agent-plan.is-inline,
+.minimal-agent-confirmation-strip,
+.minimal-agent-confirmation-strip.is-message {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.minimal-agent-plan.is-inline small,
+.minimal-agent-confirmation-strip small {
+  grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+  gap: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 7px 0;
+}
+
+.minimal-agent-confirmation-strip span,
+.minimal-agent-plan.is-inline span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-confirmation-strip strong,
+.minimal-agent-plan.is-inline strong {
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: initial;
+  white-space: normal;
+}
+
+.minimal-agent-message-actions {
+  gap: 8px;
+}
+
+.minimal-agent-message.is-current-confirmation .minimal-agent-message-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: stretch;
+}
+
+.minimal-agent-message.is-current-confirmation .minimal-agent-confirmation-effect,
+.minimal-agent-message.is-current-confirmation .minimal-agent-confirmation-boundary,
+.minimal-agent-message.is-current-confirmation .minimal-agent-action-hint {
+  grid-column: 1 / -1;
+}
+
+.minimal-agent-confirmation-effect,
+.minimal-agent-confirmation-boundary {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+  border: 0;
+  border-top: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--signal-muted);
+  padding: 9px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.minimal-agent-confirmation-effect span,
+.minimal-agent-confirmation-boundary span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-confirmation-effect strong,
+.minimal-agent-confirmation-boundary strong {
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.minimal-agent-message-actions button,
+.minimal-agent-note-actions button,
+.minimal-agent-input button,
+.minimal-agent-actions button {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--signal-running);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.minimal-agent-message.is-current-confirmation .minimal-agent-message-actions button:not(.secondary) {
+  width: auto;
+  background: var(--signal-confirm);
+}
+
+.minimal-agent-message.is-current-confirmation .minimal-agent-message-actions button.secondary {
+  min-width: 92px;
+}
+
+.minimal-agent-message-actions button.secondary,
+.minimal-agent-note-actions button.secondary {
+  border-color: var(--signal-line);
+  background: var(--signal-surface);
+  color: var(--signal-ink);
+}
+
+.minimal-agent-message-actions button:disabled,
+.minimal-agent-note-actions button:disabled,
+.minimal-agent-input button:disabled,
+.minimal-agent-actions button:disabled {
+  border-color: var(--signal-line);
+  background: var(--signal-surface-subtle);
+  color: #6e7973;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.minimal-agent-execution-result {
+  gap: 6px;
+  border-color: var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-success-soft);
+}
+
+.minimal-agent-execution-result.running,
+.minimal-agent-execution-result.awaiting_confirmation,
+.minimal-agent-execution-result.ready_to_run {
+  border-color: var(--signal-running);
+  background: var(--signal-running-soft);
+}
+
+.minimal-agent-execution-result.failed,
+.minimal-agent-execution-result.blocked {
+  border-color: var(--signal-blocked);
+  background: var(--signal-blocked-soft);
+}
+
+.minimal-agent-note,
+.minimal-agent-note.has-plan,
+.minimal-agent-note.has-plan.has-result {
+  border: 0;
+  border-top: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0 0;
+}
+
+.minimal-agent-action-log {
+  gap: 7px;
+  border: 0;
+  border-top: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0 0;
+}
+
+.minimal-agent-action-log-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-left-color: var(--signal-success);
+}
+
+.minimal-agent-action-log-followup,
+.minimal-agent-action-log-view {
+  border-radius: 4px;
+}
+
+.director-agent-rail .minimal-agent-input {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  border: 0;
+  border-top: 1px solid var(--signal-line);
+  border-radius: 0;
+  background: var(--signal-surface);
+  box-shadow: none;
+  padding: 12px 0 0;
+}
+
+.director-agent-rail .minimal-agent-input textarea {
+  min-height: 72px;
+  max-height: 132px;
+  border: 1px solid var(--signal-line);
+  border-radius: 4px;
+  background: var(--signal-surface-raised);
+  color: var(--signal-ink);
+  padding: 10px;
+  font-size: 13px;
+}
+
+.minimal-agent-input-footer,
+.director-bottom-composer .minimal-agent-input-footer {
+  gap: 8px;
+  border-top: 0;
+  background: transparent;
+  padding-top: 0;
+}
+
+.minimal-agent-file-button {
+  border-color: var(--signal-line) !important;
+  background: var(--signal-surface) !important;
+  color: var(--signal-muted) !important;
+}
+
+.minimal-agent-send-button,
+.director-bottom-composer .minimal-agent-send-button {
+  min-width: 88px;
+  min-height: 40px;
+  border-color: transparent;
+  background: var(--signal-running);
+  color: #ffffff;
+}
+
+.director-agent-rail .minimal-agent-status-row {
+  display: none;
+}
+
+.minimal-agent-expand-button {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 44px;
+  border-color: var(--signal-line);
+  border-radius: 6px;
+  background: var(--signal-surface);
+  box-shadow: 0 12px 32px rgba(30, 34, 32, 0.14);
+  color: var(--signal-ink);
+}
+
+.minimal-agent-expand-button small {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .minimal-director.has-agent-rail,
+  .minimal-director.preview.has-agent-rail {
+    grid-template-columns: 220px minmax(0, 1fr) 368px;
+  }
+
+  .project-status-summary,
+  .project-status-summary.ready,
+  .project-status-summary.working,
+  .project-status-summary.waiting,
+  .project-status-summary.blocked {
+    grid-template-columns: minmax(150px, 0.72fr) minmax(210px, 1fr) auto;
+    align-items: center;
+  }
+
+  .project-status-summary-facts {
+    grid-column: auto;
+    justify-content: flex-end;
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 1099px) {
+  .minimal-topbar,
+  .preview-shell .minimal-topbar {
+    grid-template-columns: minmax(260px, 1fr) auto auto;
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .identity-name {
+    display: none;
+  }
+
+  .minimal-director.has-agent-rail,
+  .minimal-director.preview.has-agent-rail {
+    grid-template-columns: 56px minmax(0, 1fr) 336px;
+  }
+
+  .director-agent-rail {
+    order: initial;
+  }
+
+  .director-project-rail {
+    position: sticky;
+    top: 48px;
+    order: initial;
+    gap: 10px;
+    max-height: none;
+    padding: 14px 6px;
+  }
+
+  .director-project-rail-head,
+  .director-project-rail-sections {
+    display: none;
+  }
+
+  .director-project-rail-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .director-project-rail-nav button {
+    min-height: 46px;
+    place-items: center;
+    padding: 8px 4px;
+  }
+
+  .director-project-rail-nav-label {
+    justify-content: center;
+  }
+
+  .director-project-rail-nav-label b,
+  .director-project-rail-nav button small {
+    display: none;
+  }
+
+  .minimal-director.has-agent-rail .minimal-director-main,
+  .minimal-director.preview.has-agent-rail .minimal-director-main {
+    padding: 18px 20px 36px;
+  }
+
+  .new-video-plan-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .new-video-next-hint {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 899px) {
+  .minimal-director.has-agent-rail,
+  .minimal-director.preview.has-agent-rail {
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-areas: "project main";
+    overflow: clip;
+  }
+
+  .director-project-rail {
+    grid-area: project;
+  }
+
+  .minimal-director.has-agent-rail .minimal-director-main,
+  .minimal-director.preview.has-agent-rail .minimal-director-main {
+    grid-area: main;
+  }
+
+  .director-agent-rail {
+    position: fixed !important;
+    top: 56px;
+    right: 10px;
+    bottom: 10px;
+    left: auto;
+    z-index: 80;
+    width: min(360px, calc(100vw - 78px));
+    height: auto;
+    max-height: none;
+    order: initial;
+    align-self: auto;
+    border: 1px solid var(--signal-line);
+    border-radius: 8px;
+    box-shadow: 0 24px 64px rgba(30, 34, 32, 0.2);
+    overflow: hidden;
+  }
+
+  .director-agent-rail:has(.minimal-agent-panel.is-collapsed) {
+    top: auto;
+    bottom: 12px;
+    width: min(300px, calc(100vw - 78px));
+    height: auto;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .director-agent-rail .minimal-agent-panel,
+  .preview-shell .director-agent-rail .minimal-agent-panel {
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  .director-agent-rail .minimal-agent-panel.is-collapsed {
+    height: auto;
+    padding: 0;
+  }
+
+  .project-status-summary-facts {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 719px) {
+  .minimal-topbar,
+  .preview-shell .minimal-topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .minimal-topbar-left {
+    gap: 10px;
+  }
+
+  .identity-top,
+  .minimal-nav.minimal-nav-menu {
+    display: none;
+  }
+
+  .minimal-director.has-agent-rail,
+  .minimal-director.preview.has-agent-rail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "project"
+      "main";
+    height: calc(100vh - 48px);
+  }
+
+  .director-project-rail {
+    order: -1;
+    display: block;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--signal-line);
+    padding: 6px 8px;
+  }
+
+  .director-project-rail-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .director-project-rail-nav button {
+    min-height: 44px;
+  }
+
+  .minimal-director.has-agent-rail .minimal-director-main,
+  .minimal-director.preview.has-agent-rail .minimal-director-main {
+    height: auto;
+    padding: 14px 14px 32px;
+  }
+
+  .project-status-summary,
+  .project-status-summary.ready,
+  .project-status-summary.working,
+  .project-status-summary.waiting,
+  .project-status-summary.blocked {
+    grid-template-columns: 1fr;
+  }
+
+  .project-status-summary-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .new-video-storyboard-list,
+  .new-video-storyboard-readable > div:not(.new-video-reference-strategy),
+  .new-video-storyboard-card-meta,
+  .new-video-storyboard-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .new-video-storyboard-card label.wide {
+    grid-column: auto;
+  }
+
+  .director-agent-rail {
+    top: 56px;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+  }
+
+  .director-agent-rail:has(.minimal-agent-panel.is-collapsed) {
+    right: 8px;
+    bottom: 8px;
+    left: auto;
+    width: min(280px, calc(100vw - 16px));
+  }
+
+  .signal-current-task {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .signal-current-task > em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .minimal-agent-input-footer,
+  .director-bottom-composer .minimal-agent-input-footer,
+  .new-video-composer-bar,
+  .minimal-director.composer-only .new-video-composer-bar,
+  .new-video-bottom-portal .new-video-composer-bar {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas:
+      "file action"
+      "copy copy";
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .minimal-shell *,
+  .minimal-shell *::before,
+  .minimal-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

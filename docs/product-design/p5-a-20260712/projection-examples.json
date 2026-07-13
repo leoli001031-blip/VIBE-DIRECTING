@@ -1,0 +1,176 @@
+{
+  "schema": "vibe-director-p5-a-design-input/v1",
+  "note": "Design handoff examples derived from packaged App evidence. Placeholder identifiers must never be persisted or used as test fixtures.",
+  "states": [
+    {
+      "evidence": "evidence/01-new-video-input.jpg",
+      "stateKey": "new_video_input",
+      "currentTask": {
+        "source": "new_video_draft",
+        "step": "draft_story",
+        "label": "整理新视频草案",
+        "requiresConfirmation": false,
+        "effect": "none",
+        "confirmationKind": null,
+        "blockers": [],
+        "facts": [
+          { "label": "目标", "value": "2 个镜头" },
+          { "label": "参考", "value": "不生成" },
+          { "label": "视频", "value": "不提交" }
+        ]
+      },
+      "primaryAction": "发送创作意图",
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/02-draft-confirmation.jpg",
+      "stateKey": "draft_confirmation",
+      "currentTask": {
+        "source": "new_video_draft",
+        "step": "confirm_story",
+        "label": "确认这版故事",
+        "requiresConfirmation": true,
+        "effect": "none",
+        "confirmationKind": "pipeline_action",
+        "confirmationId": "<active-draft-confirmation-id>",
+        "actionId": "<active-draft-action-id>",
+        "blockers": [],
+        "facts": [
+          { "label": "镜头", "value": "草案 2 个" }
+        ]
+      },
+      "primaryAction": "确认这版故事",
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/03-save-location-confirmation.jpg",
+      "stateKey": "save_location_confirmation",
+      "currentTask": {
+        "source": "timeline_confirmation",
+        "step": "choose_save_location",
+        "label": "选择保存位置",
+        "requiresConfirmation": true,
+        "effect": "state_only",
+        "confirmationKind": "pipeline_action",
+        "confirmationId": "<active-project-confirmation-id>",
+        "actionId": "<active-project-action-id>",
+        "blockers": [],
+        "facts": [
+          { "label": "故事", "value": "2 镜头" },
+          { "label": "项目", "value": "待选择本地位置" }
+        ]
+      },
+      "primaryAction": "选择保存位置",
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/04-reference-confirmation.jpg",
+      "stateKey": "reference_confirmation",
+      "currentTask": {
+        "source": "timeline_confirmation",
+        "step": "prepare_references",
+        "label": "补参考",
+        "requiresConfirmation": true,
+        "effect": "generation_job",
+        "confirmationKind": "pipeline_action",
+        "confirmationId": "<active-reference-confirmation-id>",
+        "actionId": "<active-reference-action-id>",
+        "blockers": [],
+        "facts": [
+          { "label": "参考", "value": "缺 2 张" },
+          { "label": "执行模式", "value": "dry_run" }
+        ]
+      },
+      "primaryAction": "确认验证参考流程",
+      "providerCalled": false,
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/05-video-confirmation.jpg",
+      "stateKey": "video_confirmation",
+      "currentTask": {
+        "source": "timeline_confirmation",
+        "step": "submit_video",
+        "label": "发送视频",
+        "requiresConfirmation": true,
+        "effect": "generation_job",
+        "confirmationKind": "pipeline_action",
+        "confirmationId": "<active-video-confirmation-id>",
+        "actionId": "<active-video-action-id>",
+        "blockers": [],
+        "facts": [
+          { "label": "镜头", "value": "2 个" },
+          { "label": "执行模式", "value": "dry_run" }
+        ]
+      },
+      "primaryAction": "确认验证视频流程",
+      "providerCalled": false,
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/06-query-video-result.jpg",
+      "stateKey": "query_video_result",
+      "currentTask": {
+        "source": "pipeline_job",
+        "step": "submit_video",
+        "label": "查询视频结果",
+        "requiresConfirmation": true,
+        "effect": "generation_job",
+        "confirmationKind": "pipeline_action",
+        "jobId": "<existing-video-job-id>",
+        "blockers": [],
+        "facts": [
+          { "label": "任务", "value": "running" },
+          { "label": "外部任务", "value": "<existing-external-task-id>" }
+        ]
+      },
+      "primaryAction": "确认查询视频结果",
+      "mustReuseExistingTask": true,
+      "providerCalled": false,
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/07-export-confirmation.jpg",
+      "stateKey": "export_confirmation",
+      "currentTask": {
+        "source": "timeline_confirmation",
+        "step": "export",
+        "label": "导出交付包",
+        "requiresConfirmation": true,
+        "effect": "local_export",
+        "confirmationKind": "pipeline_action",
+        "confirmationId": "<active-export-confirmation-id>",
+        "actionId": "<active-export-action-id>",
+        "blockers": [],
+        "facts": [
+          { "label": "目标", "value": "本地交付包" },
+          { "label": "执行模式", "value": "dry_run" }
+        ]
+      },
+      "primaryAction": "确认导出",
+      "providerCalled": false,
+      "historyCanOwnCurrentTask": false
+    },
+    {
+      "evidence": "evidence/08-execution-complete-history.jpg",
+      "stateKey": "execution_complete_history",
+      "currentTask": {
+        "source": "project_observation",
+        "step": "prepare_references",
+        "label": "补参考",
+        "requiresConfirmation": true,
+        "effect": "generation_job",
+        "confirmationKind": "pipeline_action",
+        "blockers": [],
+        "facts": [
+          { "label": "故事", "value": "2 镜头" },
+          { "label": "参考", "value": "仍缺真实参考" },
+          { "label": "历史", "value": "本地导出验证完成" }
+        ]
+      },
+      "primaryAction": "补参考",
+      "terminalResultPlacement": "history",
+      "historyCanOwnCurrentTask": false
+    }
+  ]
+}

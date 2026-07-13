@@ -43,8 +43,12 @@ export interface ProjectAgentGenerationJobLedgerOpenResult {
 const jobKinds = new Set(["reference_generation", "video_submit", "export"]);
 const jobStatuses = new Set(["staged", "confirmed", "running", "succeeded", "failed", "cancelled"]);
 const executionModes = new Set(["dry_run", "live"]);
+const jobOperations = new Set(["execute", "query"]);
 const pipelineSteps = new Set(["new_video_draft", "confirm_story", "choose_save_location", "prepare_references", "submit_video", "export"]);
-const legacyGenerationJobLedgerSchemaVersion = "agent_video_generation_job_ledger/0.2.0";
+const legacyGenerationJobLedgerSchemaVersions = new Set([
+  "agent_video_generation_job_ledger/0.2.0",
+  "agent_video_generation_job_ledger/0.3.0",
+]);
 
 export async function saveProjectAgentGenerationJobLedger(
   target: ProjectVibeDraftTarget,
@@ -80,17 +84,17 @@ export async function saveProjectAgentGenerationJobLedger(
       runtimeWriteError = error instanceof Error ? error.message : String(error);
     }
   }
-  const writeResult = await writeProjectVibeSidecarText(target, projectAgentGenerationJobLedgerPath, serialized);
   if (runtimeWriteOk) {
     return {
-      ...writeResult,
       ok: true,
       status: "written",
-      path: runtimeWritePath || writeResult.path,
+      targetId: target.storageKey || ledger.projectId,
+      path: runtimeWritePath || projectAgentGenerationJobLedgerPath,
       content: serialized,
       errors: [],
     };
   }
+  const writeResult = await writeProjectVibeSidecarText(target, projectAgentGenerationJobLedgerPath, serialized);
   if (!writeResult.ok && runtimeWriteError) {
     return { ...writeResult, errors: [runtimeWriteError, ...writeResult.errors] };
   }
@@ -191,6 +195,11 @@ function parseProjectAgentGenerationJobLedger(value: unknown): {
   for (const key of ["ledgerId", "projectId", "projectFactHash", "createdAt", "updatedAt"] as const) {
     if (!textValue(normalizedValue[key])) errors.push(`Generation ledger is missing ${key}.`);
   }
+  if (!dateValue(normalizedValue.createdAt)) errors.push("Generation ledger createdAt is invalid.");
+  if (!dateValue(normalizedValue.updatedAt)) errors.push("Generation ledger updatedAt is invalid.");
+  if (dateValue(normalizedValue.createdAt) && dateValue(normalizedValue.updatedAt) && Date.parse(textValue(normalizedValue.updatedAt)) < Date.parse(textValue(normalizedValue.createdAt))) {
+    errors.push("Generation ledger updatedAt cannot precede createdAt.");
+  }
   if (!Array.isArray(normalizedValue.jobs)) errors.push("Generation ledger jobs must be an array.");
   const jobs = Array.isArray(normalizedValue.jobs) ? normalizedValue.jobs : [];
   const jobIds = new Set<string>();
@@ -211,15 +220,34 @@ function parseProjectAgentGenerationJobLedger(value: unknown): {
 }
 
 function migrateLegacyGenerationJobLedger(value: Record<string, unknown>): Record<string, unknown> {
-  if (value.schemaVersion !== legacyGenerationJobLedgerSchemaVersion || !Array.isArray(value.jobs)) return value;
+  const schemaVersion = textValue(value.schemaVersion);
+  if (!legacyGenerationJobLedgerSchemaVersions.has(schemaVersion) || !Array.isArray(value.jobs)) return value;
+  const conservativeP2Migration = schemaVersion === "agent_video_generation_job_ledger/0.2.0";
   return {
     ...value,
     schemaVersion: AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION,
     jobs: value.jobs.map((job) => isRecord(job)
       ? {
           ...job,
-          executionMode: executionModes.has(textValue(job.executionMode)) ? job.executionMode : "dry_run",
-          providerCalled: typeof job.providerCalled === "boolean" ? job.providerCalled : false,
+          operation: jobOperations.has(textValue(job.operation))
+            ? job.operation
+            : /query/i.test(textValue(job.actionId))
+              ? "query"
+              : "execute",
+          executionMode: conservativeP2Migration
+            ? "dry_run"
+            : executionModes.has(textValue(job.executionMode)) ? job.executionMode : "dry_run",
+          providerCalled: conservativeP2Migration
+            ? false
+            : typeof job.providerCalled === "boolean" ? job.providerCalled : false,
+          statusHistory: Array.isArray(job.statusHistory) && job.statusHistory.length
+            ? job.statusHistory
+            : [
+                { status: "staged", at: textValue(job.createdAt) || textValue(job.updatedAt) },
+                ...(textValue(job.status) && textValue(job.status) !== "staged"
+                  ? [{ status: job.status, at: textValue(job.updatedAt) || textValue(job.createdAt) }]
+                  : []),
+              ],
         }
       : job),
   };
@@ -228,17 +256,49 @@ function migrateLegacyGenerationJobLedger(value: Record<string, unknown>): Recor
 function validateJob(job: unknown, ledger: Record<string, unknown>) {
   if (!isRecord(job)) return ["Generation job must be an object."];
   const errors: string[] = [];
-  for (const key of ["jobId", "projectId", "projectFactHash", "actionId", "providerId", "modelId", "capability", "pipelineStep", "status", "createdAt", "updatedAt"] as const) {
+  for (const key of ["jobId", "projectId", "projectRoot", "projectFactHash", "actionId", "sourceConfirmationId", "providerId", "modelId", "capability", "pipelineStep", "status", "createdAt", "updatedAt"] as const) {
     if (!textValue(job[key])) errors.push(`Generation job is missing ${key}.`);
+  }
+  if (!dateValue(job.createdAt)) errors.push("Generation job createdAt is invalid.");
+  if (!dateValue(job.updatedAt)) errors.push("Generation job updatedAt is invalid.");
+  if (dateValue(job.createdAt) && dateValue(job.updatedAt) && Date.parse(textValue(job.updatedAt)) < Date.parse(textValue(job.createdAt))) {
+    errors.push("Generation job updatedAt cannot precede createdAt.");
   }
   if (!jobKinds.has(textValue(job.kind))) errors.push("Generation job kind is invalid.");
   if (!jobStatuses.has(textValue(job.status))) errors.push("Generation job status is invalid.");
+  if (!jobOperations.has(textValue(job.operation))) errors.push("Generation job operation is invalid.");
   if (!executionModes.has(textValue(job.executionMode))) errors.push("Generation job executionMode is invalid.");
   if (typeof job.providerCalled !== "boolean") errors.push("Generation job providerCalled must be a boolean.");
   if (!pipelineSteps.has(textValue(job.pipelineStep))) errors.push("Generation job pipeline step is invalid.");
   if (!Array.isArray(job.inputAssets) || job.inputAssets.some((item) => typeof item !== "string")) errors.push("Generation job inputAssets must be a string array.");
   if (!Array.isArray(job.outputAssets) || job.outputAssets.some((item) => typeof item !== "string")) errors.push("Generation job outputAssets must be a string array.");
   if (!Array.isArray(job.blockers) || job.blockers.some((item) => typeof item !== "string")) errors.push("Generation job blockers must be a string array.");
+  const statusHistory = Array.isArray(job.statusHistory) ? job.statusHistory : [];
+  if (!statusHistory.length) {
+    errors.push("Generation job statusHistory must be a non-empty array.");
+  } else {
+    let previousAt = 0;
+    for (const event of statusHistory) {
+      if (!isRecord(event) || !jobStatuses.has(textValue(event.status)) || !dateValue(event.at)) {
+        errors.push("Generation job statusHistory contains an invalid event.");
+        continue;
+      }
+      const at = Date.parse(textValue(event.at));
+      if (at < previousAt) errors.push("Generation job statusHistory must be chronological.");
+      previousAt = at;
+      if (event.error != null && typeof event.error !== "string") {
+        errors.push("Generation job statusHistory error must be a string.");
+      }
+    }
+    const firstEvent = statusHistory[0];
+    const lastEvent = statusHistory[statusHistory.length - 1];
+    if (!isRecord(firstEvent) || firstEvent.status !== "staged") {
+      errors.push("Generation job statusHistory must start at staged.");
+    }
+    if (!isRecord(lastEvent) || textValue(lastEvent.status) !== textValue(job.status)) {
+      errors.push("Generation job status does not match its final history event.");
+    }
+  }
   if (textValue(job.projectId) !== textValue(ledger.projectId)) errors.push("Generation job projectId does not match its ledger.");
   if (normalizeProjectRoot(textValue(job.projectRoot)) !== normalizeProjectRoot(textValue(ledger.projectRoot))) errors.push("Generation job projectRoot does not match its ledger.");
   if (textValue(job.projectFactHash) !== textValue(ledger.projectFactHash)) errors.push("Generation job projectFactHash does not match its ledger.");
@@ -260,6 +320,11 @@ function normalizeProjectRoot(value?: string) {
 function timeValue(value?: string) {
   const parsed = Date.parse(value || "");
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function dateValue(value: unknown) {
+  const parsed = Date.parse(textValue(value));
+  return Number.isFinite(parsed);
 }
 
 function isBrowserDraftProjectRoot(projectRoot?: string) {

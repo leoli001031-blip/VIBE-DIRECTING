@@ -1,43 +1,61 @@
-/* Warm Beige/Coffee AI Workbench Design Tokens */
-/* 暖米咖 AI 工作台 — 设计 Token */
+/* Signal Desk design tokens. Legacy --warm-* names remain as compatibility aliases. */
 
 :root {
-  /* Background & Surface */
-  --warm-bg: #F7F1E7;
-  --warm-paper: #FFFCF6;
-  --warm-surface-soft: #F2E7D8;
+  /* Signal Desk surfaces */
+  --signal-canvas: #F4F5F3;
+  --signal-surface: #FFFFFF;
+  --signal-surface-subtle: #EBEEEB;
+  --signal-surface-raised: #FAFBFA;
 
-  /* Text */
-  --warm-ink: #2F2722;
-  --warm-muted: #7C6F63;
+  /* Signal Desk text and structure */
+  --signal-ink: #1E2220;
+  --signal-muted: #53605A;
+  --signal-line: #C7CEC9;
+  --signal-line-strong: #AEB8B1;
 
-  /* Lines & Borders */
-  --warm-line: #DDD0C0;
+  /* Signal Desk actions and states */
+  --signal-confirm: #A73728;
+  --signal-confirm-soft: #F8EDE9;
+  --signal-running: #2B665F;
+  --signal-running-soft: #E8F1EF;
+  --signal-success: #1F6A50;
+  --signal-success-soft: #E8F2ED;
+  --signal-warning: #855C14;
+  --signal-warning-soft: #F6F0E4;
+  --signal-blocked: #9F352D;
+  --signal-blocked-soft: #F8EBE9;
+  --signal-info: #315E73;
+  --signal-info-soft: #EAF0F3;
 
-  /* Primary Action */
-  --warm-primary: #7A553C;
-  --warm-primary-soft: #E8D7C2;
-
-  /* Accents */
-  --warm-sage: #8E9A83;
-  --warm-clay: #C97961;
+  /* Compatibility aliases used by the existing director surfaces */
+  --warm-bg: var(--signal-canvas);
+  --warm-paper: var(--signal-surface);
+  --warm-surface-soft: var(--signal-surface-subtle);
+  --warm-ink: var(--signal-ink);
+  --warm-muted: var(--signal-muted);
+  --warm-line: var(--signal-line);
+  --warm-primary: var(--signal-running);
+  --warm-primary-soft: var(--signal-running-soft);
+  --warm-sage: var(--signal-success);
+  --warm-clay: var(--signal-blocked);
 
   /* Typography */
-  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
 
   /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
+  --space-compact: 12px;
   --space-lg: 24px;
   --space-xl: 32px;
   --space-2xl: 48px;
 
   /* Rounding */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
 /* Global base */
@@ -48,7 +66,7 @@ html, body {
   color: var(--warm-ink);
   font-family: var(--font-system);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -61,5 +79,5 @@ html, body {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--warm-line);
-  border-radius: 3px;
+  border-radius: 4px;
 }

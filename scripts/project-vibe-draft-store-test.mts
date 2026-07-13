@@ -1,8 +1,12 @@
 import { createProjectVibe, hashProjectVibeFacts, projectVibeFileName } from "../src/project";
 import {
+  browserProjectVibeDraftStorageKeyPrefix,
+  forgetActiveBrowserProjectVibeDraftStorageKey,
   openProjectVibeDraft,
   projectVibeDraftTargetId,
   readProjectVibeSidecarText,
+  readActiveBrowserProjectVibeDraftStorageKey,
+  rememberActiveBrowserProjectVibeDraftStorageKey,
   saveProjectVibeDraft,
   writeProjectVibeSidecarText,
 } from "../src/project/projectVibeDraftStore";
@@ -25,6 +29,9 @@ function createLocalStorageShim() {
       },
       setItem(key: string, value: string) {
         values.set(key, value);
+      },
+      removeItem(key: string) {
+        values.delete(key);
       },
     },
   };
@@ -85,21 +92,41 @@ try {
       }],
     },
   });
-  const browserTarget = { storageKey: "test:project-vibe-draft-store" };
+  const browserTarget = { storageKey: `${browserProjectVibeDraftStorageKeyPrefix}:test-project-vibe-draft-store` };
   const browserSave = await saveProjectVibeDraft(browserTarget, browserProject);
   assert(browserSave.ok, "browser draft save should succeed");
   assert(browserSave.mode === "browser_local", "browser draft save should use local storage");
   assert(browserSave.path === projectVibeFileName, "browser draft path should default to project.vibe");
-  assert(browserStorage.values.has("test:project-vibe-draft-store:project.vibe"), "browser draft should write the local storage key");
+  assert(browserStorage.values.has(`${browserTarget.storageKey}:project.vibe`), "browser draft should write the local storage key");
 
   const browserOpen = await openProjectVibeDraft(browserTarget);
   assert(browserOpen.ok && browserOpen.project, "browser draft open should restore the saved project");
   assert(browserOpen.status === "restored", "browser draft open should report restored");
   assert(browserOpen.factHash === hashProjectVibeFacts(browserProject), "browser draft fact hash should match saved project");
   assert(
-    projectVibeDraftTargetId(browserTarget) === "browser-draft:test:project-vibe-draft-store:project.vibe",
+    projectVibeDraftTargetId(browserTarget) === `browser-draft:${browserTarget.storageKey}:project.vibe`,
     "browser draft target id should describe local draft storage",
   );
+
+  assert(
+    rememberActiveBrowserProjectVibeDraftStorageKey(browserTarget.storageKey),
+    "saved browser draft should be registerable as the active unsaved project",
+  );
+  const restoredBrowserDraftStorageKey = readActiveBrowserProjectVibeDraftStorageKey();
+  assert(
+    restoredBrowserDraftStorageKey === browserTarget.storageKey,
+    "a cold start should recover the same active browser draft storage key",
+  );
+  const coldStartBrowserOpen = await openProjectVibeDraft({ storageKey: restoredBrowserDraftStorageKey });
+  assert(
+    coldStartBrowserOpen.ok && coldStartBrowserOpen.project?.shots.length === 1,
+    "the active browser draft pointer should restore confirmed story facts after a cold start",
+  );
+  assert(
+    forgetActiveBrowserProjectVibeDraftStorageKey(browserTarget.storageKey),
+    "abandoning the active browser draft should clear its restore pointer",
+  );
+  assert(!readActiveBrowserProjectVibeDraftStorageKey(), "an abandoned browser draft must not restore again");
 
   const missingOpen = await openProjectVibeDraft({ storageKey: "test:missing-draft" });
   assert(!missingOpen.ok && missingOpen.status === "missing", "missing browser draft should be classified as missing");
@@ -107,7 +134,7 @@ try {
   const browserSidecarWrite = await writeProjectVibeSidecarText(browserTarget, ".vibe-runtime/test-sidecar.json", "{\"ok\":true}");
   assert(browserSidecarWrite.ok && browserSidecarWrite.status === "written", "browser sidecar write should succeed");
   assert(
-    browserStorage.values.get("test:project-vibe-draft-store:.vibe-runtime/test-sidecar.json") === "{\"ok\":true}",
+    browserStorage.values.get(`${browserTarget.storageKey}:.vibe-runtime/test-sidecar.json`) === "{\"ok\":true}",
     "browser sidecar should use the requested project-relative path",
   );
   const browserSidecarRead = await readProjectVibeSidecarText(browserTarget, ".vibe-runtime/test-sidecar.json");

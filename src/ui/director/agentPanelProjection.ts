@@ -257,6 +257,7 @@ export type PreviewPrototypeAgentDemoResult = {
   agentToolHandoff?: DirectorAgentToolHandoff;
   agentTimelineEntries?: VibeAgentTimelineEntry[];
   agentKernelTurn?: VibeAgentKernelTurn;
+  projectFactHash?: string;
   projectVibeWritten?: boolean;
   projectRecordLabel?: string;
   projectImpactLabel?: string;

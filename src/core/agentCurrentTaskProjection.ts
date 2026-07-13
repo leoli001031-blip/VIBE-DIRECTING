@@ -104,6 +104,8 @@ export interface AgentCurrentTaskStagedPlanRestore {
 
 export interface AgentCurrentTaskCompletedStep {
   step: AgentCurrentTaskStep;
+  projectId: string;
+  projectRoot?: string;
   projectFactHash: string;
   executionMode?: "dry_run" | "live";
   actionId?: string;
@@ -287,6 +289,7 @@ function latestWaitingConfirmation(
       && confirmation.status === "waiting"
       && projectBindingMatches(confirmation, input)
       && !confirmationSuppressedByClearedPlan(confirmation, input.restoredStagedPlan)
+      && !confirmationConsumedByJob(confirmation, input.jobLedger, input)
     )
     .sort((left, right) => timeValue(right.createdAt) - timeValue(left.createdAt))[0];
 }
@@ -309,6 +312,34 @@ function normalizeProjectRoot(value?: string) {
   return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
 }
 
+function confirmationConsumedByJob(
+  confirmation: AgentCurrentTaskConfirmation,
+  ledger: AgentVideoGenerationJobLedger | undefined,
+  input: Pick<AgentCurrentTaskProjectionInput, "currentProjectId" | "currentProjectRoot" | "currentProjectFactHash">,
+) {
+  return recoveryActionConsumedByJob({
+    actionId: confirmation.actionId,
+    confirmationId: confirmation.confirmationId,
+  }, ledger, input);
+}
+
+function recoveryActionConsumedByJob(
+  recovery: { actionId?: string; confirmationId?: string },
+  ledger: AgentVideoGenerationJobLedger | undefined,
+  input: Pick<AgentCurrentTaskProjectionInput, "currentProjectId" | "currentProjectRoot" | "currentProjectFactHash">,
+) {
+  return (ledger?.jobs || []).some((job) => (
+    job.status !== "staged"
+    && job.projectId === input.currentProjectId
+    && normalizeProjectRoot(job.projectRoot) === normalizeProjectRoot(input.currentProjectRoot)
+    && job.projectFactHash === input.currentProjectFactHash
+    && (
+      Boolean(recovery.confirmationId && job.sourceConfirmationId === recovery.confirmationId)
+      || Boolean(recovery.actionId && job.actionId === recovery.actionId)
+    )
+  ));
+}
+
 function latestCurrentJob(
   ledger: AgentVideoGenerationJobLedger | undefined,
   step: AgentCurrentTaskStep,
@@ -329,13 +360,7 @@ function latestCurrentJob(
 function currentStepCompletion(input: AgentCurrentTaskProjectionInput, step: AgentCurrentTaskStep) {
   return [...(input.completedSteps || [])].reverse().find((completion) => (
     completion.step === step
-    && (
-      step !== "export"
-      || Boolean(
-        input.currentProjectFactHash
-        && completion.projectFactHash === input.currentProjectFactHash
-      )
-    )
+    && projectBindingMatches(completion, input)
   ));
 }
 
@@ -357,6 +382,7 @@ function buildProjection(input: {
   source: AgentCurrentTaskSource;
   step: AgentCurrentTaskStep;
   label?: string;
+  requiresConfirmation?: boolean;
   confirmationKind?: AgentCurrentTaskConfirmationKind;
   confirmationId?: string;
   actionId?: string;
@@ -364,14 +390,15 @@ function buildProjection(input: {
   blockers?: string[];
   facts: AgentCurrentTaskFact[];
 }): AgentCurrentTaskProjection {
+  const requiresConfirmation = input.requiresConfirmation ?? confirmationRequiredForStep(input.step);
   return {
     source: input.source,
     step: input.step,
     label: input.label || labelForStep(input.step),
-    requiresConfirmation: confirmationRequiredForStep(input.step),
+    requiresConfirmation,
     effect: effectForStep(input.step),
     confirmationKind: input.confirmationKind || (
-      confirmationRequiredForStep(input.step) ? "pipeline_action" : undefined
+      requiresConfirmation ? "pipeline_action" : undefined
     ),
     confirmationId: input.confirmationId,
     actionId: input.actionId,
@@ -382,6 +409,17 @@ function buildProjection(input: {
 }
 
 export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectionInput): AgentCurrentTaskProjection {
+  if (input.newVideoDraft?.status === "planning") {
+    return buildProjection({
+      source: "new_video_draft",
+      step: "draft_story",
+      label: labelForStep("draft_story"),
+      requiresConfirmation: false,
+      blockers: [],
+      facts: factsForInput(input),
+    });
+  }
+
   if (input.newVideoDraft?.status === "ready") {
     return buildProjection({
       source: "new_video_draft",
@@ -434,21 +472,23 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
   const observedStep = observationStep(input.projectObservation);
   const step = routeStep || planStep || observedStep || "idle";
 
-  if (stagedPlanIsActive(input.restoredStagedPlan, input) && input.restoredStagedPlan?.step === step) {
-    return buildProjection({
-      source: "staged_plan",
-      step,
-      label: input.restoredStagedPlan.label,
-      confirmationKind: input.restoredStagedPlan.kind,
-      confirmationId: input.restoredStagedPlan.confirmationId,
-      actionId: input.restoredStagedPlan.actionId,
-      blockers: input.restoredStagedPlan.blockers || [],
-      facts: factsForInput(input, input.restoredStagedPlan.facts || []),
-    });
-  }
-
+  const stagedPlan = input.restoredStagedPlan;
+  const stagedPlanMatchesStep = stagedPlanIsActive(stagedPlan, input)
+    && stagedPlan?.step === step
+    && !recoveryActionConsumedByJob({
+      actionId: stagedPlan.actionId,
+      confirmationId: stagedPlan.confirmationId,
+    }, input.jobLedger, input);
   const confirmation = latestWaitingConfirmation(input.timelineConfirmations, step, input);
-  if (confirmation) {
+  const timelineConfirmationIsCurrent = Boolean(
+    confirmation
+      && (
+        !stagedPlanMatchesStep
+        || timeValue(confirmation.createdAt) >= timeValue(stagedPlan?.createdAt)
+      )
+  );
+
+  if (timelineConfirmationIsCurrent && confirmation) {
     return buildProjection({
       source: "timeline_confirmation",
       step,
@@ -461,15 +501,37 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
     });
   }
 
+  if (stagedPlanMatchesStep && stagedPlan) {
+    return buildProjection({
+      source: "staged_plan",
+      step,
+      label: stagedPlan.label,
+      confirmationKind: stagedPlan.kind,
+      confirmationId: stagedPlan.confirmationId,
+      actionId: stagedPlan.actionId,
+      blockers: stagedPlan.blockers || [],
+      facts: factsForInput(input, stagedPlan.facts || []),
+    });
+  }
+
   const job = latestCurrentJob(input.jobLedger, step, input);
   if (job) {
+    const staged = job.status === "staged";
+    const queryRecovery = job.status === "running"
+      && job.kind === "video_submit"
+      && input.pipelinePlan?.currentOperation === "query";
     return buildProjection({
       source: "pipeline_job",
       step,
-      label: labelForStep(step),
-      confirmationId: job.sourceConfirmationId,
+      label: queryRecovery ? "查询视频结果" : labelForStep(step),
+      requiresConfirmation: staged || queryRecovery,
+      confirmationKind: staged || queryRecovery ? "pipeline_action" : undefined,
+      confirmationId: staged ? job.sourceConfirmationId : undefined,
+      actionId: queryRecovery ? undefined : job.actionId,
       jobId: job.jobId,
-      blockers: job.blockers,
+      blockers: staged && !job.sourceConfirmationId
+        ? [...job.blockers, "Staged generation job is missing its confirmation receipt."]
+        : job.blockers,
       facts: factsForInput(input, [
         { label: "任务", value: job.status },
         { label: "Provider", value: job.providerId },
@@ -477,7 +539,9 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
     });
   }
 
-  const exportCompletion = !routeStep && step === "export" ? currentStepCompletion(input, step) : undefined;
+  const exportCompletion = (!routeStep || input.intentRoute?.kind === "status")
+    ? currentStepCompletion(input, "export")
+    : undefined;
   if (exportCompletion) {
     return buildProjection({
       source: "pipeline_plan",

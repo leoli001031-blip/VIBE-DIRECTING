@@ -12,7 +12,7 @@ import type {
 } from "./types";
 
 export const AGENT_VIDEO_PROVIDER_REGISTRY_SCHEMA_VERSION = "agent_video_provider_registry/0.1.0";
-export const AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION = "agent_video_generation_job_ledger/0.3.0";
+export const AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION = "agent_video_generation_job_ledger/0.4.0";
 export const AGENT_VIDEO_PIPELINE_PLAN_SCHEMA_VERSION = "agent_video_pipeline_plan/0.1.0";
 
 export type AgentVideoProviderCapabilityKind =
@@ -72,6 +72,7 @@ export interface AgentVideoProviderCapabilityResolution {
 export type AgentVideoGenerationJobKind = "reference_generation" | "video_submit" | "export";
 export type AgentVideoGenerationJobStatus = "staged" | "confirmed" | "running" | "succeeded" | "failed" | "cancelled";
 export type AgentVideoExecutionMode = "dry_run" | "live";
+export type AgentVideoGenerationJobOperation = "execute" | "query";
 
 export interface AgentVideoGenerationJobStatusEvent {
   status: AgentVideoGenerationJobStatus;
@@ -90,9 +91,10 @@ export type AgentVideoPipelineStepId =
 export interface AgentVideoGenerationJob {
   jobId: string;
   projectId: string;
-  projectRoot?: string;
+  projectRoot: string;
   projectFactHash: string;
   actionId: string;
+  operation: AgentVideoGenerationJobOperation;
   executionMode: AgentVideoExecutionMode;
   providerCalled: boolean;
   kind: AgentVideoGenerationJobKind;
@@ -101,7 +103,7 @@ export interface AgentVideoGenerationJob {
   capability: AgentVideoProviderCapabilityKind;
   pipelineStep: AgentVideoPipelineStepId;
   status: AgentVideoGenerationJobStatus;
-  sourceConfirmationId?: string;
+  sourceConfirmationId: string;
   sourceTimelineId?: string;
   prompt: string;
   inputAssets: string[];
@@ -109,7 +111,7 @@ export interface AgentVideoGenerationJob {
   externalTaskId?: string;
   error?: string;
   blockers: string[];
-  statusHistory?: AgentVideoGenerationJobStatusEvent[];
+  statusHistory: AgentVideoGenerationJobStatusEvent[];
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +139,7 @@ export interface AgentVideoPipelinePlan {
   planId: string;
   createdAt: string;
   currentStep: AgentVideoPipelineStepId;
+  currentOperation?: AgentVideoGenerationJobOperation;
   steps: AgentVideoPipelineStep[];
   blockers: string[];
 }
@@ -149,6 +152,7 @@ export interface BuildAgentVideoPipelinePlanInput {
   localProjectReady: boolean;
   referenceMissingCount: number;
   videoSubmitted: boolean;
+  videoNeedsQuery?: boolean;
 }
 
 export type AgentVideoPipelineAction =
@@ -161,6 +165,7 @@ export interface PlanAgentVideoProductionActionInput {
   plan: AgentVideoPipelinePlan;
   ledger: AgentVideoGenerationJobLedger;
   action: AgentVideoPipelineAction;
+  operation?: AgentVideoGenerationJobOperation;
   actionId: string;
   executionMode?: AgentVideoExecutionMode;
   generatedAt?: string;
@@ -484,6 +489,7 @@ function currentStepFor(input: BuildAgentVideoPipelinePlanInput): AgentVideoPipe
   if (!input.storyConfirmed) return "confirm_story";
   if (!input.localProjectReady) return "choose_save_location";
   if (input.referenceMissingCount > 0) return "prepare_references";
+  if (input.videoNeedsQuery) return "submit_video";
   if (!input.videoSubmitted) return "submit_video";
   return "export";
 }
@@ -530,6 +536,7 @@ export function buildAgentVideoPipelinePlan(input: BuildAgentVideoPipelinePlanIn
     planId: input.planId || "agent_video_pipeline_plan",
     createdAt: input.generatedAt || defaultTimestamp,
     currentStep,
+    currentOperation: input.videoNeedsQuery && currentStep === "submit_video" ? "query" : "execute",
     steps,
     blockers: steps.flatMap((step) => step.status === "current" ? step.blockers : []),
   };
@@ -579,6 +586,10 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
   if (!jobKind) {
     return { status: "blocked", ledger: input.ledger, blockers: ["Action does not create a generation job."] };
   }
+  const operation = input.operation || "execute";
+  if (operation === "query" && input.action !== "submit_video") {
+    return { status: "blocked", ledger: input.ledger, blockers: ["Only a video job can use the query operation."] };
+  }
   const blockers = boundaryBlockers(input.plan, input.action);
   if (blockers.length) {
     return {
@@ -596,14 +607,43 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
   if (identityBlockers.length) {
     return { status: "blocked", ledger: input.ledger, blockers: identityBlockers };
   }
+  const projectRoot = normalizeProjectRoot(input.ledger.projectRoot)!;
   const actionId = input.actionId.trim();
   if (!actionId) {
     return { status: "blocked", ledger: input.ledger, blockers: ["A generation job requires an Agent action id."] };
+  }
+  const sourceConfirmationId = input.sourceConfirmationId?.trim();
+  if (!sourceConfirmationId) {
+    return { status: "blocked", ledger: input.ledger, blockers: ["A generation job requires a source confirmation receipt."] };
   }
   const existingActionJob = [...input.ledger.jobs]
     .reverse()
     .find((job) => job.actionId === actionId && jobMatchesLedgerBinding(job, input.ledger));
   if (existingActionJob) {
+    if (existingActionJob.kind !== jobKind) {
+      return {
+        status: "blocked",
+        ledger: input.ledger,
+        job: existingActionJob,
+        blockers: [`Agent action is already bound to ${existingActionJob.kind}.`],
+      };
+    }
+    if (existingActionJob.operation !== operation) {
+      return {
+        status: "blocked",
+        ledger: input.ledger,
+        job: existingActionJob,
+        blockers: [`Agent action is already bound to the ${existingActionJob.operation} operation.`],
+      };
+    }
+    if (existingActionJob.sourceConfirmationId !== sourceConfirmationId) {
+      return {
+        status: "blocked",
+        ledger: input.ledger,
+        job: existingActionJob,
+        blockers: ["Agent action is already bound to another confirmation receipt."],
+      };
+    }
     if (terminalJobStatuses.has(existingActionJob.status)) {
       return {
         status: "blocked",
@@ -636,9 +676,10 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
   const job: AgentVideoGenerationJob = {
     jobId: `agent_video_job_${compactId(input.plan.planId)}_${compactId(input.action)}_${String(input.ledger.jobs.length + 1).padStart(3, "0")}`,
     projectId: input.ledger.projectId,
-    projectRoot: input.ledger.projectRoot,
+    projectRoot,
     projectFactHash: input.ledger.projectFactHash,
     actionId,
+    operation,
     executionMode: input.executionMode || "dry_run",
     providerCalled: false,
     kind: jobKind,
@@ -647,7 +688,7 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
     capability: capability.capability,
     pipelineStep: input.action === "prepare_references" ? "prepare_references" : input.action === "submit_video" ? "submit_video" : "export",
     status: "staged",
-    sourceConfirmationId: input.sourceConfirmationId,
+    sourceConfirmationId,
     sourceTimelineId: input.sourceTimelineId,
     prompt: input.prompt || "",
     inputAssets: uniqueInOrder(input.inputAssets || []),

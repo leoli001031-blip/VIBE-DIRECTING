@@ -6,6 +6,7 @@ import {
   buildProjectRuntimeStateFromProjectVibe,
   clearProjectAgentStagedPlanDraft,
   hashProjectVibeFacts,
+  migrateProjectAgentStagedPlanDraftToProjectRoot,
   openProjectAgentStagedPlanDraft,
   parseProjectVibeText,
   projectVibeFileName,
@@ -46,6 +47,7 @@ function createLocalStorageShim() {
 const generatedAt = "2026-05-31T05:00:00.000Z";
 const projectRoot = "/tmp/director-agent-staged-plan";
 const appSource = readFileSync("src/App.tsx", "utf8");
+const stagedPlanSource = readFileSync("src/project/projectAgentStagedPlanDraft.ts", "utf8");
 const fixtureText = readFileSync("test-fixtures/projects/agent-loop-minimal/project.vibe", "utf8");
 const opened = parseProjectVibeText(fixtureText);
 assert(opened.ok && opened.project, `fixture should open: ${opened.errors.join("; ")}`);
@@ -88,6 +90,7 @@ assert(/fact_hash_mismatch[\s\S]*项目已经变化，上次待确认计划已�
 assert(/project_mismatch[\s\S]*项目已切换，上次待确认计划未恢复/.test(appSource), "project mismatches should explain why an Agent staged plan was not restored");
 assert(/projectRecordLabel:\s*agentStagedPlanRestoreNotice\(stagedPlanOpen\)/.test(appSource), "non-restored Agent staged plans should surface a compact notice in the Agent result");
 assert(/projectTaskLabel:\s*stagedPlanOpen\.ok \? "继续确认上次动作"/.test(appSource), "restored Agent staged plans should tell the creator they can continue confirmation");
+assert(/if \(runtimeWriteOk\) \{[\s\S]*return \{[\s\S]*status: "written"[\s\S]*const writeResult = await writeProjectVibeSidecarText/.test(stagedPlanSource), "an atomic runtime staged-plan write must return before the fallback writer");
 
 const stagedAssetLoop = runDirectorProductAgentLoop({
   project,
@@ -200,7 +203,7 @@ try {
     projectRoot: "/tmp/another-project",
     now: "2026-05-31T06:00:00.000Z",
   });
-  assert(wrongRootRestore.status === "project_mismatch", "another project root should invalidate the staged plan");
+  assert(wrongRootRestore.status === "root_mismatch", "another project root should invalidate the staged plan");
 
   const expiredRestore = await openProjectAgentStagedPlanDraft(target, {
     project,
@@ -215,6 +218,34 @@ try {
     now: "2026-05-31T06:00:00.000Z",
   });
   assert(directRestore.ok && directRestore.status === "restored", "pure restore helper should accept a matching draft");
+
+  const browserDraft = {
+    ...draft,
+    projectRoot: undefined,
+    action: {
+      ...draft.action!,
+      sourceContext: {
+        ...draft.action!.sourceContext,
+        projectRoot: ".vibe-runtime/browser-projects/staged-plan-draft",
+      },
+    },
+  };
+  const migratedBrowserDraft = migrateProjectAgentStagedPlanDraftToProjectRoot(browserDraft, {
+    project,
+    sourceProjectRoot: undefined,
+    targetProjectRoot: projectRoot,
+    projectPath: projectVibeFileName,
+    now: "2026-05-31T06:00:00.000Z",
+  });
+  assert(migratedBrowserDraft.ok && migratedBrowserDraft.draft?.projectRoot === projectRoot, "a matching browser staged plan should explicitly rebind to the chosen local root");
+  assert(migratedBrowserDraft.draft?.action?.sourceContext.projectRoot === projectRoot, "staged-plan migration must rebind the nested Agent action root");
+
+  const unboundLocalDraft = restoreProjectAgentStagedPlanDraft(browserDraft, {
+    project,
+    projectRoot,
+    now: "2026-05-31T06:00:00.000Z",
+  });
+  assert(unboundLocalDraft.status === "root_mismatch", "an unbound browser draft must not restore directly into a local project without explicit migration");
 
   const privateTmpRestore = restoreProjectAgentStagedPlanDraft({
     ...draft,

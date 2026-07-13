@@ -121,7 +121,7 @@ checkWithin(
 );
 checkWithin(
   agentPanelProjectionSource,
-  /已加入项目计划[\s\S]*预览已生成、等待复核/,
+  /const PROJECT_PLAN_ADDED_LABEL = "故事已确认"[\s\S]*const PREVIEW_READY_REVIEW_LABEL = "预览已生成、等待确认"/,
   "Prototype demo status must use creator-facing project/preview copy",
 );
 checkWithin(
@@ -216,7 +216,7 @@ checkWithin(
 );
 checkWithin(
   app,
-  /function\s+prototypeAgentStageProjectRecordSummary[\s\S]*确认后留下项目记录[\s\S]*projectTaskLabel/,
+  /function\s+prototypeAgentStageProjectRecordSummary[\s\S]*确认后保存到项目[\s\S]*projectTaskLabel/,
   "App.tsx must derive pre-confirmation Project.vibe impact summaries from the staged creative loop",
 );
 checkWithin(
@@ -236,7 +236,7 @@ checkWithin(
 );
 checkWithin(
   app,
-  /项目记录已保留，预览生成需要复核/,
+  /项目已保留，预览需要确认/,
   "App.tsx prototype failure copy must explain preserved project with preview failure",
 );
 checkWithin(
@@ -275,7 +275,7 @@ check(
 );
 checkWithin(
   app,
-  /async function runLocalExportAction\(input\?: \{ agentToolTrace\?: ExportActionState\["agentToolTrace"\] \}\)[\s\S]*return nextState[\s\S]*return failedState/,
+  /async function runLocalExportAction\(input\?: \{ agentToolTrace\?: ExportActionState\["agentToolTrace"\]; signal\?: AbortSignal \}\)[\s\S]*signal: input\?\.signal[\s\S]*setExportActionState\(nextState\)[\s\S]*return nextState[\s\S]*setExportActionState\(failedState\)[\s\S]*return failedState/,
   "App.tsx Agent-triggered export must return the structured export action result",
 );
 checkWithin(
@@ -309,6 +309,11 @@ checkWithin(
   "Agent preview callback result must expose creator-facing Project.vibe writeback summaries",
 );
 checkWithin(
+  agentPanelProjectionSource,
+  /export type PreviewPrototypeAgentDemoResult[\s\S]*projectFactHash\?: string/,
+  "Agent preview callback result must expose the Project.vibe fact hash produced by confirmed writeback",
+);
+checkWithin(
   app,
   /Promise<PreviewPrototypeAgentDemoResult>/,
   "App.tsx Agent confirmation callback must return the product Agent loop result contract",
@@ -327,6 +332,11 @@ checkWithin(
   app,
   /return \{[\s\S]*agentToolHandoff:\s*confirmedAgentToolHandoff[\s\S]*projectVibeWritten:[\s\S]*\.\.\.projectRecordSummary/,
   "App.tsx Agent confirmation callback must return the handoff and Project.vibe summary chosen by the product Agent loop",
+);
+checkWithin(
+  preparePrototypeAgentDemo,
+  /prototypeProjectVibeRef\.current = creativeLoop\.nextProject[\s\S]*setPrototypeProjectVibe\(creativeLoop\.nextProject\)[\s\S]*confirmedAgentToolHandoff\.status === "ready"[\s\S]*projectFactHash:\s*confirmedSaveResult\.factHash/,
+  "App.tsx must publish confirmed Project.vibe facts synchronously and return their fact hash before tool execution",
 );
 checkWithin(
   preparePrototypeAgentDemo,

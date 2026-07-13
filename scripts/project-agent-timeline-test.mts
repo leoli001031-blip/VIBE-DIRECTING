@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  bindProjectAgentTimelineEntriesToIdentity,
   createProjectVibe,
+  migrateProjectAgentTimelineEntriesToProjectRoot,
   openProjectAgentTimeline,
   projectAgentTimelinePath,
   projectVibeFileName,
@@ -188,5 +190,73 @@ const rootRestored = await openProjectAgentTimeline({
 assert.equal(rootRestored.ok, true);
 assert.equal(rootRestored.status, "restored");
 assert.equal(rootRestored.timeline.entries.some((entry) => entry.id === "agent_action_report_relative_root"), true);
+
+const boundTurnEntries = bindProjectAgentTimelineEntriesToIdentity([
+  {
+    id: "current_turn_confirmation",
+    type: "confirmation_request",
+    createdAt: "2026-06-18T08:00:00.500Z",
+    title: "确认生成参考",
+    body: "等你确认后再执行。",
+    status: "waiting",
+    details: { expectedReceipt: "image_reference_receipt" },
+  },
+] satisfies VibeAgentTimelineEntry[], {
+  projectId: project.manifest.projectId,
+  projectRoot: "/private/tmp/agent-timeline-local-project",
+  projectFactHash: "current-project-facts",
+});
+assert.equal(boundTurnEntries[0]?.details?.projectId, project.manifest.projectId);
+assert.equal(boundTurnEntries[0]?.details?.projectRoot, "/tmp/agent-timeline-local-project");
+assert.equal(boundTurnEntries[0]?.details?.projectFactHash, "current-project-facts");
+assert.equal(boundTurnEntries[0]?.details?.expectedReceipt, "image_reference_receipt");
+
+const migratedEntries = migrateProjectAgentTimelineEntriesToProjectRoot([
+  ...timeline.entries,
+  {
+    id: "stale_fact_confirmation",
+    type: "confirmation_request",
+    createdAt: "2026-06-18T08:00:01.000Z",
+    title: "旧确认",
+    body: "旧项目事实的确认不应迁移。",
+    status: "waiting",
+    details: {
+      projectId: project.manifest.projectId,
+      projectFactHash: "older-project-facts",
+    },
+  },
+  {
+    id: "other_project_confirmation",
+    type: "confirmation_request",
+    createdAt: "2026-06-18T08:00:02.000Z",
+    title: "其他项目确认",
+    body: "其他项目的确认不应迁移。",
+    status: "waiting",
+    details: {
+      projectId: "another-project",
+      projectFactHash: "current-project-facts",
+    },
+  },
+  {
+    id: "unbound_waiting_confirmation",
+    type: "confirmation_request",
+    createdAt: "2026-06-18T08:00:03.000Z",
+    title: "无身份确认",
+    body: "缺少项目事实身份的确认不应迁移。",
+    status: "waiting",
+  },
+] satisfies VibeAgentTimelineEntry[], {
+  projectId: project.manifest.projectId,
+  sourceProjectRoot: undefined,
+  targetProjectRoot: "/tmp/agent-timeline-local-project",
+  projectFactHash: "current-project-facts",
+});
+assert.equal(migratedEntries.some((entry) => entry.id === "agent_user_continue"), true);
+assert.equal(migratedEntries.some((entry) => entry.id === "stale_fact_confirmation"), false);
+assert.equal(migratedEntries.some((entry) => entry.id === "other_project_confirmation"), false);
+assert.equal(migratedEntries.some((entry) => entry.id === "unbound_waiting_confirmation"), false);
+assert.equal(migratedEntries.every((entry) => entry.details?.projectId === project.manifest.projectId), true);
+assert.equal(migratedEntries.every((entry) => entry.details?.projectRoot === "/tmp/agent-timeline-local-project"), true);
+assert.equal(migratedEntries.every((entry) => entry.details?.projectFactHash === "current-project-facts"), true);
 
 console.log("project-agent-timeline-test: ok");

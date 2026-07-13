@@ -109,11 +109,14 @@ import type { DirectorTextQaReport } from "./core/directorTextQa";
 import {
   applyProjectVibeTransaction,
   appendProjectAgentActionLogItem,
+  bindProjectAgentTimelineEntriesToIdentity,
   buildProjectRuntimeStateFromProjectVibe,
   buildProjectAgentStagedPlanDraft,
   clearProjectAgentStagedPlanDraft,
   createProjectVibe,
   hashProjectVibeFacts,
+  migrateProjectAgentStagedPlanDraftToProjectRoot,
+  migrateProjectAgentTimelineEntriesToProjectRoot,
   openProjectAgentGenerationJobLedger,
   openProjectAgentActionLog,
   openProjectAgentTimeline,
@@ -134,9 +137,13 @@ import {
 import type { AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
 import { buildProviderReviewPromotionTransaction } from "./core/providerReviewPromotion";
 import {
+  browserProjectVibeDraftStorageKeyPrefix as browserProjectDraftStorageKeyPrefix,
+  forgetActiveBrowserProjectVibeDraftStorageKey,
   forgetBrowserProjectVibeDraft,
   openProjectVibeDraft,
   projectVibeDraftTargetId as buildProjectVibeDraftTargetId,
+  readActiveBrowserProjectVibeDraftStorageKey,
+  rememberActiveBrowserProjectVibeDraftStorageKey,
   saveProjectVibeDraft,
   type ProjectVibeDraftTarget,
 } from "./project/projectVibeDraftStore";
@@ -509,6 +516,24 @@ function newVideoDraftSectionsForTopNav(shotCount: number): RuntimeView["storySe
 function timelineEntryTimeMs(entry: Pick<VibeAgentTimelineEntry, "createdAt">) {
   const time = Date.parse(entry.createdAt);
   return Number.isFinite(time) ? time : 0;
+}
+
+function bindVibeAgentTurnTimelineToProjectIdentity(
+  timeline: VibeAgentTimelineDocument,
+  generatedAt: string,
+  input: { projectId: string; projectRoot?: string; projectFactHash: string },
+): VibeAgentTimelineDocument {
+  const currentTurnEntries = bindProjectAgentTimelineEntriesToIdentity(
+    timeline.entries.filter((entry) => entry.createdAt === generatedAt),
+    input,
+  );
+  const currentTurnEntriesById = new Map(currentTurnEntries.map((entry) => [entry.id, entry]));
+  return {
+    ...timeline,
+    projectId: input.projectId,
+    projectRoot: input.projectRoot,
+    entries: timeline.entries.map((entry) => currentTurnEntriesById.get(entry.id) || entry),
+  };
 }
 
 function agentStagedPlanSupersededByNewVideoDraft(
@@ -1893,7 +1918,6 @@ function formatFrameRef(ref?: VideoExecutionPreviewRow["subagentPacketPreview"][
 const rememberedProjectRootStorageKey = "vibe-director:last-project-root";
 const recentProjectSelectionsStorageKey = "vibe-director:recent-projects";
 const autoRestoreRememberedProjectStorageKey = "vibe-director:auto-restore-project";
-const browserProjectDraftStorageKeyPrefix = "vibe-director:project-vibe:browser-draft";
 
 type RememberedProjectSelection = ProjectRootDialogSelection & {
   updatedAt?: string;
@@ -1923,10 +1947,15 @@ function initialBrowserProjectDraftStorageKey() {
   const params = new URLSearchParams(window.location.search);
   const caseId = params.get("case")?.trim();
   const explicitFresh = isFreshProjectSessionRequested();
+  const explicitSession = caseId || explicitFresh || params.has("ts") || params.has("session");
+  if (!explicitSession) {
+    const activeStorageKey = readActiveBrowserProjectVibeDraftStorageKey();
+    if (activeStorageKey) return activeStorageKey;
+  }
   const sessionId = explicitFresh
     ? String(Date.now())
     : params.get("ts")?.trim() || params.get("session")?.trim() || String(Date.now());
-  if (caseId || explicitFresh || params.has("ts") || params.has("session")) {
+  if (explicitSession) {
     return `${browserProjectDraftStorageKeyPrefix}:session:${caseId || "fresh"}:${sessionId}`;
   }
   return `${browserProjectDraftStorageKeyPrefix}:session:${sessionId}`;
@@ -3808,7 +3837,7 @@ function App() {
     if (result.status === "missing" || result.status === "cleared") return `已恢复${projectRecordLabel}`;
     if (result.status === "expired") return "上次待确认计划已过期，已从当前项目继续。";
     if (result.status === "fact_hash_mismatch") return "项目已经变化，上次待确认计划已失效。";
-    if (result.status === "project_mismatch" || result.status === "action_context_mismatch") return "项目已切换，上次待确认计划未恢复。";
+    if (result.status === "project_mismatch" || result.status === "root_mismatch" || result.status === "action_context_mismatch") return "项目已切换，上次待确认计划未恢复。";
     if (result.status === "invalid") return "上次待确认计划无法读取，已从当前项目继续。";
     return "上次待确认计划未恢复，已从当前项目继续。";
   }
@@ -4037,6 +4066,9 @@ function App() {
     });
     if (!saveResult.ok) {
       throw new Error(saveResult.errors[0] || "草案保存失败");
+    }
+    if (projectDraftUsesBrowserStorage(draftTarget, saveResult.mode)) {
+      rememberActiveBrowserProjectVibeDraftStorageKey(draftTarget.storageKey);
     }
     setLoadedPrototypeProjectDraftTargetId(draftTargetId);
     if (draftTarget.projectRoot) {
@@ -4645,17 +4677,26 @@ function App() {
       generatedAt: now,
       previousTimeline: existingAgentTimeline.timeline,
     });
-    await saveAgentTimelineDocumentQueued(vibeAgentTurn.timeline, "Failed to save Agent timeline");
-    const projectRecordSummary = prototypeAgentStageProjectRecordSummary(productAgentLoop.stageResult);
-    if (productAgentLoop.status === "awaiting_confirmation" || productAgentLoop.status === "blocked") {
-      const stagedPlanProjectOpen = await openProjectVibeDraft(prototypeProjectDraftTarget);
-      const stagedPlanSourceProject = stagedPlanProjectOpen.ok
-        && stagedPlanProjectOpen.project
-        && stagedPlanProjectOpen.project.manifest.projectId === sourceProject.manifest.projectId
-        ? stagedPlanProjectOpen.project
-        : prototypeProjectVibeRef.current.manifest.projectId === sourceProject.manifest.projectId
+    const stagedPlanProjectOpen = await openProjectVibeDraft(prototypeProjectDraftTarget);
+    const stagedPlanSourceProject = stagedPlanProjectOpen.ok
+      && stagedPlanProjectOpen.project
+      && stagedPlanProjectOpen.project.manifest.projectId === sourceProject.manifest.projectId
+      ? stagedPlanProjectOpen.project
+      : prototypeProjectVibeRef.current.manifest.projectId === sourceProject.manifest.projectId
         ? prototypeProjectVibeRef.current
         : sourceProject;
+    const boundAgentTimeline = bindVibeAgentTurnTimelineToProjectIdentity(
+      vibeAgentTurn.timeline,
+      now,
+      {
+        projectId: timelineProject.manifest.projectId,
+        projectRoot: prototypeProjectDraftTarget.projectRoot,
+        projectFactHash: hashProjectVibeFacts(stagedPlanSourceProject),
+      },
+    );
+    await saveAgentTimelineDocumentQueued(boundAgentTimeline, "Failed to save Agent timeline");
+    const projectRecordSummary = prototypeAgentStageProjectRecordSummary(productAgentLoop.stageResult);
+    if (productAgentLoop.status === "awaiting_confirmation" || productAgentLoop.status === "blocked") {
       const draft = buildProjectAgentStagedPlanDraft({
         project: stagedPlanSourceProject,
         projectRoot: prototypeProjectDraftTarget.projectRoot,
@@ -4685,7 +4726,7 @@ function App() {
     return {
       agentActionEnvelope: productAgentLoop.action,
       agentToolHandoff: productAgentLoop.toolHandoff,
-      agentTimelineEntries: vibeAgentTurn.timeline.entries,
+      agentTimelineEntries: boundAgentTimeline.entries,
       agentKernelTurn: vibeAgentTurn.kernelTurn,
       qaFeedback: productAgentLoop.qaFeedback,
       ...projectRecordSummary,
@@ -4765,9 +4806,18 @@ function App() {
       generatedAt: input.generatedAt,
       previousTimeline: existingAgentTimeline.timeline,
     });
-    await saveAgentTimelineDocumentQueued(vibeAgentTurn.timeline, "Failed to save confirmed Agent timeline");
+    const boundAgentTimeline = bindVibeAgentTurnTimelineToProjectIdentity(
+      vibeAgentTurn.timeline,
+      input.generatedAt,
+      {
+        projectId: timelineProject.manifest.projectId,
+        projectRoot: prototypeProjectDraftTarget.projectRoot,
+        projectFactHash: hashProjectVibeFacts(input.project),
+      },
+    );
+    await saveAgentTimelineDocumentQueued(boundAgentTimeline, "Failed to save confirmed Agent timeline");
     return {
-      entries: vibeAgentTurn.timeline.entries,
+      entries: boundAgentTimeline.entries,
       kernelTurn: vibeAgentTurn.kernelTurn,
     };
   }
@@ -4989,6 +5039,7 @@ function App() {
           console.warn("Failed to clear Agent staged plan draft", clearDraftResult.errors[0]);
         }
       }
+      prototypeProjectVibeRef.current = creativeLoop.nextProject;
       setPrototypeProjectVibe(creativeLoop.nextProject);
       prototypeProjectDraftStatusRef.current = ({
         status: confirmedSaveResult.status,
@@ -5055,6 +5106,7 @@ function App() {
           agentToolHandoff: confirmedAgentToolHandoff,
           agentTimelineEntries: confirmedAgentTurn.entries,
           agentKernelTurn: confirmedAgentTurn.kernelTurn,
+          projectFactHash: confirmedSaveResult.factHash,
           projectVibeWritten: confirmedSaveResult.ok,
           ...projectRecordSummary,
           status: "ready",
@@ -5107,6 +5159,7 @@ function App() {
           agentToolHandoff: confirmedAgentToolHandoff,
           agentTimelineEntries: confirmedAgentTurn.entries,
           agentKernelTurn: confirmedAgentTurn.kernelTurn,
+          projectFactHash: confirmedSaveResult.factHash,
           projectVibeWritten: confirmedSaveResult.ok,
           ...projectRecordSummary,
           status: "ready",
@@ -5148,6 +5201,7 @@ function App() {
         selection: confirmedSelection,
       });
 
+      prototypeProjectVibeRef.current = result.nextProject;
       setPrototypeProjectVibe(result.nextProject);
       prototypeProjectDraftStatusRef.current = ({
         status: saveResult.status,
@@ -5186,6 +5240,7 @@ function App() {
         agentToolHandoff: confirmedAgentToolHandoff,
         agentTimelineEntries: confirmedAgentTurn.entries,
         agentKernelTurn: confirmedAgentTurn.kernelTurn,
+        projectFactHash: saveResult.factHash,
         projectVibeWritten: saveResult.ok,
         ...projectRecordSummary,
         status: "preview_ready",
@@ -5395,6 +5450,9 @@ function App() {
     if (!saveResult.ok) {
       throw new Error(saveResult.errors[0] || "故事保存位置没有准备成功。");
     }
+    if (!prototypeProjectDraftTarget.projectRoot) {
+      forgetActiveBrowserProjectVibeDraftStorageKey(prototypeProjectDraftTarget.storageKey);
+    }
 
     setProjectPathInput(selection.projectRoot);
     setLoadedPrototypeProjectDraftTargetId(options.loadedTargetId || buildProjectVibeDraftTargetId(target));
@@ -5451,7 +5509,16 @@ function App() {
       },
     });
 
-    if (restoredAgentTimelineEntries.length > 0) {
+    const migratedAgentTimelineEntries = migrateProjectAgentTimelineEntriesToProjectRoot(
+      restoredAgentTimelineEntries,
+      {
+        projectId: currentProject.manifest.projectId,
+        sourceProjectRoot: prototypeProjectDraftTarget.projectRoot,
+        targetProjectRoot: selection.projectRoot,
+        projectFactHash: hashProjectVibeFacts(currentProject),
+      },
+    );
+    if (migratedAgentTimelineEntries.length > 0) {
       const migratedTimeline = appendVibeAgentTimelineEntries(
         createVibeAgentTimelineDocument({
           projectId: currentProject.manifest.projectId,
@@ -5459,7 +5526,7 @@ function App() {
           projectRoot: selection.projectRoot,
           generatedAt,
         }),
-        restoredAgentTimelineEntries,
+        migratedAgentTimelineEntries,
         generatedAt,
       );
       const saveAgentTimelineResult = await saveProjectAgentTimeline(target, migratedTimeline);
@@ -5468,7 +5535,35 @@ function App() {
       } else {
         setRestoredAgentTimelineEntries(migratedTimeline.entries);
       }
+    } else {
+      setRestoredAgentTimelineEntries([]);
     }
+
+    if (restoredAgentStagedPlanDraft?.status === "active") {
+      const migratedStagedPlan = migrateProjectAgentStagedPlanDraftToProjectRoot(
+        restoredAgentStagedPlanDraft,
+        {
+          project: currentProject,
+          sourceProjectRoot: prototypeProjectDraftTarget.projectRoot,
+          targetProjectRoot: selection.projectRoot,
+          projectPath,
+          now: generatedAt,
+        },
+      );
+      if (migratedStagedPlan.ok && migratedStagedPlan.draft) {
+        const saveStagedPlanResult = await saveProjectAgentStagedPlanDraft(target, migratedStagedPlan.draft);
+        if (!saveStagedPlanResult.ok) {
+          console.warn("Failed to migrate Agent staged plan to selected project folder", saveStagedPlanResult.errors[0]);
+        } else {
+          setRestoredAgentStagedPlanDraft(migratedStagedPlan.draft);
+        }
+      } else {
+        setRestoredAgentStagedPlanDraft(undefined);
+      }
+    }
+
+    // Generation jobs are never rebound across roots; browser drafts cannot stage them.
+    setRestoredAgentGenerationJobLedger(undefined);
 
     try {
       await connectCurrentProject({
@@ -5836,6 +5931,7 @@ function App() {
         // Runtime binding and local remembered state are still cleared below.
       }
     } else {
+      forgetActiveBrowserProjectVibeDraftStorageKey(draftTargetToForget.storageKey);
       forgetBrowserProjectVibeDraft(draftTargetToForget);
     }
     setRecentProjectSelections(clearRememberedProjectRoot(projectRootToForget));

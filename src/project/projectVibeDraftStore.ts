@@ -67,6 +67,50 @@ export interface ProjectVibeSidecarTextResult {
 
 type BrowserStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+export const browserProjectVibeDraftStorageKeyPrefix = "vibe-director:project-vibe:browser-draft";
+const activeBrowserProjectVibeDraftStorageKey = `${browserProjectVibeDraftStorageKeyPrefix}:active`;
+
+function validBrowserProjectVibeDraftStorageKey(value?: string | null): string | undefined {
+  const storageKey = value?.trim();
+  if (!storageKey || storageKey === activeBrowserProjectVibeDraftStorageKey) return undefined;
+  return storageKey.startsWith(`${browserProjectVibeDraftStorageKeyPrefix}:`) ? storageKey : undefined;
+}
+
+export function readActiveBrowserProjectVibeDraftStorageKey(): string | undefined {
+  const storage = browserStorage();
+  if (!storage) return undefined;
+  try {
+    return validBrowserProjectVibeDraftStorageKey(storage.getItem(activeBrowserProjectVibeDraftStorageKey));
+  } catch {
+    return undefined;
+  }
+}
+
+export function rememberActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): boolean {
+  const validStorageKey = validBrowserProjectVibeDraftStorageKey(storageKey);
+  const storage = browserStorage();
+  if (!validStorageKey || !storage) return false;
+  try {
+    storage.setItem(activeBrowserProjectVibeDraftStorageKey, validStorageKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function forgetActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): boolean {
+  const storage = browserStorage();
+  if (!storage) return false;
+  try {
+    const activeStorageKey = readActiveBrowserProjectVibeDraftStorageKey();
+    if (storageKey && activeStorageKey !== validBrowserProjectVibeDraftStorageKey(storageKey)) return false;
+    storage.removeItem(activeBrowserProjectVibeDraftStorageKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function projectVibeDraftTargetId(target: ProjectVibeDraftTarget = {}): string {
   if (target.projectRoot && (electronBridge() || runtimeProjectFileAccessAvailable(target))) {
     return `project-file:${normalizeProjectRootForDisplay(target.projectRoot)}/${projectPathForTarget(target)}`;

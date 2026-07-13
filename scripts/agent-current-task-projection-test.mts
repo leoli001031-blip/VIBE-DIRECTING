@@ -67,6 +67,7 @@ function plan(input: {
   localProjectReady: boolean;
   referenceMissingCount: number;
   videoSubmitted: boolean;
+  videoNeedsQuery?: boolean;
 }) {
   return buildAgentVideoPipelinePlan({
     planId: "agent_current_task_projection_test",
@@ -76,8 +77,29 @@ function plan(input: {
     localProjectReady: input.localProjectReady,
     referenceMissingCount: input.referenceMissingCount,
     videoSubmitted: input.videoSubmitted,
+    videoNeedsQuery: input.videoNeedsQuery,
   });
 }
+
+const planningDraftProjection = buildAgentCurrentTaskProjection({
+  newVideoDraft: {
+    status: "planning",
+    title: "这段显示文案不应创建确认边界",
+    confirmationId: "stale_planning_confirmation",
+    draftShotCount: 2,
+  },
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: false,
+    localProjectReady: false,
+    referenceMissingCount: 2,
+    videoSubmitted: false,
+  }),
+});
+assert(planningDraftProjection.step === "draft_story", "a planning draft should remain draft_story even if downstream plan state is confirmable");
+assert(planningDraftProjection.source === "new_video_draft", "a planning draft should own the current task while planning is active");
+assert(!planningDraftProjection.requiresConfirmation, "a planning draft must not expose a confirmation boundary");
+assert(!planningDraftProjection.confirmationId, "a planning draft must not preserve a stale confirmation id");
 
 const newVideoDraftProjection = buildAgentCurrentTaskProjection({
   newVideoDraft: {
@@ -311,15 +333,57 @@ const completedExportProjection = buildAgentCurrentTaskProjection({
     referenceMissingCount: 0,
     videoSubmitted: true,
   }),
+  currentProjectId: "project-current",
+  currentProjectRoot: "/tmp/project-current",
   currentProjectFactHash: "facts-current",
   completedSteps: [{
     step: "export",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
     projectFactHash: "facts-current",
   }],
 });
 assert(completedExportProjection.step === "idle", "completed export should not remain the current confirmation task");
 assert(!completedExportProjection.requiresConfirmation, "completed export should not require another confirmation");
 assert(!completedExportProjection.confirmationId, "completed export should not expose a stale confirmation id");
+
+const completedExportClosesEarlierPipelineProjection = buildAgentCurrentTaskProjection({
+  projectObservation: missingReferencesObservation,
+  intentRoute: {
+    kind: "status",
+    label: "检查项目",
+    confirmation: "reference_generation",
+    plan: ["读取当前项目", "先生成参考"],
+  },
+  pipelinePlan: missingReferencesPlan,
+  currentProjectId: "project-current",
+  currentProjectRoot: "/tmp/project-current",
+  currentProjectFactHash: "facts-current",
+  restoredStagedPlan: {
+    status: "cleared",
+    clearedAt: "2026-07-07T00:01:00.000Z",
+  },
+  timelineConfirmations: [{
+    confirmationId: "old_reference_confirmation_before_export",
+    step: "prepare_references",
+    status: "waiting",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
+    projectFactHash: "facts-current",
+    createdAt: "2026-07-07T00:00:30.000Z",
+  }],
+  completedSteps: [{
+    step: "export",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
+    projectFactHash: "facts-current",
+    executionMode: "live",
+    completedAt: "2026-07-07T00:01:00.000Z",
+  }],
+});
+assert(completedExportClosesEarlierPipelineProjection.step === "idle", "a current-fact export completion must close earlier prerequisite steps after restart");
+assert(!completedExportClosesEarlierPipelineProjection.requiresConfirmation, "a completed current-fact export must not revive an older prerequisite confirmation");
+assert(!completedExportClosesEarlierPipelineProjection.confirmationId, "a completed current-fact export must leave older confirmation cards as history");
 
 const validatedExportProjection = buildAgentCurrentTaskProjection({
   pipelinePlan: plan({
@@ -329,9 +393,13 @@ const validatedExportProjection = buildAgentCurrentTaskProjection({
     referenceMissingCount: 0,
     videoSubmitted: true,
   }),
+  currentProjectId: "project-current",
+  currentProjectRoot: "/tmp/project-current",
   currentProjectFactHash: "facts-current",
   completedSteps: [{
     step: "export",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
     projectFactHash: "facts-current",
     executionMode: "dry_run",
   }],
@@ -348,9 +416,13 @@ const staleFactExportCompletionProjection = buildAgentCurrentTaskProjection({
     referenceMissingCount: 0,
     videoSubmitted: true,
   }),
+  currentProjectId: "project-current",
+  currentProjectRoot: "/tmp/project-current",
   currentProjectFactHash: "facts-current",
   completedSteps: [{
     step: "export",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
     projectFactHash: "facts-before-project-change",
   }],
 });
@@ -480,6 +552,27 @@ const matchingSubmitConfirmation = buildAgentCurrentTaskProjection({
 assert(matchingSubmitConfirmation.source === "timeline_confirmation", "matching waiting confirmation should restore");
 assert(matchingSubmitConfirmation.confirmationId === "current_submit_video_confirmation", "matching waiting confirmation id should be preserved");
 
+const renamedSubmitConfirmation = buildAgentCurrentTaskProjection({
+  projectObservation: observation({
+    localProjectReady: true,
+    shotCount: 2,
+    referenceMissingCount: 0,
+    referenceReadyCount: 2,
+  }),
+  pipelinePlan: submitVideoPlan,
+  timelineConfirmations: [{
+    confirmationId: "current_submit_video_confirmation",
+    step: "submit_video",
+    status: "waiting",
+    label: "把当前镜头交给生成队列",
+    createdAt: "2026-07-07T00:00:41.000Z",
+  }],
+});
+assert(renamedSubmitConfirmation.step === matchingSubmitConfirmation.step, "changing confirmation display copy must not change the projected step");
+assert(renamedSubmitConfirmation.source === matchingSubmitConfirmation.source, "changing confirmation display copy must not change the projection source");
+assert(renamedSubmitConfirmation.confirmationId === matchingSubmitConfirmation.confirmationId, "changing confirmation display copy must not change the structured confirmation identity");
+assert(renamedSubmitConfirmation.requiresConfirmation === matchingSubmitConfirmation.requiresConfirmation, "changing confirmation display copy must not change the confirmation boundary");
+
 let videoLedger: AgentVideoGenerationJobLedger = createAgentVideoGenerationJobLedger({
   ledgerId: "agent_current_task_projection_video_ledger",
   projectId: "agent-current-task-project",
@@ -507,6 +600,10 @@ const jobProjection = buildAgentCurrentTaskProjection({
 });
 assert(jobProjection.source === "pipeline_job", "non-terminal pipeline job should become the current task source");
 assert(jobProjection.jobId === stagedVideo.job!.jobId, "current job id should be exposed");
+assert(jobProjection.requiresConfirmation, "a staged pipeline job must remain behind its confirmation boundary");
+assert(jobProjection.confirmationId === "submit_video_confirmation", "a staged job must restore its source confirmation id");
+assert(jobProjection.actionId === "submit_video_action", "a staged job must restore its Agent action id");
+assert(jobProjection.confirmationKind === "pipeline_action", "a staged job must restore as a pipeline confirmation");
 
 const confirmationBeforeJobProjection = buildAgentCurrentTaskProjection({
   pipelinePlan: submitVideoPlan,
@@ -583,6 +680,37 @@ const confirmedVideo = transitionAgentVideoGenerationJob({
   generatedAt: "2026-07-07T00:00:51.000Z",
 });
 assert(confirmedVideo.ok, "staged video job should confirm");
+const confirmedVideoProjection = buildAgentCurrentTaskProjection({
+  pipelinePlan: submitVideoPlan,
+  jobLedger: confirmedVideo.ledger,
+  currentProjectId: "agent-current-task-project",
+  currentProjectRoot: "/tmp/agent-current-task-project",
+  currentProjectFactHash: "agent-current-task-facts",
+  restoredStagedPlan: {
+    status: "restored",
+    step: "submit_video",
+    actionId: "submit_video_action",
+    confirmationId: "restored_submit_video_plan",
+    projectId: "agent-current-task-project",
+    projectRoot: "/tmp/agent-current-task-project",
+    projectFactHash: "agent-current-task-facts",
+    createdAt: "2026-07-07T00:00:50.000Z",
+  },
+  timelineConfirmations: [{
+    confirmationId: "submit_video_confirmation",
+    step: "submit_video",
+    status: "waiting",
+    actionId: "submit_video_action",
+    projectId: "agent-current-task-project",
+    projectRoot: "/tmp/agent-current-task-project",
+    projectFactHash: "agent-current-task-facts",
+    createdAt: "2026-07-07T00:00:50.000Z",
+  }],
+});
+assert(confirmedVideoProjection.source === "pipeline_job", "a confirmed job must consume its matching waiting confirmation");
+assert(!confirmedVideoProjection.requiresConfirmation, "a confirmed job must restore as processing without another confirmation");
+assert(!confirmedVideoProjection.confirmationId, "a consumed confirmation id must not remain active");
+assert(confirmedVideoProjection.actionId === "submit_video_action", "a confirmed job must retain its action identity after consuming stale recovery state");
 const runningVideo = transitionAgentVideoGenerationJob({
   ledger: confirmedVideo.ledger,
   jobId: stagedVideo.job!.jobId,
@@ -590,6 +718,44 @@ const runningVideo = transitionAgentVideoGenerationJob({
   generatedAt: "2026-07-07T00:00:52.000Z",
 });
 assert(runningVideo.ok, "confirmed video job should run");
+const runningVideoProjection = buildAgentCurrentTaskProjection({
+  pipelinePlan: submitVideoPlan,
+  jobLedger: runningVideo.ledger,
+  currentProjectId: "agent-current-task-project",
+  currentProjectRoot: "/tmp/agent-current-task-project",
+  currentProjectFactHash: "agent-current-task-facts",
+  timelineConfirmations: [{
+    confirmationId: "submit_video_confirmation",
+    step: "submit_video",
+    status: "waiting",
+    actionId: "submit_video_action",
+    projectId: "agent-current-task-project",
+    projectRoot: "/tmp/agent-current-task-project",
+    projectFactHash: "agent-current-task-facts",
+    createdAt: "2026-07-07T00:00:50.000Z",
+  }],
+});
+assert(runningVideoProjection.source === "pipeline_job", "a running job must not be preempted by its consumed confirmation");
+assert(!runningVideoProjection.requiresConfirmation, "a running job must restore as processing without replay");
+const queryVideoPlan = plan({
+  storyDraftPresent: true,
+  storyConfirmed: true,
+  localProjectReady: true,
+  referenceMissingCount: 0,
+  videoSubmitted: true,
+  videoNeedsQuery: true,
+});
+const runningVideoQueryProjection = buildAgentCurrentTaskProjection({
+  pipelinePlan: queryVideoPlan,
+  jobLedger: runningVideo.ledger,
+  currentProjectId: "agent-current-task-project",
+  currentProjectRoot: "/tmp/agent-current-task-project",
+  currentProjectFactHash: "agent-current-task-facts",
+});
+assert(runningVideoQueryProjection.source === "pipeline_job", "a recoverable running video job should remain projection-owned");
+assert(runningVideoQueryProjection.step === "submit_video" && runningVideoQueryProjection.label === "查询视频结果", "a recoverable video job must project query instead of resubmit");
+assert(runningVideoQueryProjection.requiresConfirmation, "querying a running external task must use a fresh explicit confirmation boundary");
+assert(runningVideoQueryProjection.jobId === stagedVideo.job!.jobId, "query recovery must retain the original running job identity");
 const succeededVideo = transitionAgentVideoGenerationJob({
   ledger: runningVideo.ledger,
   jobId: stagedVideo.job!.jobId,
@@ -603,8 +769,19 @@ const terminalJobProjection = buildAgentCurrentTaskProjection({
   currentProjectId: "agent-current-task-project",
   currentProjectRoot: "/tmp/agent-current-task-project",
   currentProjectFactHash: "agent-current-task-facts",
+  timelineConfirmations: [{
+    confirmationId: "submit_video_confirmation",
+    step: "submit_video",
+    status: "waiting",
+    actionId: "submit_video_action",
+    projectId: "agent-current-task-project",
+    projectRoot: "/tmp/agent-current-task-project",
+    projectFactHash: "agent-current-task-facts",
+    createdAt: "2026-07-07T00:00:50.000Z",
+  }],
 });
 assert(terminalJobProjection.source === "pipeline_plan", "terminal jobs must not become the current task source");
 assert(!terminalJobProjection.jobId, "terminal jobs should not expose a current job id");
+assert(!terminalJobProjection.confirmationId, "terminal jobs must consume their old confirmation instead of reviving it");
 
 console.log("agent-current-task-projection-test passed");

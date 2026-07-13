@@ -256,7 +256,7 @@ export function useImage2AssetGenerationAction({
 }: UseImage2AssetGenerationActionInput) {
   const [actionState, setActionState] = useState<Image2AssetGenerationActionState>({ status: "idle" });
   const keyConfigured = useMemo(
-    () => providerConfigStatuses.length === 0 || isAssetKeyConfigured(providerConfigStatuses),
+    () => isAssetKeyConfigured(providerConfigStatuses),
     [providerConfigStatuses],
   );
 
