@@ -57,16 +57,6 @@ import {
   type AgentCurrentTaskStep,
 } from "../../core/agentCurrentTaskProjection";
 import {
-  restoreAgentVideoExecutionReceipt,
-  runAgentVideoExecution,
-  type AgentVideoExecutionAction,
-  type AgentVideoExecutionAdapterResult,
-  type AgentVideoExecutionContext,
-  type AgentVideoExecutionOperation,
-  type AgentVideoLiveCapability,
-  type RunAgentVideoExecutionInput,
-} from "../../core/agentVideoExecutionAdapter";
-import {
   buildAgentVideoPipelinePlan,
   createAgentVideoGenerationJobLedger,
   type AgentVideoGenerationJobLedger,
@@ -134,7 +124,6 @@ import {
   workflowPanelNextStepLabel,
   workflowPlanFacts,
 } from "./agentPanelProjection";
-import { buildMinimalAgentProductAdapter } from "./agentProductCapabilities";
 import {
   directorFeedbackCanConfirm,
   directorFeedbackGenerationLabel,
@@ -159,6 +148,21 @@ import type { ProjectStatusViewModel } from "../app/projectStatusViewModel";
 import type { CreatorAgentCommand } from "./creatorDeskTypes";
 import { cleanStoryText, formatShotNumber } from "./MinimalStoryFlow";
 import { usesEndpointEndFrame } from "./videoControlModeUi";
+import {
+  agentTimelineHasSucceededLiveExecution,
+  agentTimelineHasValidatedExecution,
+  agentTimelineLiveExecutionCoversProjectedState,
+  agentVideoExecutionLedgerMatchesProject,
+  agentVideoExecutionReceiptFromTimelineEntry,
+  createAgentVideoExecutionController,
+  normalizeAgentVideoExecutionProjectRoot,
+  runAgentVideoConfirmedProductAction,
+  type AgentVideoExecutionAction,
+  type AgentVideoExecutionContext,
+  type AgentVideoExecutionController,
+  type AgentVideoExecutionOperation,
+  type AgentVideoExecutionProjectIdentity,
+} from "./agentVideoExecutionController";
 
 type DirectorWorkflowInput = Parameters<typeof buildDirectorWorkflowState>[0];
 type MinimalAgentMessage = {
@@ -4511,22 +4515,6 @@ function exportWorkerReadyForAgentConfirmation(worker?: ExportWorkerState) {
   return Boolean(worker.manifest.mvpPackage.reportIncluded && worker.manifest.files.length > 0);
 }
 
-function normalizeAgentGenerationProjectRoot(projectRoot?: string) {
-  return projectRoot?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
-}
-
-function agentGenerationLedgerMatchesProject(
-  ledger: AgentVideoGenerationJobLedger | undefined,
-  input: { projectId: string; projectRoot?: string; projectFactHash: string },
-) {
-  return Boolean(
-    ledger
-      && ledger.projectId === input.projectId
-      && normalizeAgentGenerationProjectRoot(ledger.projectRoot) === normalizeAgentGenerationProjectRoot(input.projectRoot)
-      && ledger.projectFactHash === input.projectFactHash,
-  );
-}
-
 function nonConfirmationToolBlockers(handoff?: DirectorAgentToolHandoff) {
   return (handoff?.blockers || []).filter((blocker) => blocker !== "user_confirmation_required");
 }
@@ -4739,7 +4727,7 @@ function agentCurrentTaskCompletedStepsFromTimelineEntries(
     const projectFactHash = executionReceipt?.projectFactHash || stringValue(entry.details?.sourceFactHash) || stringValue(entry.details?.projectFactHash);
     if (
       projectId !== identity.projectId
-      || normalizeAgentGenerationProjectRoot(projectRoot) !== normalizeAgentGenerationProjectRoot(identity.projectRoot)
+      || normalizeAgentVideoExecutionProjectRoot(projectRoot) !== normalizeAgentVideoExecutionProjectRoot(identity.projectRoot)
       || projectFactHash !== identity.projectFactHash
     ) continue;
     completed.set(step, {
@@ -4781,157 +4769,6 @@ function agentVideoDryRunActionFor(action?: DirectorAgentActionEnvelope): AgentV
   if (action?.kind === "prepare_export") return "export";
   return undefined;
 }
-
-function agentVideoDryRunOutcomeLabel(action: AgentVideoExecutionAction) {
-  if (action === "prepare_references") return "参考执行合同已验证；未生成真实参考。";
-  if (action === "submit_video") return "视频执行合同已验证；未提交或生成真实视频。";
-  return "导出执行合同已验证；未写入导出文件。";
-}
-
-function agentVideoExecutionReceiptFromTimelineEntry(
-  entry: VibeAgentTimelineEntry,
-  identity?: { projectId: string; projectRoot?: string; projectFactHash: string },
-) {
-  const value = entry.details?.executionReceipt;
-  const restored = restoreAgentVideoExecutionReceipt(value, identity);
-  return restored.ok ? restored.receipt : undefined;
-}
-
-function agentTimelineHasValidatedExecution(
-  entries: VibeAgentTimelineEntry[],
-  action: AgentVideoExecutionAction,
-  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
-) {
-  return entries.some((entry) => {
-    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry, identity);
-    return receipt?.executionMode === "dry_run"
-      && receipt.status === "validated"
-      && receipt.action === action
-      && receipt.outputAssets.length === 0
-      && receipt.providerCalled === false;
-  });
-}
-
-function agentTimelineHasSucceededLiveExecution(
-  entries: VibeAgentTimelineEntry[],
-  action: AgentVideoExecutionAction,
-  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
-) {
-  const expectedToolName = action === "prepare_references"
-    ? "generate_references"
-    : action === "submit_video"
-      ? "submit_video"
-      : "export_project";
-  return entries.some((entry) => {
-    const receipt = agentVideoExecutionReceiptFromTimelineEntry(entry, identity);
-    if (receipt) {
-      return receipt.executionMode === "live"
-        && receipt.status === "succeeded"
-        && receipt.action === action;
-    }
-    const projectId = stringValue(entry.details?.projectId);
-    const projectRoot = stringValue(entry.details?.projectRoot);
-    const sourceFactHash = stringValue(entry.details?.sourceFactHash);
-    return entry.toolName === expectedToolName
-      && entry.status === "done"
-      && entry.lifecycle === "succeeded"
-      && entry.details?.directProductPhase === "completed"
-      && projectId === identity.projectId
-      && normalizeAgentGenerationProjectRoot(projectRoot) === normalizeAgentGenerationProjectRoot(identity.projectRoot)
-      && sourceFactHash === identity.projectFactHash;
-  });
-}
-
-function agentTimelineLiveExecutionCoversProjectedState(
-  entries: VibeAgentTimelineEntry[],
-  action: AgentVideoExecutionAction,
-  phase: "started" | "running" | "completed" | "failed" | "blocked",
-  identity: { projectId: string; projectRoot?: string; projectFactHash: string },
-) {
-  const receipt = [...entries]
-    .reverse()
-    .map((entry) => agentVideoExecutionReceiptFromTimelineEntry(entry, identity))
-    .find((item) => item
-      && item.executionMode === "live"
-      && item.action === action);
-  if (!receipt) return false;
-  if (phase === "started" || phase === "running") {
-    return receipt.status === "running" || receipt.status === "timed_out" || receipt.status === "succeeded";
-  }
-  if (phase === "completed") return receipt.status === "succeeded";
-  return receipt.status === "blocked" || receipt.status === "failed" || receipt.status === "cancelled" || receipt.status === "timed_out";
-}
-
-function agentVideoExecutionToolResult(result: AgentVideoExecutionAdapterResult) {
-  const rawResult = isPlainRecord(result.rawResult) ? result.rawResult : {};
-  if (result.receipt.status === "validated") {
-    return {
-      ok: true,
-      status: "validated",
-      uiStatus: "validated",
-      message: agentVideoDryRunOutcomeLabel(result.receipt.action),
-      dryRunOnly: true,
-      providerCalled: false,
-      outputAssets: [],
-      executionReceipt: result.receipt,
-      jobId: result.job?.jobId,
-      statusTrace: result.statusTrace,
-    };
-  }
-  return {
-    ...rawResult,
-    status: stringValue(rawResult.status) || result.receipt.status,
-    message: stringValue(rawResult.message) || result.blockers[0],
-    dryRunOnly: false,
-    providerCalled: result.providerCalled,
-    outputAssets: result.receipt.outputAssets,
-    executionReceipt: result.receipt,
-    jobId: result.job?.jobId,
-    statusTrace: result.statusTrace,
-  };
-}
-
-type ConfiguredAgentVideoExecutionInput = Omit<RunAgentVideoExecutionInput, "liveCapability" | "execute"> & {
-  perform?: (context: AgentVideoExecutionContext) => unknown | Promise<unknown>;
-};
-const defaultAgentVideoExecutionOperation: AgentVideoExecutionOperation = "execute";
-
-function configuredAgentVideoLiveCapability(action: AgentVideoExecutionAction): AgentVideoLiveCapability {
-  if (action === "prepare_references") {
-    return {
-      providerId: "apikey-fun-gpt55-responses-image",
-      providerName: "Image2",
-      modelId: "responses-image-reference",
-    };
-  }
-  if (action === "submit_video") {
-    return {
-      providerId: "jimeng-seedance-cli",
-      providerName: "Seedance",
-      modelId: "seedance2.0",
-    };
-  }
-  return {
-    providerId: "local-exporter",
-    providerName: "Local Project Exporter",
-    modelId: "project-export-v1",
-    asyncMode: "sync",
-  };
-}
-
-function runConfiguredAgentVideoExecution(input: ConfiguredAgentVideoExecutionInput) {
-  const { perform, ...request } = input;
-  return runAgentVideoExecution({
-    ...request,
-    liveCapability: input.executionMode === "live"
-      ? configuredAgentVideoLiveCapability(input.action)
-      : undefined,
-    execute: input.executionMode === "live" && perform
-      ? (context) => perform(context)
-      : undefined,
-  });
-}
-
 export function MinimalAgentPanel({
   runtimeState,
   projectFactHash = "",
@@ -5132,7 +4969,7 @@ export function MinimalAgentPanel({
   const [latestAgentKernelTurn, setLatestAgentKernelTurn] = useState<VibeAgentKernelTurn | undefined>();
   const [agentActionLog, setAgentActionLog] = useState<AgentActionLogItem[]>([]);
   const [savedSkillStack, setSavedSkillStack] = useState<DirectorSkillStackItem[]>([]);
-  const agentGenerationProjectIdentity = {
+  const agentGenerationProjectIdentity: AgentVideoExecutionProjectIdentity = {
     projectId: runtimeState.sourceIndex.projectId,
     projectRoot: localProjectReady && runtimeProjectRootIsLocalFolder(runtimeState.project.root)
       ? runtimeState.project.root
@@ -5147,11 +4984,39 @@ export function MinimalAgentPanel({
     createdAt: "1970-01-01T00:00:00.000Z",
   }));
   const agentVideoExecutionLedgerRef = useRef(agentVideoDryRunLedger);
-  const agentVideoExecutionInFlightRef = useRef(new Map<string, ReturnType<typeof runConfiguredAgentVideoExecution>>());
+  const agentVideoExecutionRuntimeRef = useRef({
+    onRememberAgentGenerationJobLedger,
+    rememberAgentTimelineEntries,
+    setStatus,
+  });
+  agentVideoExecutionRuntimeRef.current = {
+    onRememberAgentGenerationJobLedger,
+    rememberAgentTimelineEntries,
+    setStatus,
+  };
+  const agentVideoExecutionControllerRef = useRef<AgentVideoExecutionController | undefined>(undefined);
+  if (!agentVideoExecutionControllerRef.current) {
+    agentVideoExecutionControllerRef.current = createAgentVideoExecutionController({
+      getProjectIdentity: () => agentGenerationProjectIdentityRef.current,
+      setProjectIdentity: (identity) => {
+        agentGenerationProjectIdentityRef.current = identity;
+      },
+      getLedger: () => agentVideoExecutionLedgerRef.current,
+      setLedger: (ledger) => {
+        agentVideoExecutionLedgerRef.current = ledger;
+        setAgentVideoDryRunLedger(ledger);
+      },
+      canPersistLedger: () => Boolean(agentVideoExecutionRuntimeRef.current.onRememberAgentGenerationJobLedger),
+      persistLedger: (ledger) => agentVideoExecutionRuntimeRef.current.onRememberAgentGenerationJobLedger?.(ledger),
+      publishTimeline: (entries, identity) => agentVideoExecutionRuntimeRef.current.rememberAgentTimelineEntries(entries, identity),
+      setStatus: (nextStatus) => agentVideoExecutionRuntimeRef.current.setStatus(nextStatus),
+    });
+  }
+  const agentVideoExecutionController = agentVideoExecutionControllerRef.current;
 
   useEffect(() => {
     setAgentVideoDryRunLedger((current) => {
-      if (agentGenerationLedgerMatchesProject(restoredAgentGenerationJobLedger, agentGenerationProjectIdentity)) {
+      if (agentVideoExecutionLedgerMatchesProject(restoredAgentGenerationJobLedger, agentGenerationProjectIdentity)) {
         const restored = current.ledgerId === restoredAgentGenerationJobLedger!.ledgerId
           && current.updatedAt === restoredAgentGenerationJobLedger!.updatedAt
           ? current
@@ -5159,7 +5024,7 @@ export function MinimalAgentPanel({
         agentVideoExecutionLedgerRef.current = restored;
         return restored;
       }
-      if (agentGenerationLedgerMatchesProject(current, agentGenerationProjectIdentity)) {
+      if (agentVideoExecutionLedgerMatchesProject(current, agentGenerationProjectIdentity)) {
         agentVideoExecutionLedgerRef.current = current;
         return current;
       }
@@ -7765,97 +7630,6 @@ export function MinimalAgentPanel({
     projectFactHash,
   ]);
 
-  async function runSharedAgentVideoExecution(input: {
-    action: AgentVideoExecutionAction;
-    operation?: AgentVideoExecutionOperation;
-    actionId: string;
-    confirmationReceiptId: string;
-    sourceTimelineId?: string;
-    executionMode: "dry_run" | "live";
-    projectFactHash?: string;
-    retry?: boolean;
-    prompt?: string;
-    timeoutMs?: number;
-    perform?: (context: AgentVideoExecutionContext) => unknown | Promise<unknown>;
-  }) {
-    const generatedAt = new Date().toISOString();
-    const baseActionId = input.actionId.trim() || `agent_video_${input.action}`;
-    const executionIdentity = {
-      ...agentGenerationProjectIdentityRef.current,
-      projectFactHash: input.projectFactHash?.trim()
-        || agentGenerationProjectIdentityRef.current.projectFactHash,
-    };
-    agentGenerationProjectIdentityRef.current = executionIdentity;
-    const inFlightKey = [
-      executionIdentity.projectId,
-      executionIdentity.projectRoot || "",
-      executionIdentity.projectFactHash,
-      input.operation || defaultAgentVideoExecutionOperation,
-      baseActionId,
-    ].join("::");
-    const existingExecution = agentVideoExecutionInFlightRef.current.get(inFlightKey);
-    if (existingExecution) return existingExecution;
-    const execution = (async () => {
-      let executionLedger = agentVideoExecutionLedgerRef.current;
-      if (!agentGenerationLedgerMatchesProject(executionLedger, executionIdentity)) {
-        executionLedger = createAgentVideoGenerationJobLedger({
-          ledgerId: executionLedger.ledgerId || "minimal_agent_video_dry_run",
-          ...executionIdentity,
-          createdAt: generatedAt,
-        });
-        agentVideoExecutionLedgerRef.current = executionLedger;
-        setAgentVideoDryRunLedger(executionLedger);
-      }
-      const previousJob = [...executionLedger.jobs]
-        .reverse()
-        .find((job) => job.actionId === baseActionId);
-      const retryOfActionId = input.retry && previousJob && ["failed", "cancelled"].includes(previousJob.status)
-        ? baseActionId
-        : undefined;
-      const actionId = retryOfActionId
-        ? `${baseActionId}_retry_${generatedAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}`
-        : baseActionId;
-      const result = await runConfiguredAgentVideoExecution({
-        plan: agentCurrentTaskPipelinePlan,
-        ledger: executionLedger,
-        action: input.action,
-        operation: input.operation,
-        actionId,
-        retryOfActionId,
-        sourceConfirmationId: input.confirmationReceiptId,
-        sourceTimelineId: input.sourceTimelineId,
-        executionMode: input.executionMode,
-        liveExecutionAllowed: input.executionMode === "live",
-        generatedAt,
-        prompt: input.prompt,
-        timeoutMs: input.timeoutMs,
-        perform: input.perform,
-        onLedgerSnapshot: async (ledgerSnapshot) => {
-          if (input.executionMode === "live" && !onRememberAgentGenerationJobLedger) {
-            throw new Error("Live execution requires project-backed generation job persistence.");
-          }
-          await onRememberAgentGenerationJobLedger?.(ledgerSnapshot);
-          agentVideoExecutionLedgerRef.current = ledgerSnapshot;
-          setAgentVideoDryRunLedger(ledgerSnapshot);
-        },
-        onTimelineEntries: (entries) => {
-          rememberAgentTimelineEntries(entries, executionIdentity);
-        },
-      });
-      agentVideoExecutionLedgerRef.current = result.ledger;
-      setAgentVideoDryRunLedger(result.ledger);
-      return result;
-    })();
-    agentVideoExecutionInFlightRef.current.set(inFlightKey, execution);
-    try {
-      return await execution;
-    } finally {
-      if (agentVideoExecutionInFlightRef.current.get(inFlightKey) === execution) {
-        agentVideoExecutionInFlightRef.current.delete(inFlightKey);
-      }
-    }
-  }
-
   async function runFooterAgentVideoExecution(input: {
     action: AgentVideoExecutionAction;
     operation?: AgentVideoExecutionOperation;
@@ -7864,20 +7638,11 @@ export function MinimalAgentPanel({
     timeoutMs: number;
     perform: (context: AgentVideoExecutionContext) => unknown | Promise<unknown>;
   }) {
-    const previousJob = [...agentVideoExecutionLedgerRef.current.jobs]
-      .reverse()
-      .find((job) => job.actionId === input.actionId);
-    const result = await runSharedAgentVideoExecution({
+    return agentVideoExecutionController.runFooterExecution({
       ...input,
-      executionMode: "live",
-      retry: Boolean(previousJob && ["failed", "cancelled"].includes(previousJob.status)),
+      plan: agentCurrentTaskPipelinePlan,
+      generatedAt: new Date().toISOString(),
     });
-    const toolResult = agentVideoExecutionToolResult(result);
-    const message = stringValue(toolResult.message)
-      || (result.status === "completed" ? "动作已完成。" : result.blockers[0])
-      || "动作状态已记录。";
-    setStatus(message);
-    return result;
   }
 
   async function runConfirmedAgentTool(
@@ -7890,8 +7655,6 @@ export function MinimalAgentPanel({
       action,
       activeVideoPermissionContract,
     );
-    const actionId = action?.actionId || preparedHandoff?.actionId || "agent_video_execution_action";
-    const confirmationReceiptId = preparedHandoff?.handoffId || action?.actionId || "agent_video_execution_confirmation";
     const referenceLive = Boolean(
       action?.kind === "prepare_reference_generation"
       && action.executionContract.referenceGenerationAllowed
@@ -7911,72 +7674,49 @@ export function MinimalAgentPanel({
     );
     const queryLive = Boolean(action?.kind === "query_video_result" && onSendSeedanceVideo && videoCanResume && !videoBusy);
     const exportLive = Boolean(action?.kind === "prepare_export" && onRunExport);
-    const runExecution = async (input: {
-      executionAction: AgentVideoExecutionAction;
-      operation?: AgentVideoExecutionOperation;
-      live: boolean;
-      timeoutMs: number;
-      perform?: (context: AgentVideoExecutionContext) => unknown | Promise<unknown>;
-      targetConfirmationReceiptId?: string;
-    }) => {
-      const result = await runSharedAgentVideoExecution({
-        action: input.executionAction,
-        operation: input.operation,
-        actionId,
-        confirmationReceiptId: input.targetConfirmationReceiptId || confirmationReceiptId,
-        sourceTimelineId: preparedHandoff?.handoffId,
-        executionMode: input.live ? "live" : "dry_run",
-        projectFactHash: options.projectFactHash,
-        retry: options.retry,
-        prompt: userIntent,
-        timeoutMs: input.timeoutMs,
-        perform: input.perform,
-      });
-      return agentVideoExecutionToolResult(result);
-    };
-    const productAdapter = buildMinimalAgentProductAdapter({
-      availability: currentAgentToolAvailability(action),
-      recoveryHint: videoSendAction?.message,
-      videoPermissionContract: confirmedToolVideoPermissionContract,
-      webSearchSettings,
-      setStatus,
-      setAgentToolHandoff,
-      setResearchStatus,
-      setReferenceStatus,
-      setResearchResult,
-      createReferences: (target) => runExecution({
-        executionAction: "prepare_references",
-        live: referenceLive,
-        timeoutMs: 10 * 60 * 1000,
-        targetConfirmationReceiptId: target?.confirmationReceiptId,
-        perform: referenceLive ? (context) => onCreateP6RealSample?.({ ...target, signal: context.signal }) : undefined,
-      }),
-      submitVideo: (target) => runExecution({
-        executionAction: "submit_video",
-        live: videoLive,
-        timeoutMs: 5 * 60 * 1000,
-        targetConfirmationReceiptId: target?.confirmationReceiptId,
-        perform: videoLive ? (context) => onSendSeedanceVideo?.({ ...target, signal: context.signal }) : undefined,
-      }),
-      queryVideo: (target) => runExecution({
-        executionAction: "submit_video",
-        operation: "query",
-        live: queryLive,
-        timeoutMs: 5 * 60 * 1000,
-        targetConfirmationReceiptId: target?.confirmationReceiptId,
-        perform: queryLive ? (context) => onSendSeedanceVideo?.({ ...target, signal: context.signal }) : undefined,
-      }),
-      runExport: (target) => runExecution({
-        executionAction: "export",
-        live: exportLive,
-        timeoutMs: 2 * 60 * 1000,
-        perform: exportLive ? (context) => onRunExport?.({ ...target, signal: context.signal }) : undefined,
-      }),
-    });
-    return productAdapter.runConfirmedAction({
+    return runAgentVideoConfirmedProductAction({
+      controller: agentVideoExecutionController,
+      plan: agentCurrentTaskPipelinePlan,
       action,
       userIntent,
       preparedHandoff,
+      projectFactHash: options.projectFactHash,
+      retry: options.retry,
+      productAdapter: {
+        availability: currentAgentToolAvailability(action),
+        recoveryHint: videoSendAction?.message,
+        videoPermissionContract: confirmedToolVideoPermissionContract,
+        webSearchSettings,
+        setStatus,
+        setAgentToolHandoff,
+        setResearchStatus,
+        setReferenceStatus,
+        setResearchResult,
+      },
+      references: {
+        live: referenceLive,
+        perform: onCreateP6RealSample
+          ? (target, signal) => onCreateP6RealSample({ ...target, signal })
+          : undefined,
+      },
+      video: {
+        live: videoLive,
+        perform: onSendSeedanceVideo
+          ? (target, signal) => onSendSeedanceVideo({ ...target, signal })
+          : undefined,
+      },
+      videoQuery: {
+        live: queryLive,
+        perform: onSendSeedanceVideo
+          ? (target, signal) => onSendSeedanceVideo({ ...target, signal })
+          : undefined,
+      },
+      exportProject: {
+        live: exportLive,
+        perform: onRunExport
+          ? (target, signal) => onRunExport({ agentToolTrace: target?.agentToolTrace, signal })
+          : undefined,
+      },
     });
   }
 
