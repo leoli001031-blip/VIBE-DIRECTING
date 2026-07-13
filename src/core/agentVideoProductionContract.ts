@@ -644,6 +644,14 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
         blockers: ["Agent action is already bound to another confirmation receipt."],
       };
     }
+    if (operation === "query" && !existingActionJob.externalTaskId) {
+      return {
+        status: "blocked",
+        ledger: input.ledger,
+        job: existingActionJob,
+        blockers: ["A video query job requires the external task id from its submitted video."],
+      };
+    }
     if (terminalJobStatuses.has(existingActionJob.status)) {
       return {
         status: "blocked",
@@ -657,6 +665,23 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
       ledger: input.ledger,
       job: existingActionJob,
       blockers: [],
+    };
+  }
+  const querySourceJob = operation === "query"
+    ? [...input.ledger.jobs]
+        .reverse()
+        .find((job) => (
+          job.kind === "video_submit"
+          && job.status === "running"
+          && Boolean(job.externalTaskId)
+          && jobMatchesLedgerBinding(job, input.ledger)
+        ))
+    : undefined;
+  if (operation === "query" && !querySourceJob?.externalTaskId) {
+    return {
+      status: "blocked",
+      ledger: input.ledger,
+      blockers: ["A video query requires a recoverable submitted task id from the current project facts."],
     };
   }
   const capabilityResolution = resolveAgentVideoProviderCapability({
@@ -693,6 +718,7 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
     prompt: input.prompt || "",
     inputAssets: uniqueInOrder(input.inputAssets || []),
     outputAssets: uniqueInOrder(input.outputAssets || []),
+    externalTaskId: querySourceJob?.externalTaskId,
     blockers: [],
     statusHistory: [{ status: "staged", at: generatedAt }],
     createdAt: generatedAt,

@@ -272,6 +272,7 @@ function validateJob(job: unknown, ledger: Record<string, unknown>) {
   if (!pipelineSteps.has(textValue(job.pipelineStep))) errors.push("Generation job pipeline step is invalid.");
   if (!Array.isArray(job.inputAssets) || job.inputAssets.some((item) => typeof item !== "string")) errors.push("Generation job inputAssets must be a string array.");
   if (!Array.isArray(job.outputAssets) || job.outputAssets.some((item) => typeof item !== "string")) errors.push("Generation job outputAssets must be a string array.");
+  if (job.externalTaskId != null && !textValue(job.externalTaskId)) errors.push("Generation job externalTaskId must be a non-empty string.");
   if (!Array.isArray(job.blockers) || job.blockers.some((item) => typeof item !== "string")) errors.push("Generation job blockers must be a string array.");
   const statusHistory = Array.isArray(job.statusHistory) ? job.statusHistory : [];
   if (!statusHistory.length) {

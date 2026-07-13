@@ -305,13 +305,15 @@ const runningQuery = await runAgentVideoExecution({
     providerName: "Mock Video Provider",
     modelId: "mock-video-model",
   },
-  execute: () => {
+  execute: (context) => {
     queryCalls += 1;
-    return { status: "running", providerCalled: true, taskId: "mock-submit-p3" };
+    assert(context.job.externalTaskId === "mock-submit-p3", "query execution must inherit the submitted external task id");
+    return { status: "running", providerCalled: true, taskId: context.job.externalTaskId };
   },
   onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(runningQuery.status === "running" && runningQuery.job?.operation === "query", "a live query must persist as a query job while the external task is still running");
+assert(runningQuery.job?.externalTaskId === "mock-submit-p3", "the persisted query job must retain the submitted external task id");
 
 const mismatchedQueryOperation = await runAgentVideoExecution({
   plan: videoQueryPlan,

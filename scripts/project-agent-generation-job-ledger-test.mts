@@ -247,6 +247,12 @@ try {
   }, identity);
   assert(mismatchedStatusHistory.status === "invalid" && !mismatchedStatusHistory.ok, "job status must match the final persisted history event");
 
+  const malformedExternalTaskId = restoreProjectAgentGenerationJobLedger({
+    ...running.ledger,
+    jobs: running.ledger.jobs.map((job) => ({ ...job, externalTaskId: 42 })),
+  }, identity);
+  assert(malformedExternalTaskId.status === "invalid" && !malformedExternalTaskId.ok, "non-string external task ids must fail sidecar validation");
+
   const legacy = restoreProjectAgentGenerationJobLedger({
     ...running.ledger,
     schemaVersion: "agent_video_generation_job_ledger/0.2.0",
