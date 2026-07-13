@@ -51,15 +51,16 @@ The current P6-C live acceptance must use the packaged App/runtime route:
 - result remains `needs_review` until an explicit human decision.
 
 On 2026-07-14 the user granted standing software-development test authorization
-for the existing local `apikey.fun` image credential. Future bounded image
-tests do not need a new conversational authorization, but every call must still
-report its shot, provider, model, endpoint, call count, and possible external
-cost before execution and must pass the product's action-time confirmation.
-The standing authorization does not allow automatic retry, batch/high-
-concurrency submission, another image provider, or any video provider. A failed
-or missing result requires a new prepare/permission cycle and an explicit new
-product action; it cannot reuse the consumed permission. Do not use the CLI
-command below as a substitute for packaged App acceptance.
+for the existing local `apikey.fun` API credential. Future bounded development
+tests using that same credential, including image generation and provider-backed
+director text QA, do not need a new conversational authorization. Every call
+must still report its purpose, provider, model, endpoint, call count, and
+possible external cost before execution and must pass the product's action-time
+confirmation. The standing authorization does not allow automatic retry,
+batch/high-concurrency submission, another provider credential, or any video
+provider. A failed or missing result requires a new prepare/permission cycle
+and an explicit new product action; it cannot reuse the consumed permission.
+Do not use the CLI command below as a substitute for packaged App acceptance.
 
 ## P6-C Acceptance Record
 

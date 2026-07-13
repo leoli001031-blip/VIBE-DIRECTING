@@ -8,9 +8,9 @@ submitted.
 Readiness label: `P6-D no-submit ready; awaiting one-shot video authorization`.
 
 This phase stops at the separate video-provider authorization gate. The user's
-standing development-test authorization covers the existing local
-`apikey.fun` image credential; it does not authorize a Seedance/Jimeng video
-submission.
+standing development-test authorization covers bounded use of the existing
+local `apikey.fun` API credential, including the provider-backed director text
+QA in this route; it does not authorize a Seedance/Jimeng video submission.
 
 ## Scope and baseline
 
