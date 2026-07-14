@@ -1,3 +1,5 @@
+import { JIMENG_CLI_MODEL_OPTIONS } from "./jimengVideoCli";
+
 export const videoRelayQueueSchemaVersion = "0.1.0";
 
 export type VideoRelayQueueItemStatus =
@@ -111,6 +113,12 @@ function canQueue(item: VideoRelayQueueItem): boolean {
   return ready(item.status) && item.blockers.length === 0;
 }
 
+function activeVideoModelLabel(item: VideoRelayQueueItem | undefined): string {
+  return JIMENG_CLI_MODEL_OPTIONS.find((option) => option.value === item?.modelVersion)?.label
+    || item?.modelVersion
+    || "Seedance";
+}
+
 export function buildVideoRelayQueueState(input: BuildVideoRelayQueueStateInput): VideoRelayQueueState {
   const activeItems = input.items.filter((item) => active(item.status));
   const readyItems = input.items.filter(canQueue);
@@ -170,8 +178,8 @@ export function buildVideoRelayQueueState(input: BuildVideoRelayQueueStateInput)
         ? "视频生成已暂停，可以稍后继续。"
         : activeItems.length
           ? activeItems[0]?.status === "submitting"
-            ? "正在提交 Seedance 2.0 VIP，拿到提交号后会进入后台队列。"
-            : "Seedance 2.0 VIP 已接管当前视频任务；排队或生成时只查询结果，不重复提交。"
+            ? `正在提交 ${activeVideoModelLabel(activeItems[0])}，拿到提交号后会进入后台队列。`
+            : `${activeVideoModelLabel(activeItems[0])} 已接管当前视频任务；排队或生成时只查询结果，不重复提交。`
           : nextReadyItem
             ? "后续视频段已准备好，需要你明确确认后再提交。"
             : allDone

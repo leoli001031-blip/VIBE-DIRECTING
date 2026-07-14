@@ -227,6 +227,58 @@ assert(lockedProjection.reviewTray.counts.locked === 3, "locking references shou
 assert(lockedProjection.videoGeneration.status === "not_generated", "after lock, video plan should be ready to submit rather than already submitted");
 assert(lockedProjection.agentCommand.kind === "submit_video", "locked references should make the primary Agent command submit video");
 assert(lockedProjection.agentCommand.label === "发送视频", "video-ready projects should use one submit-video primary label");
+const omniReferenceProjection = buildCreatorDeskProjection({
+  runtimeState: {
+    ...lockedRuntimeState,
+    storyFlow: {
+      sections: [{ id: "act_1", label: "开场", shotCount: 1, blockedCount: 1, readyCount: 0, shotIds: ["S01"] }],
+      shots: [{
+        ...lockedRuntimeState.storyFlow.shots[0],
+        status: "blocked",
+        startFrame: undefined,
+        endFrame: undefined,
+        referenceStrategy: "omni_reference",
+      }],
+    },
+    visualMemory: {
+      summary: { ...lockedRuntimeState.visualMemory.summary, total: 5, existing: 5, locked: 5 },
+      assets: [
+        ...lockedRuntimeState.visualMemory.assets,
+        {
+          id: "style_anime",
+          type: "style",
+          name: "电影感动画",
+          path: "assets/locked/style-anime.md",
+          status: "exists",
+          lockedStatus: "locked",
+          safeForFutureReference: true,
+          textConstraints: ["cinematic anime film still"],
+          sourceRefs: ["project.vibe#assets/style_anime"],
+          issues: [],
+        },
+        {
+          id: "folder_style_anime",
+          type: "style",
+          name: "style-anime.md",
+          path: "assets/locked/style-anime.md",
+          status: "exists",
+          lockedStatus: "locked",
+          safeForFutureReference: true,
+          textConstraints: ["style-anime.md"],
+          sourceRefs: ["project_folder_scan"],
+          issues: [],
+        },
+      ],
+    },
+  } as any,
+  previewItems: [],
+  image2BatchState: { status: "ready_for_review", summary: { ...image2BatchState.summary, readyCount: 0, plannedCount: 1, blockedCount: 1, items: [] } } as any,
+  selectedShotIds: ["S01"],
+});
+assert(omniReferenceProjection.framePlan.missingCount === 0, "omni-reference shots must not require storyboard start or end frames");
+assert(omniReferenceProjection.projectObservation.references.status === "ready", "locked omni references must clear stale missing-frame observations");
+assert(omniReferenceProjection.projectObservation.currentTask.confirmation.kind === "video_submit", "locked assets must not remain in the inbox as review blockers after omni references are ready");
+assert(omniReferenceProjection.agentCommand.kind === "submit_video", "locked omni references should advance the Agent to video submission");
 const lockedProjectVibe = createProjectVibeFromRuntimeState(lockedRuntimeState);
 assert(lockedProjectVibe.assets.every((asset) => asset.status === "locked"), "Project.vibe projection should refresh locked assets");
 assert(lockedProjectVibe.visualMemory.entries.every((entry) => entry.status === "locked" && entry.canUseAsFutureReference), "locked visual memory should become future-reference safe");

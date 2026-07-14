@@ -2,27 +2,31 @@
 
 Date: 2026-07-14
 
-Status: PASS for P6-D no-submit readiness only. No real video task was
-submitted.
+Status: PARTIAL PASS for P6-D live provider acceptance. The single authorized
+video was submitted and recovered by the same task id, but the provider still
+reports it as queued, so live returned-media review remains pending.
 
-Readiness label: `P6-D no-submit ready; awaiting one-shot video authorization`.
+Readiness label:
+`P6-D live submit/query verified; returned-media needs_review acceptance pending`.
 
-This phase stops at the separate video-provider authorization gate. The user's
-standing development-test authorization covers bounded use of the existing
-local `apikey.fun` API credential, including the provider-backed director text
-QA in this route; it does not authorize a Seedance/Jimeng video submission.
+The user explicitly authorized one provider-backed director text QA and one
+standard Seedance 2.0 video submission for `P6S01`. The packaged App completed
+both exactly once. All later provider actions were query-only operations against
+the persisted `externalTaskId`; no retry or second submission was attempted.
 
 ## Scope and baseline
 
 - Branch: `codex/agent-first-local-baseline-20260712`.
 - Starting commit: `ea8fc26 Complete P6-C real reference acceptance`.
-- No frontend dev server, UI change, Product Design, ImageGen, or visual work.
-- Real image calls in P6-D: 0.
-- Real video calls in P6-D: 0.
-- External network calls from the P6-D preflight: 0.
-- New image or video media created by the P6-D preflight: none.
+- No frontend dev server, UI redesign, Product Design, ImageGen, or visual work.
+- Real storyboard-image generation calls in P6-D: 0.
+- Provider-backed director text-QA operations in P6-D: 1.
+- Real Seedance/Jimeng video submissions in P6-D: 1.
+- Same-task provider result queries in P6-D: 2.
+- Automatic retries or resubmissions in P6-D: 0.
+- New image or video media returned by the provider: none; the task is queued.
 
-## Intended one-shot
+## Authorized one-shot
 
 Project root:
 
@@ -38,11 +42,58 @@ Bound submission target:
 - max concurrent video jobs: 1
 - extra storyboard image generation: disabled for this single-shot
   `omni_reference` path
-- required confirmation phrase: `submit-seedance-video`
+- confirmation boundary: packaged App `确认提交视频` action
 
 The project contains one shot and three usable locked image references. The
-relay queue does not exist yet and has zero active tasks. No MP4, MOV, or WEBM
-file existed before or after the preflight.
+one-shot `omni_reference` route used those references directly and did not
+generate a storyboard image.
+
+## Live packaged acceptance
+
+Packaged-run isolation:
+
+- user data: `/tmp/vibe-director-p6d-live-20260714-r1/profile`
+- runtime: `/tmp/vibe-director-p6d-live-20260714-r1/runtime`
+- project id: `current_project`
+- project root:
+  `/tmp/vibe-director-p6c-live-20260714-r4/projects/p6c-reference-one-shot`
+
+The packaged App performed one provider-backed director text QA. Its receipt is
+`video/seedance_2026-07-14T14-03-45-563Z/receipts/director-text-qa.json`.
+The provider returned `needs_revision` with zero blockers and one advisory
+warning; the warning did not alter the user's explicitly authorized one-shot
+scope.
+
+The App then invoked `dreamina multimodal2video` exactly once with the three
+locked references, duration `5`, ratio `16:9`, resolution `720p`, and model
+version `seedance2.0`. The submit receipt is
+`video/seedance_2026-07-14T14-03-45-563Z/receipts/dreamina-submit.json`.
+It records exit code 0, no timeout, no stored raw secret, and no storyboard
+generation.
+
+The provider returned and the project persisted this identity under both
+`submitId` and canonical `externalTaskId`:
+
+`d2c02c02-1c3d-4763-af77-d60816f642cb`
+
+Two later packaged-App actions invoked only `dreamina query_result` with that
+exact id. The latest query receipt contains no `multimodal2video` argument. At
+`2026-07-14T15:00:23Z`, the provider still reported `Queueing`, position 11030
+of 301060. The relay contains one active item, `seedance_segment_1`, bound only
+to `P6S01`; its model is `seedance2.0`, resolution is `720p`, duration is 5
+seconds, and `autoSubmitAllowed=false`.
+
+A cold packaged-App restart restored the same external task id, displayed
+`查询视频结果` as the current Agent task, and kept the confirmation copy explicit
+that querying would not repeat submission. After the final package rebuild, a
+second restart and query again used the same id and left the queue active. The
+single submit receipt remained unique, and the run directory contained zero
+video files.
+
+Because no media has returned, live ingestion, project-relative output path,
+SHA-256 recording, and the required `needs_review` state have not yet been
+observed against real provider media. P6-D therefore remains open at that final
+boundary and does not authorize P7 review/export work yet.
 
 ## No-submit report
 
@@ -108,6 +159,30 @@ timeline path. The report now sets `storyboardGenerated` from the actual
 then proved an `externalTaskId`-only task remains queryable without resubmit and
 an omni-reference submit creates or claims no storyboard image.
 
+### Live-run corrections
+
+The real packaged run exposed a small set of non-visual contract defects. The
+minimal corrections are limited to those defects:
+
+- A canonical minimal `Project.vibe` now overrides a stale readable legacy
+  `project/story_flow.json`, instead of letting an empty legacy fixture erase
+  the selected shot.
+- Explicit `omni_reference` mode accepts the selected shot's usable locked
+  visual references, ignores text-only style assets when calculating missing
+  visual references, and creates no endpoint/storyboard image jobs.
+- A locked asset is considered usable even when it does not carry a separate
+  generated/existing status marker.
+- The Agent confirmation action now responds to its accessible click plus
+  pointer and keyboard activation, with event deduplication. No visual style or
+  layout changed.
+- Active queue copy is derived from the actual model version, so this standard
+  run says `Seedance 2.0` instead of the former hard-coded VIP label.
+- Real submit/resume reports now derive `dryRunOnly` from mock/provider
+  execution truth. The historical submit report for this run was written before
+  that correction and incorrectly says `dryRunOnly=true`; the provider-call
+  fields and CLI receipt prove it was real. The final resume report, produced
+  from the corrected package, records `dryRunOnly=false`.
+
 ## Credential boundary
 
 - The preflight checks only that `dreamina` is discoverable and that the local
@@ -117,9 +192,9 @@ an omni-reference submit creates or claims no storyboard image.
   because it runs one provider-backed director text-QA operation before
   Dreamina. The status check exposes only configured/not-configured; it does not
   print or persist the raw key.
-- `dreamina --help` was the only direct CLI invocation during discovery. No
-  generator, account, credit, login, task-list, or query command was run against
-  the real provider.
+- During live acceptance, only the packaged App invoked the authorized text QA,
+  one `multimodal2video` command, and later `query_result` commands for the
+  persisted task id. Receipts record `rawSecretStored=false`.
 - No secret value was written to the repository or test output.
 
 ## External task and recovery contract
@@ -160,31 +235,24 @@ Existing deterministic tests cover:
 No offline scenario creates or claims a real provider task. Media-looking paths
 in the adapter matrix are fake strings or local test fixtures.
 
-## Authorization gate and next action
+## Live boundary and next action
 
-P6-D may perform one real run only after a separate explicit video
-authorization. The authorized action must remain exactly one 5-second standard
-Seedance 2.0 720p submission for `P6S01` through the packaged App confirmation
-boundary. Its initial external call graph is one provider-backed director text
-QA followed by one Seedance video submit; no storyboard-image generation is
-expected for this target.
+The one-submit authorization has been consumed. No further submit or automatic
+retry is allowed for this task. While it remains queued, the only permitted
+provider operation is `query_result` with
+`d2c02c02-1c3d-4763-af77-d60816f642cb`.
 
-After submit:
+When media returns, the packaged App must persist a project-relative output
+path and content hash, leave the artifact at `needs_review`, and require an
+explicit review decision. It must not promote the video to a project fact or
+export authority automatically. A failed or identity-ambiguous result stops;
+any new submission would require a separate explicit authorization and action
+id.
 
-1. Persist the returned `externalTaskId` before treating the task as queued.
-2. Do not resubmit on timeout, restart, or an ambiguous provider response.
-3. Query only the saved task id.
-4. Do not auto-retry a failed submission. A retry requires a new explicit
-   confirmation and action id.
-5. Any returned video must remain `needs_review`; it cannot become a project
-   fact or export authority in P6-D.
-
-If no external task id is returned, the run stops as an unknown-submit failure
-and does not spend a second submission automatically.
-
-The exact remaining authorization can be given as:
-
-`授权本轮通过 packaged App 执行 1 次 provider-backed director text QA，并向 Seedance/Jimeng 提交 1 个 P6S01、5 秒、720p、标准 seedance2.0 视频；只提交一次，不自动重试，不生成额外故事板图片；拿到 externalTaskId 后只查询，返回结果保持 needs_review。`
+P7 remains blocked until the real returned-media boundary is observed. An
+unrelated residual issue was also seen: activating `收起 AI 导演` once produced
+React minified error 300. It did not affect submit/query identity and is not
+being repaired inside this provider-acceptance phase.
 
 ## Verification
 
@@ -217,6 +285,16 @@ Final phase gate also passed:
 - `git diff --check`
 - `npm run package:smoke`
 
+Live packaged acceptance additionally proved:
+
+- one text-QA receipt and one submit receipt;
+- one canonical external task id across submit, cold restore, and both queries;
+- no second submit receipt and no storyboard/image-generation receipt;
+- standard `seedance2.0`, `720p`, 5-second queue state for `P6S01`;
+- corrected resume truth: `providerCalled=true`,
+  `runtimeExternalNetworkCallMade=true`, and `dryRunOnly=false`;
+- zero returned video files, so live `needs_review` ingestion remains pending.
+
 `package:smoke` rebuilt and verified the local ad-hoc packaged App without a
 dev server. The packaged launch contract exited successfully, and no App or
 runtime process remained afterward.
@@ -225,13 +303,13 @@ Packaged artifact:
 
 - app: `release/mac-arm64/Vibe Director Studio.app`
 - archive: `release/mac-arm64/Vibe Director Studio.app/Contents/Resources/app.asar`
-- archive build time: `2026-07-14 06:02:33 +0800`
-- archive size: `7,355,483` bytes
+- archive build time: `2026-07-14 22:55:04 +0800`
+- archive size: `7,356,122` bytes
 - archive SHA-256:
-  `32c589197a9d050dcfd83f24a93ee567179e809195522d99fe70ab51959f542f`
+  `a636b811202eb381a37f0a957f139a5388f51ddf1f2d14a3ebf8cff7dd1d5adc`
 - signature: local ad-hoc; notarization intentionally remains out of scope
 
 The rebuilt packaged runtime contains the canonical `externalTaskId` fields,
-legacy `submitId` fallback, and `query_result` recovery command. Passing this
-gate permits only the separate one-shot video authorization request; it does
-not itself authorize or prove a real video provider call.
+legacy `submitId` fallback, corrected real/dry-run evidence, and query-only cold
+recovery. It proves the live submit/recovery boundary, but not returned-media
+review while the provider task remains queued.

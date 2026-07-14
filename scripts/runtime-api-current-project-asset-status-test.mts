@@ -6,7 +6,7 @@ import {
   createRuntimeApiCurrentProjectAssetStatus,
   markCurrentProjectVisualMemoryAssetStatus,
 } from "./runtime-api-current-project-asset-status.mts";
-import { createProjectVibe } from "../src/project/index.ts";
+import { createProjectVibe, refreshProjectVibeSourceIndex } from "../src/project/index.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -93,6 +93,28 @@ try {
       sourceRefs: [],
     }],
   });
+  project.assets.push({
+    id: "folder_asset_assets_locked_rooftop_png",
+    kind: "reference",
+    label: "rooftop.png",
+    status: "needs_review",
+    path: "assets/locked/rooftop.png",
+    textConstraints: ["needs_review"],
+    usedByShotIds: [],
+    sourceRefs: ["project.vibe#local-reference"],
+  });
+  project.visualMemory.entries.push({
+    id: "vm_folder_asset_assets_locked_rooftop_png",
+    assetId: "folder_asset_assets_locked_rooftop_png",
+    kind: "reference",
+    label: "rooftop.png",
+    status: "needs_review",
+    textConstraints: ["needs_review"],
+    usedByShotIds: [],
+    canUseAsFutureReference: false,
+    sourceRefs: ["project.vibe#local-reference"],
+  });
+  refreshProjectVibeSourceIndex(project, "2026-05-24T00:00:00.000Z");
   writeJson(projectVibePath, project);
 
   const endpoints = createRuntimeApiEndpoints();
@@ -158,6 +180,23 @@ try {
   const afterReviewProject = readJson(projectVibePath);
   assert(afterReviewProject.assets.some((asset: any) => asset.id === "prop_ticket" && asset.status === "needs_review"), "needs_review prop should persist as a Project.vibe asset");
   assert(afterReviewProject.shots[0].propAssetIds.includes("prop_ticket"), "prop should bind back to matching shot");
+
+  const projectOnlyResponse = response();
+  await api.handleCurrentProjectAssetStatusRoute(
+    {
+      method: "POST",
+      body: { assetId: "folder_asset_assets_locked_rooftop_png", status: "locked" },
+    },
+    projectOnlyResponse,
+    new URL(`http://127.0.0.1${endpoints.currentProjectAssetStatusEndpoint}`),
+  );
+  assert(projectOnlyResponse.statusCode === 200, "Project.vibe-only reference update should return 200");
+  assert(projectOnlyResponse.payload.visualMemoryWritten === false, "Project.vibe-only reference should not expand the legacy visual-memory sidecar");
+  const afterProjectOnlyLock = readJson(visualMemoryPath);
+  assert(!Array.isArray(afterProjectOnlyLock.assets), "Project.vibe-only reference should remain absent from visual_memory.json");
+  const afterProjectOnlyProject = readJson(projectVibePath);
+  assert(afterProjectOnlyProject.assets.some((asset: any) => asset.id === "folder_asset_assets_locked_rooftop_png" && asset.status === "locked"), "Project.vibe-only reference should persist as locked");
+  assert(afterProjectOnlyProject.visualMemory.entries.some((entry: any) => entry.assetId === "folder_asset_assets_locked_rooftop_png" && entry.canUseAsFutureReference === true), "Project.vibe-only reference should become future reference");
 
   const blockedResponse = response();
   await api.handleCurrentProjectAssetStatusRoute(

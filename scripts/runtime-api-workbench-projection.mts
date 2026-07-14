@@ -985,8 +985,18 @@ export function createRuntimeApiWorkbenchProjection({
     const projectVibeVisualMemory = isRecord(projectFacts.projectVibe?.visualMemory)
       ? projectFacts.projectVibe.visualMemory
       : undefined;
-    const storyFlowParsed = storyFact.readable ? storyFact.parsed : projectVibeStoryFlow;
-    const storyFlowReadable = storyFact.readable || Boolean(projectVibeStoryFlow);
+    const canonicalProjectVibeStory = Boolean(
+      projectVibeStoryFlow
+      && projectFacts.projectVibe?.kind === "project_vibe_document"
+      && projectFacts.projectVibe?.manifest?.sourceOfTruth === "project_vibe"
+      && projectFacts.projectVibe?.manifest?.runtimeFixtureAuthority !== true,
+    );
+    const storyFlowParsed = canonicalProjectVibeStory
+      ? projectVibeStoryFlow
+      : storyFact.readable
+        ? storyFact.parsed
+        : projectVibeStoryFlow;
+    const storyFlowReadable = canonicalProjectVibeStory || storyFact.readable || Boolean(projectVibeStoryFlow);
     const visualMemoryParsed = visualMemoryFact.readable ? visualMemoryFact.parsed : projectVibeVisualMemory;
     const visualMemoryReadable = visualMemoryFact.readable || Boolean(projectVibeVisualMemory);
     const storyShots = storyFlowReadable ? normalizeWorkbenchStoryShots(storyFlowParsed) : [];
@@ -1038,19 +1048,19 @@ export function createRuntimeApiWorkbenchProjection({
         refs: Array.isArray(sourceIndexFact.parsed?.refs) ? sourceIndexFact.parsed.refs.filter((item) => typeof item === "string") : [],
       },
       storyFlow: {
-        present: storyFact.present,
+        present: canonicalProjectVibeStory || storyFact.present,
         readable: storyFlowReadable,
-        path: storyFact.path,
-        fallbackFromProjectVibe: !storyFact.readable && Boolean(projectVibeStoryFlow),
-        sourceOfTruth: storyFact.sourceOfTruth,
-        factSourceRole: storyFact.factSourceRole,
-        sourceRole: storyFact.sourceRole,
-        declaredBy: storyFact.declaredBy,
-        declaredRefPath: storyFact.declaredRefPath,
-        compatibilityFallbackUsed: storyFact.compatibilityFallbackUsed,
-        runtimeStateRole: storyFact.runtimeStateRole,
-        runtimeStateUsed: storyFact.runtimeStateUsed,
-        runtimeStateMayOverride: storyFact.runtimeStateMayOverride,
+        path: canonicalProjectVibeStory ? source.projectVibeRelativePath : storyFact.path,
+        fallbackFromProjectVibe: !canonicalProjectVibeStory && !storyFact.readable && Boolean(projectVibeStoryFlow),
+        sourceOfTruth: canonicalProjectVibeStory ? "project_vibe" : storyFact.sourceOfTruth,
+        factSourceRole: canonicalProjectVibeStory ? "project_vibe_story_flow" : storyFact.factSourceRole,
+        sourceRole: canonicalProjectVibeStory ? "canonical_project_store" : storyFact.sourceRole,
+        declaredBy: canonicalProjectVibeStory ? "project.vibe" : storyFact.declaredBy,
+        declaredRefPath: canonicalProjectVibeStory ? undefined : storyFact.declaredRefPath,
+        compatibilityFallbackUsed: canonicalProjectVibeStory ? false : storyFact.compatibilityFallbackUsed,
+        runtimeStateRole: "derived_cache",
+        runtimeStateUsed: false,
+        runtimeStateMayOverride: false,
         shotCount: storyShots.length,
         sectionCount: storySections.length,
         sections: storySections,
@@ -1079,8 +1089,8 @@ export function createRuntimeApiWorkbenchProjection({
       factsUsed: [
         ...projectFacts.factsUsed,
         ...(storyFlowReadable ? [{
-          name: storyFact.readable ? storyFact.name : "project_vibe.story_flow",
-          path: storyFact.readable ? storyFact.path : source.projectVibeRelativePath,
+          name: canonicalProjectVibeStory ? "project_vibe.story_flow" : storyFact.readable ? storyFact.name : "project_vibe.story_flow",
+          path: canonicalProjectVibeStory ? source.projectVibeRelativePath : storyFact.readable ? storyFact.path : source.projectVibeRelativePath,
           usedFor: storyFact.usedFor,
         }] : []),
         ...(visualMemoryReadable ? [{

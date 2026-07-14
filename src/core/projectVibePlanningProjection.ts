@@ -330,11 +330,16 @@ export function buildProjectVibePlanningProjection(
   const projectId = input.scriptPlannerResult?.projectId || input.project?.manifest.projectId || "project";
   const shots = sources.map((source) => {
     const shot = shotRecordFromSource(source);
-    const keyframePair = requiresEndpointEndFrame(source.shot) ? keyframePairForShot(projectId, source.shot) : undefined;
-    const jobs = [
-      jobForShot({ shot: source.shot, projectId, assets: source.assets, role: "start" }),
-      ...(keyframePair ? [jobForShot({ shot: source.shot, projectId, assets: source.assets, role: "end" })] : []),
-    ];
+    const usesOmniReference = source.shot.referenceStrategy === "omni_reference";
+    const keyframePair = !usesOmniReference && requiresEndpointEndFrame(source.shot)
+      ? keyframePairForShot(projectId, source.shot)
+      : undefined;
+    const jobs = usesOmniReference
+      ? []
+      : [
+          jobForShot({ shot: source.shot, projectId, assets: source.assets, role: "start" }),
+          ...(keyframePair ? [jobForShot({ shot: source.shot, projectId, assets: source.assets, role: "end" })] : []),
+        ];
     return {
       shot,
       jobs,

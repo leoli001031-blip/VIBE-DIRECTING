@@ -1,5 +1,5 @@
 import { buildVideoRelayQueueState, type VideoRelayQueueItem } from "../src/core/videoRelayQueue.ts";
-import { JIMENG_CLI_VIP_MODEL_VERSION } from "../src/core/jimengVideoCli.ts";
+import { JIMENG_CLI_DEFAULT_MODEL_VERSION, JIMENG_CLI_VIP_MODEL_VERSION } from "../src/core/jimengVideoCli.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -77,6 +77,19 @@ assert(running.items[0]?.queuePosition === 2085, "active queue item must preserv
 assert(running.items[0]?.queueInfo?.status === "Queueing", "active queue item must preserve queue info");
 assert(running.items[0]?.promptPath === "runs/demo/prompts/video_001.md", "active queue item must preserve prompt path");
 assert(running.items[0]?.referencePaths.length === 3, "active queue item must preserve the reference list");
+assert(running.userSummary.includes("Seedance 2.0 VIP"), "VIP queue summary must preserve the selected VIP model label");
+
+const standardRunning = buildVideoRelayQueueState({
+  generatedAt,
+  storyboardConfirmed: true,
+  items: [item("video_standard", "queued", {
+    modelVersion: JIMENG_CLI_DEFAULT_MODEL_VERSION,
+    externalTaskId: "standard-task-001",
+    resumeCommand: "dreamina query_result --submit_id=standard-task-001 --download_dir=video/standard",
+  })],
+});
+assert(standardRunning.userSummary.includes("Seedance 2.0 已接管"), "standard queue summary must preserve the selected standard model label");
+assert(!standardRunning.userSummary.includes("VIP"), "standard queue summary must not claim the VIP channel");
 
 for (const activeStatus of ["submitting", "submitted", "queued", "running", "generating", "polling"] as const) {
   const activeQueue = buildVideoRelayQueueState({

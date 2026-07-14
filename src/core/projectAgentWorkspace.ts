@@ -527,6 +527,7 @@ function inboxKindLabel(kind: ProjectInboxKind) {
 }
 
 function assetNeedsReview(asset: AssetRecord) {
+  if (asset.lockedStatus === "locked") return false;
   return asset.lockedStatus === "candidate"
     || asset.lockedStatus === "needs_review"
     || asset.status === "exists"

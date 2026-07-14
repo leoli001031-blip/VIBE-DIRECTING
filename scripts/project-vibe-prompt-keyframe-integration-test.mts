@@ -110,6 +110,18 @@ const projectedEndJob = projection.jobs.find((job) => job.slot === "image.edit")
 assert(projectedStartJob?.requiredMode === "text2image", "Projected start frame must use text-to-image.");
 assert(!projectedEndJob, "Default projection must not create an end-frame image edit job.");
 
+const omniProject = fixtureProject({ referenceStrategy: "omni_reference" });
+const omniProjection = buildProjectVibePlanningProjection({ project: omniProject, generatedAt });
+assert(omniProjection.jobs.length === 0, "Omni-reference projection must not create image jobs.");
+assert(omniProjection.keyframePairs.length === 0, "Omni-reference projection must not create endpoint keyframe pairs.");
+const omniRuntimeState = buildProjectRuntimeStateFromProjectVibe({
+  project: omniProject,
+  projectRoot: "/tmp/project-vibe-prompt-keyframe-omni",
+  projectPath: "project/project.vibe",
+  generatedAt,
+});
+assert(omniRuntimeState.imagePipeline.imageTaskPlans.length === 0, "Omni-reference runtime must not plan image generation.");
+
 const endpointProject = fixtureProject({ videoControlMode: "first_last_endpoint" });
 const endpointProjection = buildProjectVibePlanningProjection({ project: endpointProject, generatedAt });
 const endpointEndJob = endpointProjection.jobs.find((job) => job.slot === "image.edit");

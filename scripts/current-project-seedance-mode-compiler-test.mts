@@ -645,6 +645,7 @@ const narrativeResponse = await route.currentProjectSeedanceSubmitResponse({
 }, {}, narrativeSource);
 
 assert(narrativeResponse.ok === true, `mock narrative submit should pass: ${JSON.stringify(narrativeResponse)}`);
+assert(narrativeResponse.dryRunOnly === true, "mock Seedance submit must remain marked dry-run only");
 assert(narrativeResponse.compilerMode === "storyboard_narrative", "narrative sequence should compile to storyboard_narrative");
 assert(narrativeResponse.storyboardPromptPath, "narrative mode must write an Image2 storyboard prompt");
 const narrativeStoryboardPrompt = readFileSync(path.resolve(repoRoot, narrativeResponse.storyboardPromptPath), "utf8");
@@ -1097,6 +1098,7 @@ const groupedResumeResponse = await route.currentProjectSeedanceResumeResponse({
 }, {}, groupedSource);
 
 assert(groupedResumeResponse.ok === true, `resume query should pass: ${JSON.stringify(groupedResumeResponse)}`);
+assert(groupedResumeResponse.dryRunOnly === true, "mock Seedance query must remain marked dry-run only");
 assert(groupedResumeResponse.status === "success", "resume query should mark returned mock video as success");
 assert(groupedResumeResponse.externalTaskId === "dreamina_submit_resume_001", "resume query should reuse an externalTaskId-only persisted task without resubmitting");
 assert(groupedResumeResponse.outputVideoPath, "resume query should expose the returned video path");
@@ -1149,6 +1151,7 @@ const queryOnlyResponse = await queryOnlyRoute.currentProjectSeedanceResumeRespo
   cliPath: "dreamina",
 }, {}, groupedSource);
 assert(queryOnlyResponse.ok === true, `query-only recovery should stay active: ${JSON.stringify(queryOnlyResponse)}`);
+assert(queryOnlyResponse.dryRunOnly === false, "provider-backed query recovery must not retain the dry-run marker");
 assert(queryOnlyCalls.length === 1, "cold recovery should invoke the provider CLI exactly once");
 assert(queryOnlyCalls[0][0] === "query_result" && queryOnlyCalls[0].includes("--submit_id=query-only-submit-001"), "cold recovery must query the persisted externalTaskId");
 assert(!queryOnlyCalls.flat().includes("multimodal2video"), "cold recovery must never resubmit video generation");

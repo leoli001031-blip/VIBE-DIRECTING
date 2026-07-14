@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, CircleDashed, Clapperboard, ExternalLink, FolderOpen, Images, LockKeyhole, MessageCircle, PackageCheck, Pencil, Plus, RotateCcw, Search, Send, Sparkles, Video, X } from "lucide-react";
 import {
   agentWebSearchSourceLabel,
@@ -4934,6 +4934,7 @@ export function MinimalAgentPanel({
   const lastVisibleComposerInputRef = useRef("");
   const skillSaveMouseDownHandledRef = useRef(false);
   const sendPointerHandledRef = useRef(false);
+  const confirmationPointerHandledRef = useRef(false);
   const agentThreadRef = useRef<HTMLElement>(null);
   const previousSelectionFocusKeyRef = useRef("");
   const previousRuntimeProjectKeyRef = useRef("");
@@ -11204,6 +11205,40 @@ export function MinimalAgentPanel({
                   }
                   void prepareChange(agentMessageConfirmationIntent(message, confirmationAction.label), currentComposerSelectionOverride());
                 };
+                const handleConfirmationPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+                  if (event.button !== 0 || confirmationDisabled) return;
+                  confirmationPointerHandledRef.current = true;
+                  event.preventDefault();
+                  runConfirmationAction();
+                  window.setTimeout(() => {
+                    confirmationPointerHandledRef.current = false;
+                  }, 0);
+                };
+                const handleConfirmationMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
+                  if (confirmationPointerHandledRef.current || event.button !== 0 || confirmationDisabled) return;
+                  confirmationPointerHandledRef.current = true;
+                  event.preventDefault();
+                  runConfirmationAction();
+                  window.setTimeout(() => {
+                    confirmationPointerHandledRef.current = false;
+                  }, 0);
+                };
+                const handleConfirmationClick = () => {
+                  if (confirmationPointerHandledRef.current) {
+                    confirmationPointerHandledRef.current = false;
+                    return;
+                  }
+                  runConfirmationAction();
+                };
+                const handleConfirmationKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+                  if ((event.key !== "Enter" && event.key !== " ") || confirmationDisabled) return;
+                  confirmationPointerHandledRef.current = true;
+                  event.preventDefault();
+                  runConfirmationAction();
+                  window.setTimeout(() => {
+                    confirmationPointerHandledRef.current = false;
+                  }, 0);
+                };
                 return (
                   <div className="minimal-agent-message-actions">
                     <small className="minimal-agent-confirmation-effect">
@@ -11228,7 +11263,10 @@ export function MinimalAgentPanel({
                     )}
                     <button
                       type="button"
-                      onClick={runConfirmationAction}
+                      onPointerDown={handleConfirmationPointerDown}
+                      onMouseDown={handleConfirmationMouseDown}
+                      onClick={handleConfirmationClick}
+                      onKeyDown={handleConfirmationKeyDown}
                       disabled={confirmationDisabled}
                       title={confirmationDisabled ? confirmationDisabledReason : confirmationButtonHint}
                     >

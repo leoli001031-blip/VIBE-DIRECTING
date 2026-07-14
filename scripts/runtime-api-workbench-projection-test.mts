@@ -258,6 +258,49 @@ try {
 	  assert(sceneAsset?.sourceReceiptId === "provider-request-scene-a", "workbench asset facts should preserve generated asset receipt evidence");
 	  assert(sceneAsset?.outputHash === "sha-scene-a", "workbench asset facts should preserve generated asset hash evidence");
 	  assert(sceneAsset?.promptText === "Generate Station scene reference.", "workbench asset facts should preserve generated asset prompt text");
+
+  const legacyProjectVibe = readJsonIfPresent(source.projectVibePath);
+  const { factFiles: _factFiles, ...legacyProjectVibeWithoutFactFiles } = legacyProjectVibe;
+  writeJson(source.projectVibePath, {
+    ...legacyProjectVibeWithoutFactFiles,
+    kind: "project_vibe_document",
+    modelVersion: "project_vibe_minimal_v1",
+    manifest: {
+      projectId: "projection_fixture",
+      title: "Projection Fixture",
+      version: "2026-07-14T00:00:00.000Z",
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z",
+      sourceOfTruth: "project_vibe",
+      portableRoot: "project_root",
+      runtimeFixtureAuthority: false,
+    },
+    storyFlow: {
+      id: "story_flow_current",
+      updatedAt: "2026-07-14T00:00:00.000Z",
+      sourceOfTruth: "project_vibe",
+      sections: [{ id: "act_1", title: "Act 1", summary: "One shot", sequenceIndex: 0, shotIds: ["P6S01"] }],
+      shotOrder: ["P6S01"],
+    },
+    shots: [{
+      id: "P6S01",
+      sectionId: "act_1",
+      title: "Canonical shot",
+      intent: "Canonical Project.vibe shot wins over the compatibility sidecar.",
+      durationSeconds: 5,
+      status: "blocked",
+      referenceStrategy: "omni_reference",
+    }],
+  });
+  writeJson(source.storyFlowPath, {
+    shots: [{ id: "P6S01", title: "Stale sidecar shot", durationSeconds: 6 }],
+  });
+  const canonicalProjectFacts = projectionApi.readProjectFacts(source);
+  const canonicalWorkbenchFacts = projectionApi.currentProjectWorkbenchFacts(source, canonicalProjectFacts);
+  assert(canonicalWorkbenchFacts.storyFlow.shots[0]?.title === "Canonical shot", "canonical Project.vibe shots must override a readable compatibility story sidecar");
+  assert(canonicalWorkbenchFacts.storyFlow.shots[0]?.durationSeconds === 5, "canonical Project.vibe shot duration must override stale sidecar duration");
+  assert(canonicalWorkbenchFacts.storyFlow.shots[0]?.referenceStrategy === "omni_reference", "canonical Project.vibe reference strategy must reach the workbench projection");
+  assert(canonicalWorkbenchFacts.storyFlow.sourceRole === "canonical_project_store", "workbench story metadata must identify canonical Project.vibe authority");
 	  assert(sceneAsset?.promptHash === "sha-prompt-scene-a", "workbench asset facts should preserve generated asset prompt hash");
   const textStyleAsset = workbenchFacts.visualMemory.assets.find((asset) => asset.id === "style_a");
   assert(textStyleAsset?.status === "locked", "text-only style constraints should not block reference review or video submit");

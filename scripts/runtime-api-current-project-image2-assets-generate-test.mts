@@ -151,9 +151,9 @@ function createFixture(fixtureRoot) {
     characterGuidance: shot.characterGuidance || [],
     sceneGuidance: shot.sceneGuidance || [],
     propGuidance: shot.propGuidance || [],
-    sceneAssetIds: [],
-    characterAssetIds: [],
-    propAssetIds: [],
+    sceneAssetIds: shot.id === shotId && shot.sceneId ? [shot.sceneId] : [],
+    characterAssetIds: shot.id === shotId ? shot.roleIds || [] : [],
+    propAssetIds: shot.id === shotId ? shot.propIds || [] : [],
     durationSeconds: shot.durationSeconds || 4,
     status: "planned",
     sourceRefs: [`project/story_flow.json#shots/${shot.id}`],
@@ -173,6 +173,35 @@ function createFixture(fixtureRoot) {
       shotOrder: [shotId, shot2Id, shot3Id],
     },
     shots: projectShots,
+    assets: [
+      {
+        id: "char_mika",
+        kind: "character",
+        label: "Mika",
+        status: "missing",
+        textConstraints: ["Mika 戴耳机，女高中生，安静观察"],
+        usedByShotIds: [shotId],
+        sourceRefs: [`project/visual_memory.json#roles/char_mika`],
+      },
+      {
+        id: "scene_morning_bookstore",
+        kind: "scene",
+        label: "清晨旧书店",
+        status: "candidate",
+        textConstraints: ["清晨旧书店", "木地板", "高书架", "窗外淡雾"],
+        usedByShotIds: [shotId],
+        sourceRefs: [`project/visual_memory.json#scenes/scene_morning_bookstore`],
+      },
+      {
+        id: "prop_old_book",
+        kind: "prop",
+        label: "旧书",
+        status: "missing",
+        textConstraints: ["一本磨损的旧书"],
+        usedByShotIds: [shotId],
+        sourceRefs: [`project/visual_memory.json#props/prop_old_book`],
+      },
+    ],
   });
   mkdirSync(`${fixtureRoot}/project`, { recursive: true });
   writeFileSync(`${fixtureRoot}/project/project.vibe`, serializeProjectVibe(project), "utf8");
@@ -645,7 +674,7 @@ try {
   assert(projectGenerated.response.status === 200, `project-scope asset generation should pass: ${projectGenerated.payload.message}`);
   assert(projectGenerated.payload.scope === "project", "project-scope asset generation should report project scope");
   assert(projectGenerated.payload.selectedShotIds.length === 3, "project-scope asset generation should scan all project shots");
-  assert(projectGenerated.payload.generatedAssetCount === 4, "project-scope asset generation should reuse existing references and only prepare missing bindings/assets");
+  assert(projectGenerated.payload.generatedAssetCount === 3, `project-scope asset generation should reuse the selected-shot references and only prepare the shared scene plus two missing props: ${JSON.stringify(projectGenerated.payload.assets?.map((asset) => ({ id: asset.id, type: asset.type, status: asset.status })))}`);
   assert(!projectGenerated.payload.assets.some((asset) => /手|hand/i.test(asset.name || asset.id)), "body-part shot details must not become standalone reference assets");
   assert(!projectGenerated.payload.assets.some((asset) => asset.type === "prop" && asset.id === "char_mika"), "character subjects repeated in prop fields must not generate duplicate prop references");
   assert(!projectGenerated.payload.assets.some((asset) => asset.type === "prop" && /storyboard|分镜/i.test(asset.id || asset.name)), "storyboard references must not be regenerated as prop assets");

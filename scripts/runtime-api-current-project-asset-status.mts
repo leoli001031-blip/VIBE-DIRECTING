@@ -461,6 +461,24 @@ function writeProjectVibeAssetStatus(source, result, input, deps) {
   }
 }
 
+function projectVibeAssetForVisualMemory(source, assetId, deps) {
+  if (!source?.projectVibePath || !assetId) return undefined;
+  try {
+    const parsed = parseProjectVibeText(deps.readFileSync(source.projectVibePath, "utf8"));
+    if (!parsed.ok || !parsed.project || !Array.isArray(parsed.project.assets)) return undefined;
+    const asset = parsed.project.assets.find((item) => isRecord(item) && item.id === assetId);
+    if (!asset) return undefined;
+    return {
+      ...asset,
+      id: assetId,
+      displayName: assetLabel(asset, assetId),
+      status: normalizeStatus(asset.status) || "needs_review",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export function assetStatusRequestInput(_url, body) {
   return {
     assetId: asString(body?.assetId) || asString(body?.asset?.id),
@@ -504,7 +522,47 @@ export function createRuntimeApiCurrentProjectAssetStatus(deps) {
       };
     }
 
-    const result = markCurrentProjectVisualMemoryAssetStatus(visualMemory, input);
+    let result = markCurrentProjectVisualMemoryAssetStatus(visualMemory, input);
+    if (!result.ok && result.blockers?.includes("asset_not_found")) {
+      const projectAsset = projectVibeAssetForVisualMemory(source, input.assetId, { readFileSync });
+      if (projectAsset) {
+        const projectResult = markCurrentProjectVisualMemoryAssetStatus({ assets: [projectAsset] }, input);
+        if (projectResult.ok) {
+          const projectVibeWrite = writeProjectVibeAssetStatus(source, projectResult, input, {
+            readFileSync,
+            writeFileSync,
+            mkdirSync,
+          });
+          if (projectVibeWrite.projectVibeWritten) {
+            return {
+              ok: true,
+              ...runtimePolicy(),
+              endpoint: currentProjectAssetStatusEndpoint,
+              status: projectResult.status,
+              message: projectResult.message,
+              asset: projectResult.asset,
+              assetId: input.assetId,
+              visualMemoryWritten: false,
+              visualMemoryPath: source.visualMemoryRelativePath,
+              ...projectVibeWrite,
+              running: runtimeState(),
+              ...extra,
+            };
+          }
+          return {
+            ok: false,
+            ...runtimePolicy(),
+            endpoint: currentProjectAssetStatusEndpoint,
+            status: "blocked",
+            message: projectVibeWrite.projectVibeError || "参考状态没有写入项目。",
+            blockers: ["project_vibe_write_failed"],
+            assetId: input.assetId,
+            ...projectVibeWrite,
+            ...extra,
+          };
+        }
+      }
+    }
     if (!result.ok) {
       return {
         ...result,

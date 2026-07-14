@@ -126,14 +126,14 @@ function isTextOnlyStyleAsset(asset: AssetRecord) {
   const sourceText = (asset.sourceRefs || []).join(" ").toLowerCase();
   const searchable = assetSearchText(asset);
   const path = clean(asset.path).toLowerCase();
-  const placeholderPath = !path || path.endsWith(".json");
-  if (placeholderPath && (
+  const textOnlyPath = !path || /\.(?:json|md|markdown|txt)$/.test(path);
+  if (textOnlyPath && (
     sourceText.includes("new_video_reference:style:text")
     || searchable.includes("文字风格方向")
     || searchable.includes("项目视觉风格")
   )) return true;
   if (type !== "style") return false;
-  return placeholderPath && (
+  return textOnlyPath && (
     Boolean(asset.textConstraints?.length)
     || Boolean(clean(asset.promptText))
   );
@@ -284,8 +284,11 @@ function frameNextAction(item: Pick<CreatorFramePlanItem, "startStatus" | "endSt
 }
 
 function framePlanItem(shot: ShotRecord): CreatorFramePlanItem {
-  const requiresEndFrame = usesEndpointEndFrame(shot);
-  const startStatus = frameStatusLabel(shot.status, Boolean(shot.startFrame), "start");
+  const usesOmniReference = shot.referenceStrategy === "omni_reference";
+  const requiresEndFrame = !usesOmniReference && usesEndpointEndFrame(shot);
+  const startStatus = usesOmniReference
+    ? "approved"
+    : frameStatusLabel(shot.status, Boolean(shot.startFrame), "start");
   const endStatus = requiresEndFrame && startStatus === "approved"
     ? frameStatusLabel(shot.status, Boolean(shot.endFrame), "end")
     : "approved";
