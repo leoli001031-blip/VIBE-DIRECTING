@@ -2,12 +2,12 @@
 
 Date: 2026-07-14
 
-Status: PARTIAL PASS for P6-D live provider acceptance. The single authorized
-video was submitted and recovered by the same task id, but the provider still
-reports it as queued, so live returned-media review remains pending.
+Status: PASS for P6-D live provider acceptance. The single authorized video was
+submitted, recovered by the same task id, returned into the project, and left
+at the required `needs_review` boundary.
 
 Readiness label:
-`P6-D live submit/query verified; returned-media needs_review acceptance pending`.
+`P6-D real video one-shot accepted at needs_review; P7 human decision pending`.
 
 The user explicitly authorized one provider-backed director text QA and one
 standard Seedance 2.0 video submission for `P6S01`. The packaged App completed
@@ -22,9 +22,10 @@ the persisted `externalTaskId`; no retry or second submission was attempted.
 - Real storyboard-image generation calls in P6-D: 0.
 - Provider-backed director text-QA operations in P6-D: 1.
 - Real Seedance/Jimeng video submissions in P6-D: 1.
-- Same-task provider result queries in P6-D: 2.
+- Same-task provider result queries in P6-D: 12; every query reused the one
+  persisted external task id.
 - Automatic retries or resubmissions in P6-D: 0.
-- New image or video media returned by the provider: none; the task is queued.
+- New media returned by the provider: one MP4; no new image media.
 
 ## Authorized one-shot
 
@@ -76,24 +77,30 @@ The provider returned and the project persisted this identity under both
 
 `d2c02c02-1c3d-4763-af77-d60816f642cb`
 
-Two later packaged-App actions invoked only `dreamina query_result` with that
-exact id. The latest query receipt contains no `multimodal2video` argument. At
-`2026-07-14T15:00:23Z`, the provider still reported `Queueing`, position 11030
-of 301060. The relay contains one active item, `seedance_segment_1`, bound only
-to `P6S01`; its model is `seedance2.0`, resolution is `720p`, duration is 5
-seconds, and `autoSubmitAllowed=false`.
+Twelve later monitoring actions invoked only `dreamina query_result` with that
+exact id. Eight lightweight queue checks used the CLI query directly; four
+packaged-runtime recovery queries also persisted project state. No query used
+`multimodal2video`. The task moved from `Queueing` to `Generating`, then returned
+through the packaged App at `2026-07-14T21:40:40Z`.
 
-A cold packaged-App restart restored the same external task id, displayed
-`查询视频结果` as the current Agent task, and kept the confirmation copy explicit
-that querying would not repeat submission. After the final package rebuild, a
-second restart and query again used the same id and left the queue active. The
-single submit receipt remained unique, and the run directory contained zero
-video files.
+While active, cold packaged-App restarts restored the same external task id,
+displayed `查询视频结果` as the current Agent task, and stated that querying would
+not repeat submission. The final packaged query downloaded exactly one file:
 
-Because no media has returned, live ingestion, project-relative output path,
-SHA-256 recording, and the required `needs_review` state have not yet been
-observed against real provider media. P6-D therefore remains open at that final
-boundary and does not authorize P7 review/export work yet.
+`video/seedance_2026-07-14T14-03-45-563Z/video/d2c02c02-1c3d-4763-af77-d60816f642cb_video_1.mp4`
+
+The path is project-relative and resolves inside the project root. Its SHA-256
+is `bd605aad4071cc00940d54639576d54bed77473dc7e1e253e4c29aafd0cee4fe`,
+matching the resume report, relay queue, and preview plan. The preview plan
+records `status=needs_review`, `productionStatus=needs_review`,
+`previewStatus=returned_with_review_overlay`, and `reviewRequired=true`.
+
+The relay is complete with one completed item, zero active items,
+`autoSubmitAllowed=false`, and no resume commands. The original submit receipt
+remains the only submit receipt. A post-return cold restart no longer restored
+the old query as the main task; it exposed a confirmed-boundary `导出交付包`
+task instead. No export was confirmed or executed because P7 human review is
+still pending.
 
 ## No-submit report
 
@@ -237,22 +244,20 @@ in the adapter matrix are fake strings or local test fixtures.
 
 ## Live boundary and next action
 
-The one-submit authorization has been consumed. No further submit or automatic
-retry is allowed for this task. While it remains queued, the only permitted
-provider operation is `query_result` with
-`d2c02c02-1c3d-4763-af77-d60816f642cb`.
+The one-submit authorization has been consumed, the task is terminal-success,
+and further provider polling is unnecessary. No retry or second submission is
+allowed for this task.
 
-When media returns, the packaged App must persist a project-relative output
-path and content hash, leave the artifact at `needs_review`, and require an
-explicit review decision. It must not promote the video to a project fact or
-export authority automatically. A failed or identity-ambiguous result stops;
-any new submission would require a separate explicit authorization and action
-id.
+P7 may now perform human review only. The returned media remains
+`needs_review`; it has not been approved, promoted to a project fact, or
+exported. The post-return projection currently offers `导出交付包` before a
+separate review decision has been recorded. The action still has a confirmation
+boundary, but P7 must decide whether that ordering is an accepted preview-export
+contract or a review-flow defect before export is exercised.
 
-P7 remains blocked until the real returned-media boundary is observed. An
-unrelated residual issue was also seen: activating `收起 AI 导演` once produced
-React minified error 300. It did not affect submit/query identity and is not
-being repaired inside this provider-acceptance phase.
+An unrelated residual issue was also seen: activating `收起 AI 导演` once
+produced React minified error 300. It did not affect submit/query identity and
+is not being repaired inside this provider-acceptance phase.
 
 Future submission preference: the next separately authorized new video task
 should use `720p` with `seedance2.0_vip`. This preference does not authorize a
@@ -293,12 +298,15 @@ Final phase gate also passed:
 Live packaged acceptance additionally proved:
 
 - one text-QA receipt and one submit receipt;
-- one canonical external task id across submit, cold restore, and both queries;
+- one canonical external task id across submit, every query, and cold restore;
 - no second submit receipt and no storyboard/image-generation receipt;
-- standard `seedance2.0`, `720p`, 5-second queue state for `P6S01`;
+- standard `seedance2.0`, 1280x720 H.264 MP4, 5.062-second returned media for
+  `P6S01`;
 - corrected resume truth: `providerCalled=true`,
   `runtimeExternalNetworkCallMade=true`, and `dryRunOnly=false`;
-- zero returned video files, so live `needs_review` ingestion remains pending.
+- project-relative media path and matching SHA-256 across return evidence;
+- `needs_review` / `returned_with_review_overlay` with no automatic promotion,
+  approval, or export.
 
 `package:smoke` rebuilt and verified the local ad-hoc packaged App without a
 dev server. The packaged launch contract exited successfully, and no App or
@@ -316,5 +324,5 @@ Packaged artifact:
 
 The rebuilt packaged runtime contains the canonical `externalTaskId` fields,
 legacy `submitId` fallback, corrected real/dry-run evidence, and query-only cold
-recovery. It proves the live submit/recovery boundary, but not returned-media
-review while the provider task remains queued.
+recovery. The live submit, recovery, return ingest, and `needs_review` boundary
+are now proven. P7 human review remains separate.
