@@ -254,6 +254,11 @@ unrelated residual issue was also seen: activating `收起 AI 导演` once produ
 React minified error 300. It did not affect submit/query identity and is not
 being repaired inside this provider-acceptance phase.
 
+Future submission preference: the next separately authorized new video task
+should use `720p` with `seedance2.0_vip`. This preference does not authorize a
+second submission for the current `P6S01` task and does not change the product's
+global model default.
+
 ## Verification
 
 Passed before the final phase gate:
