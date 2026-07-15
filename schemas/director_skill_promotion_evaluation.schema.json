@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_promotion_evaluation.schema.json",
+  "title": "DirectorSkillPromotionEvaluation",
+  "description": "Evidence-only promotion eligibility report. Explicit user confirmation remains a separate required boundary.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "evaluationId", "skillId", "sourceVersion", "sourceContentHash", "requestedMaturity", "eligible", "acceptedCaseIds", "acceptedProjectCount", "unresolvedCaseIds", "rejectedEvidenceIds", "reasons", "evaluatedAt"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_promotion_evaluation/1.0.0" }, "evaluationId": { "type": "string", "minLength": 1 },
+    "skillId": { "type": "string", "minLength": 1 }, "sourceVersion": { "type": "string", "minLength": 1 }, "sourceContentHash": { "type": "string", "minLength": 1 },
+    "requestedMaturity": { "enum": ["verified", "trusted"] }, "eligible": { "type": "boolean" },
+    "acceptedCaseIds": { "$ref": "#/$defs/stringArray" }, "acceptedProjectCount": { "type": "integer", "minimum": 0 },
+    "unresolvedCaseIds": { "$ref": "#/$defs/stringArray" }, "rejectedEvidenceIds": { "$ref": "#/$defs/stringArray" },
+    "reasons": { "$ref": "#/$defs/stringArray" }, "evaluatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": { "stringArray": { "type": "array", "items": { "type": "string", "minLength": 1 } } }
+}

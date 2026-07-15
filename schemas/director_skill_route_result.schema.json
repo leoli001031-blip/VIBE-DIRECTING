@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_route_result.schema.json",
+  "title": "DirectorSkillRouteResult",
+  "description": "Deterministic structured Director Skill route result with precedence, exclusions, conflicts, and context budget.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "routeId", "taskId", "inputHash", "taskPurpose", "auxiliary", "notSelected", "conflicts", "knowledgePacks", "precedence", "contextBudget", "warnings", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_route_result/1.0.0" },
+    "routeId": { "type": "string", "minLength": 1 }, "taskId": { "type": "string", "minLength": 1 }, "inputHash": { "type": "string", "minLength": 1 },
+    "taskPurpose": { "enum": ["story_planning", "reference_planning", "prompt_compiler", "qa"] },
+    "primary": { "$ref": "#/$defs/selection" },
+    "auxiliary": { "type": "array", "items": { "$ref": "#/$defs/selection" } },
+    "notSelected": { "type": "array", "items": { "$ref": "#/$defs/exclusion" } },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } },
+    "knowledgePacks": { "type": "array", "items": { "$ref": "director_skill_case.schema.json#/$defs/knowledgeBinding" } },
+    "precedence": {
+      "type": "array", "prefixItems": [
+        { "const": "system_hard_boundaries" }, { "const": "project_facts" }, { "const": "trusted_user_skill" }, { "const": "candidate_recommendation" }
+      ], "minItems": 4, "maxItems": 4
+    },
+    "contextBudget": {
+      "type": "object", "additionalProperties": false, "required": ["maxInjectionTokens", "estimatedSelectedTokens", "truncated"],
+      "properties": { "maxInjectionTokens": { "type": "integer", "minimum": 1 }, "estimatedSelectedTokens": { "type": "integer", "minimum": 0 }, "truncated": { "type": "boolean" } }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }, "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "selection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["skillId", "version", "contentHash", "maturity", "scope", "recipeId", "recipeVersion", "recipeContentHash", "score", "reasons", "counterexampleConditions"],
+      "properties": {
+        "skillId": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 }, "contentHash": { "type": "string", "minLength": 1 },
+        "maturity": { "enum": ["candidate", "verified", "trusted", "deprecated"] }, "scope": { "enum": ["system_builtin", "project_local", "user_global", "external_imported"] },
+        "recipeId": { "type": "string", "minLength": 1 }, "recipeVersion": { "type": "string", "minLength": 1 }, "recipeContentHash": { "type": "string", "minLength": 1 },
+        "score": { "type": "number" }, "reasons": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "counterexampleConditions": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "exclusion": {
+      "type": "object", "additionalProperties": false, "required": ["skillId", "version", "reason", "detail"],
+      "properties": {
+        "skillId": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 },
+        "reason": { "enum": ["invalid_contract", "deprecated", "task_purpose_mismatch", "strategy_mismatch", "execution_mode_mismatch", "duration_mismatch", "action_density_mismatch", "provider_incompatible", "dependency_missing", "version_conflict", "conflict_lost", "lower_score"] },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    },
+    "conflict": {
+      "type": "object", "additionalProperties": false, "required": ["skillIds", "resolution", "reason"],
+      "properties": {
+        "skillIds": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 1 } },
+        "resolution": { "enum": ["system_wins", "project_fact_wins", "higher_trust_wins", "manual_selection_required"] },
+        "winnerSkillId": { "type": "string" }, "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

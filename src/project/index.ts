@@ -6,6 +6,7 @@ export * from "./projectAgentStagedPlanDraft";
 export * from "./projectAgentActionLog";
 export * from "./projectAgentTimeline";
 export * from "./projectAgentGenerationJobLedger";
+export * from "./projectDirectorSkillInvocationStore";
 export {
   buildProjectAgentStagedPlanDraft,
   clearProjectAgentStagedPlanDraft,

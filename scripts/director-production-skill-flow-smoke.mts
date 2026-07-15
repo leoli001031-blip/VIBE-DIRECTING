@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { buildScriptStoryboardPromptPack } from "../src/core/scriptStoryboardPromptPack.ts";
@@ -12,10 +12,6 @@ import type { StoryboardReferenceAsset } from "../src/core/storyboardReferencePi
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
-}
-
-function timestampId(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
 function writeText(filePath: string, text: string): void {
@@ -36,7 +32,7 @@ function table(rows: Array<Record<string, string>>): string {
   ].join("\n");
 }
 
-const outputRoot = path.resolve("real-test-sandbox", `director-production-skill-flow-${timestampId()}`);
+const outputRoot = mkdtempSync("/tmp/vibe-director-production-skill-flow-");
 const storyboardDir = path.join(outputRoot, "storyboards");
 const videoDir = path.join(outputRoot, "seedance");
 

@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { extractFile, listPackage } from "@electron/asar";
 
@@ -57,7 +56,7 @@ async function stopRuntime(child: ReturnType<typeof spawn>) {
 
 async function runPackagedExecutableSmoke(executablePath: string) {
   const marker = "__VIBE_ELECTRON_PACKAGED_GUI_SMOKE__";
-  const smokeRoot = mkdtempSync(path.join(tmpdir(), "vibe-packaged-app-smoke-"));
+  const smokeRoot = mkdtempSync("/tmp/vibe-packaged-app-smoke-");
   const smokeProfile = path.join(smokeRoot, "profile");
   const smokeProjects = path.join(smokeRoot, "projects");
   const smokeRuntime = path.join(smokeRoot, "runtime");
@@ -66,24 +65,105 @@ async function runPackagedExecutableSmoke(executablePath: string) {
   mkdirSync(smokeRuntime, { recursive: true });
   const stdout: string[] = [];
   const stderr: string[] = [];
-  const child = spawn(executablePath, [], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      VIBE_ELECTRON_SMOKE: "1",
-      VIBE_DIRECTOR_RUNTIME_API_PORT: "0",
-      VIBE_DIRECTOR_USER_DATA_DIR: smokeProfile,
-      VIBE_DIRECTOR_PROJECTS_ROOT: smokeProjects,
-      VIBE_DIRECTOR_RUNTIME_WORKDIR: smokeRuntime,
-      VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH: path.join(smokeProfile, "current-project.local.json"),
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const launchEnv = {
+    VIBE_ELECTRON_SMOKE: "1",
+    VIBE_DIRECTOR_RUNTIME_API_PORT: "0",
+    VIBE_DIRECTOR_USER_DATA_DIR: smokeProfile,
+    VIBE_DIRECTOR_PROJECTS_ROOT: smokeProjects,
+    VIBE_DIRECTOR_RUNTIME_WORKDIR: smokeRuntime,
+    VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH: path.join(smokeProfile, "current-project.local.json"),
+  };
+  const redirectedStdoutPath = process.platform === "darwin" ? path.join(smokeRoot, "stdout.log") : undefined;
+  const redirectedStderrPath = process.platform === "darwin" ? path.join(smokeRoot, "stderr.log") : undefined;
+  const darwinLaunchMarker = process.platform === "darwin" ? `vibe-packaged-smoke-id=${path.basename(smokeRoot)}` : undefined;
+  const darwinSourceAppPath = process.platform === "darwin"
+    ? path.resolve(path.dirname(executablePath), "../..")
+    : undefined;
+  const darwinAppPath = darwinSourceAppPath
+    ? path.join(smokeRoot, path.basename(darwinSourceAppPath))
+    : undefined;
+  if (redirectedStdoutPath && redirectedStderrPath) {
+    writeFileSync(redirectedStdoutPath, "", "utf8");
+    writeFileSync(redirectedStderrPath, "", "utf8");
+  }
+  if (darwinSourceAppPath && darwinAppPath) {
+    const sourceSignatureVerification = spawnSync("codesign", ["--verify", "--deep", "--strict", darwinSourceAppPath], { encoding: "utf8" });
+    assert(
+      sourceSignatureVerification.status === 0,
+      `source packaged App signature verification failed: ${sourceSignatureVerification.stderr || sourceSignatureVerification.stdout}`,
+    );
+    const copy = spawnSync("ditto", [darwinSourceAppPath, darwinAppPath], { encoding: "utf8" });
+    assert(copy.status === 0, `could not copy packaged App into the fresh smoke root: ${copy.stderr || copy.stdout}`);
+    const signatureVerification = spawnSync("codesign", ["--verify", "--deep", "--strict", darwinAppPath], { encoding: "utf8" });
+    assert(
+      signatureVerification.status === 0,
+      `packaged App signature verification failed: ${signatureVerification.stderr || signatureVerification.stdout}`,
+    );
+    const signatureDetails = spawnSync("codesign", ["-d", "--verbose=4", "--entitlements", ":-", darwinAppPath], { encoding: "utf8" });
+    const signatureOutput = `${signatureDetails.stdout || ""}${signatureDetails.stderr || ""}`;
+    assert(signatureDetails.status === 0 && /flags=.*runtime/.test(signatureOutput), "packaged App must retain hardened-runtime signing flags");
+    for (const entitlement of [
+      "com.apple.security.cs.allow-jit",
+      "com.apple.security.cs.allow-unsigned-executable-memory",
+      "com.apple.security.cs.disable-library-validation",
+    ]) {
+      assert(signatureOutput.includes(entitlement), `packaged App signature must retain ${entitlement}`);
+    }
+    const registration = spawnSync(
+      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+      ["-f", darwinAppPath],
+      { encoding: "utf8" },
+    );
+    assert(registration.status === 0, `could not register packaged App with LaunchServices: ${registration.stderr || registration.stdout}`);
+  }
+  const child = process.platform === "darwin"
+    ? spawn("open", [
+        "-n",
+        "-g",
+        "-o",
+        redirectedStdoutPath!,
+        "--stderr",
+        redirectedStderrPath!,
+        ...Object.entries(launchEnv).flatMap(([name, value]) => ["--env", `${name}=${value}`]),
+        darwinAppPath!,
+        "--args",
+        `--user-data-dir=${smokeProfile}`,
+        `--${darwinLaunchMarker}`,
+      ], {
+        cwd: process.cwd(),
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+    : spawn(executablePath, [], {
+        cwd: process.cwd(),
+        env: { ...process.env, ...launchEnv },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+  function output() {
+    const redirectedStdout = redirectedStdoutPath && existsSync(redirectedStdoutPath)
+      ? readFileSync(redirectedStdoutPath, "utf8")
+      : "";
+    const redirectedStderr = redirectedStderrPath && existsSync(redirectedStderrPath)
+      ? readFileSync(redirectedStderrPath, "utf8")
+      : "";
+    return `${stdout.join("")}${redirectedStdout}\n${stderr.join("")}${redirectedStderr}`;
+  }
 
   let stopChildPromise: Promise<void> | null = null;
-  function stopChild() {
+  function stopChild(forceDarwinApp = false) {
     if (stopChildPromise) return stopChildPromise;
     stopChildPromise = new Promise<void>((resolve) => {
+      if (darwinLaunchMarker) {
+        if (!forceDarwinApp) {
+          resolve();
+          return;
+        }
+        const stop = spawn("pkill", ["-TERM", "-f", darwinLaunchMarker], { stdio: "ignore" });
+        stop.once("error", () => resolve());
+        stop.once("exit", () => resolve());
+        return;
+      }
       if (child.exitCode !== null || child.signalCode !== null) {
         resolve();
         return;
@@ -101,16 +181,16 @@ async function runPackagedExecutableSmoke(executablePath: string) {
     return stopChildPromise;
   }
 
+  let passed = false;
   try {
     const resultLine = await new Promise<string>((resolve, reject) => {
       let settled = false;
-      function output() {
-        return `${stdout.join("")}\n${stderr.join("")}`;
-      }
+      const poll = setInterval(() => maybeResolve(), 100);
       function maybeResolve() {
         const line = output().split(/\r?\n/).find((candidate) => candidate.startsWith(marker));
         if (!line || settled) return;
         settled = true;
+        clearInterval(poll);
         clearTimeout(timeout);
         void stopChild();
         resolve(line);
@@ -118,8 +198,9 @@ async function runPackagedExecutableSmoke(executablePath: string) {
       const timeout = setTimeout(() => {
         if (settled) return;
         settled = true;
-        void stopChild();
-        reject(new Error(`Packaged executable smoke timed out\nstdout:\n${stdout.join("")}\nstderr:\n${stderr.join("")}`));
+        clearInterval(poll);
+        void stopChild(true);
+        reject(new Error(`Packaged executable smoke timed out; evidence retained at ${smokeRoot}\n${output()}`));
       }, 45_000);
       child.stdout?.on("data", (chunk: Buffer) => {
         stdout.push(chunk.toString());
@@ -132,25 +213,31 @@ async function runPackagedExecutableSmoke(executablePath: string) {
       child.on("error", (error) => {
         if (settled) return;
         settled = true;
+        clearInterval(poll);
         clearTimeout(timeout);
         reject(error);
       });
       child.on("exit", (code) => {
         if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
         const line = output().split(/\r?\n/).find((candidate) => candidate.startsWith(marker));
         if (line) {
+          settled = true;
+          clearInterval(poll);
+          clearTimeout(timeout);
           resolve(line);
           return;
         }
+        if (process.platform === "darwin" && code === 0) return;
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(timeout);
         reject(new Error(`Packaged executable smoke exited with ${code} before marker\n${output()}`));
       });
     });
 
     const result = JSON.parse(resultLine.slice(marker.length));
-    const output = `${stdout.join("")}\n${stderr.join("")}`;
-    assert(result.ok === true, `packaged executable smoke failed: ${result.error || output}`);
+    const launchOutput = output();
+    assert(result.ok === true, `packaged executable smoke failed: ${result.error || launchOutput}`);
     assert(result.packaged === true, "packaged executable smoke must run with app.isPackaged=true");
     assert(result.renderer?.rootPresent === true, "packaged executable smoke must render the app root");
     assert((result.renderer?.bodyLength || 0) > 100, "packaged executable smoke must render the real app body");
@@ -170,12 +257,13 @@ async function runPackagedExecutableSmoke(executablePath: string) {
     assert(result.runtimeStatus?.providerCalled === false, "packaged executable smoke must not call providers");
     assert(result.runtimeStatus?.liveSubmitAllowed === false, "packaged executable smoke must keep live submit blocked");
     assert(
-      !/(keychain|secret storage|password|系统钥匙串|钥匙串|密码)/i.test(output),
+      !/(keychain|secret storage|password|系统钥匙串|钥匙串|密码)/i.test(launchOutput),
       "packaged executable smoke should not emit keychain/secret-storage/password prompts during normal launch",
     );
+    passed = true;
   } finally {
     await stopChild();
-    rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    if (passed) rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
 
@@ -293,6 +381,9 @@ assert(mainSource.includes("--vibe-current-project-binding="), "built Electron m
 assert(mainSource.includes("preload.cjs"), "built Electron main must target built preload.cjs");
 assert(mainSource.includes("VIBE_DIRECTOR_RUNTIME_API_PORT"), "built Electron main must prefer Vibe Director runtime env names");
 assert(mainSource.includes("VIBE_CORE_RUNTIME_API_PORT"), "built Electron main must keep legacy runtime env compatibility isolated");
+assert(mainSource.includes("VIBE_ELECTRON_PACKAGED_ACCEPTANCE"), "built Electron main must gate packaged control acceptance behind an explicit test-only flag");
+assert(mainSource.includes("VIBE_ELECTRON_ACCEPTANCE_CONTROL_TOKEN"), "packaged acceptance control must require an ephemeral token");
+assert(mainSource.includes('server.listen(packagedAcceptanceControlPort, "127.0.0.1"'), "packaged acceptance control must bind to loopback only");
 assert(preloadSource.includes("contextBridge"), "built preload must expose a context-isolated bridge");
 assert(preloadSource.includes("vibeRuntime"), "built preload must expose vibeRuntime");
 assert(preloadSource.includes("ensureRuntimeApiBaseUrl"), "built preload must expose lazy runtime startup");
@@ -311,7 +402,7 @@ assert(
 );
 await runPackagedExecutableSmoke(executablePath);
 
-const runtimeCwd = mkdtempSync(path.join(tmpdir(), "vibe-packaged-runtime-"));
+const runtimeCwd = mkdtempSync("/tmp/vibe-packaged-runtime-");
 const isolatedHome = path.join(runtimeCwd, "home");
 await mkdir(isolatedHome, { recursive: true });
 const fakeSpeakerPath = path.join(runtimeCwd, "speaker.wav");

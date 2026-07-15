@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_portable_case.schema.json",
+  "title": "DirectorSkillPortableCase",
+  "description": "Redacted, non-authorizing Case evidence for a portable Director Skill package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "portableCaseHash", "sourceCaseId", "sourceCaseHash", "projectIdentityHash", "shotIdentityHash", "skillId", "skillVersion", "skillContentHash", "outcome", "inputHash", "outputHash", "provider", "qa", "humanDecisionEvidence", "summary", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_portable_case/1.0.0" },
+    "portableCaseHash": { "$ref": "#/$defs/sha256" },
+    "sourceCaseId": { "type": "string", "minLength": 1 },
+    "sourceCaseHash": { "type": "string", "minLength": 1 },
+    "projectIdentityHash": { "$ref": "#/$defs/sha256" },
+    "shotIdentityHash": { "$ref": "#/$defs/sha256" },
+    "skillId": { "type": "string", "minLength": 1 },
+    "skillVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "skillContentHash": { "type": "string", "minLength": 1 },
+    "outcome": { "$ref": "#/$defs/decision" },
+    "inputHash": { "type": "string", "minLength": 1 },
+    "outputHash": { "type": "string", "minLength": 1 },
+    "provider": { "$ref": "#/$defs/provider" },
+    "qa": { "$ref": "#/$defs/qa" },
+    "humanDecisionEvidence": { "$ref": "#/$defs/humanDecision" },
+    "summary": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "decision": { "enum": ["accepted", "modified", "rejected", "retry_requested", "failed", "needs_review"] },
+    "provider": {
+      "type": "object", "additionalProperties": false, "required": ["executionMode"],
+      "properties": {
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" }, "providerId": { "type": "string" },
+        "modelId": { "type": "string" }, "executionMode": { "enum": ["dry_run", "live"] }
+      }
+    },
+    "qa": {
+      "type": "object", "additionalProperties": false, "required": ["status", "findings"],
+      "properties": {
+        "status": { "enum": ["not_run", "pass", "warning", "blocked"] }, "reportHash": { "type": "string" },
+        "findings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "humanDecision": {
+      "type": "object", "additionalProperties": false, "required": ["present"],
+      "properties": {
+        "present": { "type": "boolean" }, "decision": { "$ref": "#/$defs/decision" },
+        "confirmationHash": { "$ref": "#/$defs/sha256" }, "decidedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

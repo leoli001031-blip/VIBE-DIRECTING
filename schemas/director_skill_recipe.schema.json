@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_recipe.schema.json",
+  "title": "DirectorSkillRecipe",
+  "description": "Declarative compiler and provider parameter recipe selected by a Director Skill. It never grants execution or approval authorization.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "skillId", "version", "contentHash", "compilerProfile", "providerCompatibility", "promptFragments", "parameterHints", "guards"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_recipe/1.0.0" },
+    "id": { "type": "string", "minLength": 1 },
+    "skillId": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "contentHash": { "type": "string", "pattern": "^vdsh_[a-f0-9]{8}$" },
+    "compilerProfile": { "enum": ["storyboard_narrative", "storyboard_rapid_cut", "omni_reference"] },
+    "providerCompatibility": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/providerSlot" } },
+    "promptFragments": {
+      "type": "object", "additionalProperties": false, "required": ["planner", "image2", "seedance", "qa"],
+      "properties": {
+        "planner": { "$ref": "#/$defs/stringArray" },
+        "image2": { "$ref": "#/$defs/stringArray" },
+        "seedance": { "$ref": "#/$defs/stringArray" },
+        "qa": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "parameterHints": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" }, { "type": "number" }, { "type": "boolean" },
+          { "type": "array", "items": { "type": "string" } }
+        ]
+      }
+    },
+    "guards": {
+      "type": "object", "additionalProperties": false, "required": ["forbiddenOverrides", "submitAuthorization", "autoApproval"],
+      "properties": {
+        "forbiddenOverrides": {
+          "type": "array", "minItems": 6, "uniqueItems": true,
+          "items": { "enum": ["provider_policy", "preflight_gate", "review_gate", "delivery_gate", "confirmation_boundary", "electron_security_boundary"] }
+        },
+        "submitAuthorization": { "const": "never" },
+        "autoApproval": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "stringArray": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  }
+}

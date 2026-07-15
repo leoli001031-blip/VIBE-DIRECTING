@@ -20,6 +20,14 @@ if (process.platform === "darwin") {
   // Local-first app: avoid Chromium touching macOS keychain storage during normal use.
   app.commandLine.appendSwitch("use-mock-keychain");
 }
+const packagedAcceptanceControlPort = Number(process.env.VIBE_ELECTRON_ACCEPTANCE_CONTROL_PORT || "");
+const packagedAcceptanceControlToken = (process.env.VIBE_ELECTRON_ACCEPTANCE_CONTROL_TOKEN || "").trim();
+const packagedAcceptanceControlEnabled = app.isPackaged
+  && process.env.VIBE_ELECTRON_PACKAGED_ACCEPTANCE === "1"
+  && Number.isInteger(packagedAcceptanceControlPort)
+  && packagedAcceptanceControlPort >= 1024
+  && packagedAcceptanceControlPort <= 65535
+  && packagedAcceptanceControlToken.length >= 32;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function readEnv(primaryName: string, legacyName?: string): string | undefined {
   return process.env[primaryName] || (legacyName ? process.env[legacyName] : undefined);
@@ -62,6 +70,7 @@ const runtimeSessionToken = createRuntimeSessionToken();
 let runtimeServer: ChildProcess | null = null;
 let runtimeApiBaseUrl: string | undefined;
 let runtimeServerStarting: Promise<string | undefined> | null = null;
+let packagedAcceptanceControlServer: net.Server | null = null;
 let trustedRendererWebContentsId: number | undefined;
 const projectRootScope = createProjectRootScope();
 const sandboxWatchers = new Map<string, ReturnType<typeof fs.watch>>();
@@ -389,6 +398,85 @@ async function ensureRuntimeServer() {
     runtimeServerStarting = null;
   });
   return runtimeServerStarting;
+}
+
+async function stopRuntimeServer() {
+  const child = runtimeServer;
+  runtimeServer = null;
+  runtimeApiBaseUrl = undefined;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolveStop) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolveStop();
+    };
+    child.once("exit", finish);
+    child.kill("SIGTERM");
+    setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      finish();
+    }, 1000).unref();
+  });
+}
+
+async function startPackagedAcceptanceControl(win: electron.BrowserWindow) {
+  if (!packagedAcceptanceControlEnabled || packagedAcceptanceControlServer) return;
+  const server = net.createServer((socket) => {
+    let buffer = "";
+    const respond = (payload: Record<string, unknown>) => socket.write(`${JSON.stringify(payload)}\n`);
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString();
+      if (buffer.length > 1_000_000) {
+        socket.destroy();
+        return;
+      }
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        void (async () => {
+          let request: { id?: number; token?: string; method?: string; expression?: string };
+          try {
+            request = JSON.parse(line);
+          } catch {
+            respond({ ok: false, error: "invalid_json" });
+            return;
+          }
+          const id = Number(request.id);
+          if (!Number.isInteger(id) || request.token !== packagedAcceptanceControlToken) {
+            respond({ id, ok: false, error: "unauthorized" });
+            return;
+          }
+          try {
+            if (request.method === "evaluate" && typeof request.expression === "string") {
+              const value = await win.webContents.executeJavaScript(request.expression, true);
+              respond({ id, ok: true, value: value === undefined ? null : value });
+              return;
+            }
+            if (request.method === "close") {
+              respond({ id, ok: true, value: true });
+              setTimeout(() => app.quit(), 0);
+              return;
+            }
+            respond({ id, ok: false, error: "unsupported_method" });
+          } catch (error) {
+            respond({ id, ok: false, error: error instanceof Error ? error.message : String(error) });
+          }
+        })();
+      }
+    });
+  });
+  packagedAcceptanceControlServer = server;
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(packagedAcceptanceControlPort, "127.0.0.1", () => resolveListen());
+  }).catch((error) => {
+    packagedAcceptanceControlServer = null;
+    server.close();
+    throw error;
+  });
 }
 
 function trustedRendererDocumentUrl() {
@@ -776,10 +864,11 @@ async function runPackagedSmoke(win: electron.BrowserWindow, runtimeStartedBefor
           exposedRuntimeApiBaseUrl: window.__VIBE_RUNTIME_API_BASE_URL__ || ""
         }))()
       `);
-      if (typeof renderer.bodyTextSample === "string" && renderer.bodyTextSample.includes("本地创作台")) break;
+      if (typeof renderer.bodyTextSample === "string" && renderer.bodyTextSample.includes("AI 导演")) break;
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    console.log(`${smokeMarker}${JSON.stringify({
+    await stopRuntimeServer();
+    fs.writeSync(1, `${smokeMarker}${JSON.stringify({
       ok: true,
       packaged: app.isPackaged,
       runtimeStartedBeforeRendererLoad,
@@ -799,13 +888,14 @@ async function runPackagedSmoke(win: electron.BrowserWindow, runtimeStartedBefor
         liveSubmitAllowed: runtimeStatus.liveSubmitAllowed,
       },
       renderer,
-    })}`);
+    })}\n`);
     app.exit(0);
   } catch (error) {
-    console.error(`${smokeMarker}${JSON.stringify({
+    await stopRuntimeServer();
+    fs.writeSync(2, `${smokeMarker}${JSON.stringify({
       ok: false,
       error: error instanceof Error ? error.message : String(error),
-    })}`);
+    })}\n`);
     app.exit(1);
   }
 }
@@ -870,6 +960,7 @@ async function createWindow() {
     await win.loadFile(path.join(appRoot, "dist", "index.html"));
   }
 
+  await startPackagedAcceptanceControl(win);
   if (smokeMode) await runPackagedSmoke(win, runtimeStartedBeforeRendererLoad);
   return win;
 }
@@ -885,6 +976,8 @@ app.whenReady().then(async () => {
 
 app.on("will-quit", () => {
   closeSandboxWatchers();
+  packagedAcceptanceControlServer?.close();
+  packagedAcceptanceControlServer = null;
   runtimeServer?.kill();
 });
 

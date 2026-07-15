@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_registry_operation.schema.json",
+  "title": "DirectorSkillRegistryOperationReceipt",
+  "description": "Explicitly confirmed promotion, version, pin, enablement, deprecation, or rollback operation receipt.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "receiptId", "receiptHash", "operation", "skillId", "applied", "reasons", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_registry_operation/1.0.0" }, "receiptId": { "type": "string", "minLength": 1 }, "receiptHash": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["promote", "install_version", "pin", "unpin", "enable", "disable", "deprecate", "rollback"] },
+    "skillId": { "type": "string", "minLength": 1 }, "beforeVersion": { "type": "string" }, "afterVersion": { "type": "string" },
+    "applied": { "type": "boolean" }, "confirmationId": { "type": "string" }, "reasons": { "type": "array", "items": { "type": "string" } },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

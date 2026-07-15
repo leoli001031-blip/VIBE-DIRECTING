@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_evaluation.schema.json",
+  "title": "DirectorSkillEvaluationReport",
+  "description": "Fixture, routing, human-decision, QA, rollback, reuse, and trusted-evidence evaluation for the Director Skill system.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "reportId", "reportHash", "fixtureResults", "metrics", "v1V2Comparisons", "trustedEvidence", "governance", "overallStatus", "generatedAt"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_evaluation/1.0.0" }, "reportId": { "type": "string", "minLength": 1 },
+    "reportHash": { "type": "string", "minLength": 1 }, "fixtureResults": { "type": "array", "items": { "$ref": "#/$defs/fixtureResult" } },
+    "metrics": { "$ref": "#/$defs/metrics" }, "v1V2Comparisons": { "type": "array", "items": { "$ref": "#/$defs/comparison" } },
+    "trustedEvidence": { "type": "array", "items": { "$ref": "#/$defs/trusted" } }, "governance": { "$ref": "#/$defs/governance" },
+    "overallStatus": { "enum": ["pass", "fail"] }, "generatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "fixtureResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fixtureId", "kind", "status", "routeId", "matchedExpectedPrimary", "falseTrigger", "forbiddenTriggered", "exclusionReasons", "conflictCount", "failures"],
+      "properties": {
+        "fixtureId": { "type": "string" }, "kind": { "enum": ["positive", "negative", "ambiguous", "conflict"] }, "status": { "enum": ["pass", "fail"] },
+        "actualPrimarySkillId": { "type": "string" }, "actualPrimaryVersion": { "type": "string" }, "routeId": { "type": "string" },
+        "matchedExpectedPrimary": { "type": "boolean" }, "falseTrigger": { "type": "boolean" },
+        "forbiddenTriggered": { "type": "array", "items": { "type": "string" } }, "exclusionReasons": { "type": "array", "items": { "type": "string" } },
+        "conflictCount": { "type": "integer", "minimum": 0 }, "failures": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["routeHitRate", "falseTriggerRate", "humanAccepted", "humanModified", "humanRejected", "retryRequested", "failed", "qaPassRate", "rollbackRate", "crossProjectReuseCount"],
+      "properties": {
+        "routeHitRate": { "type": "number", "minimum": 0, "maximum": 1 }, "falseTriggerRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "humanAccepted": { "type": "integer", "minimum": 0 }, "humanModified": { "type": "integer", "minimum": 0 },
+        "humanRejected": { "type": "integer", "minimum": 0 }, "retryRequested": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 }, "qaPassRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rollbackRate": { "type": "number", "minimum": 0, "maximum": 1 }, "crossProjectReuseCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "comparison": {
+      "type": "object", "additionalProperties": false, "required": ["fixtureId", "promptCompared", "qaCompared", "missingEvidence"],
+      "properties": {
+        "fixtureId": { "type": "string" }, "v1StrategyId": { "type": "string" }, "v2StrategyId": { "type": "string" },
+        "routingAligned": { "type": "boolean" }, "promptCompared": { "type": "boolean" }, "promptChanged": { "type": "boolean" },
+        "qaCompared": { "type": "boolean" }, "qaChanged": { "type": "boolean" }, "missingEvidence": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "trusted": {
+      "type": "object", "additionalProperties": false,
+      "required": ["skillId", "version", "contentHash", "acceptedCaseCount", "acceptedProjectCount", "providerModels", "crossProjectReuseCount", "unprovenScope"],
+      "properties": {
+        "skillId": { "type": "string" }, "version": { "type": "string" }, "contentHash": { "type": "string" },
+        "acceptedCaseCount": { "type": "integer", "minimum": 0 }, "acceptedProjectCount": { "type": "integer", "minimum": 0 },
+        "providerModels": { "type": "array", "items": { "type": "string" } }, "crossProjectReuseCount": { "type": "integer", "minimum": 0 },
+        "unprovenScope": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "governance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["promotionEligibleCaseIds", "excludedCaseIds", "rejectedRetryFailedCannotPromote", "skillCannotAuthorizeExecution"],
+      "properties": {
+        "promotionEligibleCaseIds": { "type": "array", "items": { "type": "string" } }, "excludedCaseIds": { "type": "array", "items": { "type": "string" } },
+        "rejectedRetryFailedCannotPromote": { "const": true }, "skillCannotAuthorizeExecution": { "const": true }
+      }
+    }
+  }
+}

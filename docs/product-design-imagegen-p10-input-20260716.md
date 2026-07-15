@@ -2,10 +2,10 @@
 
 Date: 2026-07-16
 
-Status: INPUT READY. P10 design work has not started.
+Status: P10-S PASS. P10 design work has not started.
 
 Entry label:
-`P9 PASS; packaged behavior is the baseline; Product Design/ImageGen may now explore presentation without changing Agent-first business contracts`.
+`P9 PASS; P10-S PASS; Product Design/ImageGen may begin after the P10-S closing commit without changing Agent-first or Director Skill contracts`.
 
 ## Purpose
 
@@ -21,6 +21,10 @@ closure and the future P10 UI redesign. It defines:
 It is not a mockup or screenshot audit. The handoff prompt authorizes ImageGen
 only for P10 design-direction artifacts after P10-A; it does not authorize
 project storyboard, reference, video, or other production-media generation.
+
+P10-S adds a second product input: how saved directing methods are recommended,
+inspected, evidenced, and deliberately promoted without becoming execution
+authority. It does not authorize a visual implementation.
 
 ## Product invariant
 
@@ -180,6 +184,8 @@ Authoritative acceptance documents:
 - `docs/agent-first-p8-b-local-export-acceptance-20260715.md`
 - `docs/agent-first-p9-delivery-rc-acceptance-20260716.md`
 - `docs/agent-first-p4-packaged-release-audit-20260711.md`
+- `docs/agent-first-p10-s-director-skill-system-acceptance-20260716.md`
+- `docs/director-skill-system-audit-20260716.md`
 
 Core contract sources:
 
@@ -209,6 +215,134 @@ The RC package contains 16 receipt-bound outputs. The final MP4 SHA-256 is:
 No screenshot or ImageGen asset was created in P9. P10 should begin by
 capturing the packaged App's actual state set before generating design
 alternatives.
+
+## Director Skills product input
+
+### Object and authority model
+
+The design must keep four content objects visibly understandable without
+merging their authority:
+
+| Object | Product meaning | What it cannot mean |
+| --- | --- | --- |
+| Skill | Reusable directing decision method | Provider command, project fact, or proof of success |
+| Recipe | Compiler/provider-compatible prompt and parameter guidance | Submit authorization or auto-approval |
+| Case | One project use with QA and human outcome | Automatic global trust |
+| Knowledge Pack | Routed knowledge, rules, and examples | Skill identity or promotion evidence by itself |
+
+Canonical JSON, version, and content hash are authoritative. A Markdown Skill
+card is a readable projection only.
+
+### Scope and maturity states
+
+| Scope / maturity | Meaning | Required presentation boundary |
+| --- | --- | --- |
+| `project_local/candidate` | Learned in this project; may be recommended here | Never imply it is available globally |
+| `user_global/verified` | Explicitly promoted with sufficient accepted evidence | Show evidence scope and remaining limits |
+| `user_global/trusted` | Repeatedly evidenced and explicitly promoted | Still subordinate to project facts and hard gates |
+| `deprecated` | Retained for history but not routable | Do not silently delete or recommend it |
+| `external_imported/unverified` | Package is present but not accepted | Keep disabled until checks and confirmation pass |
+| disabled | User or policy excluded it from routing | Preserve version/history and explain exclusion |
+| pinned | A specific version is preferred | Make the selected version and rollback target clear |
+
+Maturity is not a visual popularity badge. It is an evidence and authority
+state. A trusted Skill can still be excluded for task mismatch, provider
+incompatibility, missing dependencies, version conflict, project constraints,
+or system hard locks.
+
+### Recommendation explanation
+
+Each recommendation surface should be able to expose structured evidence for:
+
+- primary versus auxiliary selection;
+- Skill name, semantic category, scope, maturity, version, and hash;
+- concrete match reasons;
+- counterexample or avoid conditions;
+- affected task purpose and shot;
+- selected Recipe and compatible provider slots;
+- Knowledge Pack dependencies and hashes;
+- context-budget truncation;
+- conflicts, winner, and resolution rule;
+- explicit not-selected reason.
+
+The compact default may summarize this information, but diagnostics must not
+derive it from localized display copy. “Recommended” must never look like
+“will execute” or “provider authorized”.
+
+### Evidence and history
+
+A Skill detail/history design must distinguish:
+
+- Invocation Receipt status: recommended, selected, injected, validated,
+  rejected, or blocked;
+- execution mode: `dry_run` versus `live`;
+- QA pass, warning, blocker, and exact binding mismatch;
+- Case outcome: accepted, modified, rejected, retry requested, failed, or
+  needs review;
+- current project/fact evidence versus stale or rejected evidence;
+- anonymous cross-project evidence count versus local project identity;
+- version install, promotion, pin, disable, deprecate, and rollback receipts.
+
+Corrupt, old-fact, cross-project, or identity-mismatched receipts are not
+history that can be reused as current evidence. The design may explain why
+they were rejected but cannot turn them into success.
+
+### Confirmation boundaries
+
+These operations require separate, explicit confirmation states:
+
+| Operation | Required boundary |
+| --- | --- |
+| Save a new method | Save one `project_local/candidate` into the current project only |
+| Promote to verified/trusted | Confirm target Skill, source version/hash, evidence summary, target maturity, and new version |
+| Import an external package | Show schema/hash/dependency/conflict/fixture checks and target version before atomic install |
+| Disable or deprecate | Explain routing impact while preserving history |
+| Roll back | Show current and target versions; do not erase later versions |
+| Pin or unpin | Show which version the Router will prefer |
+
+Saving a candidate, accepting a Case, promoting a Skill, submitting a provider
+task, reviewing media, exporting, and promoting a project fact are independent
+decisions. No combined primary button may cross these boundaries.
+
+### Packaged P10-S evidence
+
+The packaged acceptance fixture is rooted at
+`/tmp/vibe-director-p10-s-packaged-4WHkWn`. It proved:
+
+- one `project_local/candidate` saved through the real Agent confirmation;
+- exactly one semantic Skill after cold start, with no duplicate save action;
+- no revived old confirmation card;
+- real dry-run injection into Planner, Prompt Compiler, and QA;
+- a current fact-bound `validated/pass` Invocation Receipt;
+- isolated verified `1.1.0`, trusted `1.2.0`, and rollback to `1.1.0`;
+- provider calls `0` and generated media `0`.
+
+The candidate is `director.skill.storyboard_narrative@1.0.0`, content hash
+`vdsh_77298397`; the Invocation Receipt is `dsir_13cdf904` and is explicitly
+`dry_run`.
+
+### Immutable Skill rules
+
+Product Design and implementation must preserve:
+
+- Skill identity is semantic and shot-independent; shot outcomes are Cases.
+- Candidate Skills stay project-local until a separately confirmed promotion.
+- Promotion needs accepted, QA-passed evidence from at least two projects and
+  no unresolved rejection.
+- Rejected, retry-requested, failed, needs-review, or unreviewed Cases cannot
+  support promotion.
+- Every use binds project, fact, action, Skill/Recipe/Knowledge versions and
+  hashes in an Invocation Receipt.
+- Planner, Prompt Compiler, and QA use the same compatible binding.
+- Priority is system hard boundary, current project fact, trusted user Skill,
+  then candidate recommendation.
+- Skill cannot grant provider authorization, automatic retry/approval, media
+  promotion, project-fact promotion, export authority, or Electron access.
+- External packages contain no secrets, absolute paths, project media, or
+  provider authorization, and remain disabled until validation and explicit
+  import confirmation pass.
+- Version changes are append-only; pin, disable, deprecate, and rollback retain
+  history.
 
 ## What P10 may redesign
 

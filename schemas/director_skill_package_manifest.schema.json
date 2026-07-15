@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_package_manifest.schema.json",
+  "title": "DirectorSkillPackageManifest",
+  "description": "Portable Director Skill package inventory with relative paths, SHA-256 integrity, dependencies, conflicts, and immutable safety locks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "packageId", "packageVersion", "manifestHash", "skillId", "skillVersion", "skillContentHash", "generatedAt", "files", "dependencies", "conflicts", "hardLocks"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_package_manifest/1.0.0" },
+    "packageId": { "type": "string", "minLength": 1 },
+    "packageVersion": { "const": "1.0.0" },
+    "manifestHash": { "$ref": "#/$defs/sha256" },
+    "skillId": { "type": "string", "minLength": 1 },
+    "skillVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "skillContentHash": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "files": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/file" } },
+    "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "relativePath": { "type": "string", "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//).+$" },
+    "file": {
+      "type": "object", "additionalProperties": false, "required": ["path", "role", "sha256", "sizeBytes"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "role": { "enum": ["skill", "recipe", "readme", "case", "tests"] },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "dependency": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "id", "optional"],
+      "properties": {
+        "kind": { "enum": ["skill", "knowledge_pack"] }, "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" }, "contentHash": { "type": "string" }, "optional": { "type": "boolean" }
+      }
+    },
+    "conflict": {
+      "type": "object", "additionalProperties": false, "required": ["skillId", "reason"],
+      "properties": { "skillId": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1 } }
+    },
+    "hardLocks": {
+      "type": "object", "additionalProperties": false,
+      "required": ["containsSecrets", "containsAbsolutePaths", "containsProjectMedia", "grantsProviderAuthorization"],
+      "properties": {
+        "containsSecrets": { "const": false }, "containsAbsolutePaths": { "const": false },
+        "containsProjectMedia": { "const": false }, "grantsProviderAuthorization": { "const": false }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_package_import_receipt.schema.json",
+  "title": "DirectorSkillPackageImportReceipt",
+  "description": "Validation and atomic publication receipt for an explicitly confirmed external Skill package import.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "receiptId", "receiptHash", "status", "externalVerificationStatus", "atomicPublished", "checks", "errors", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_package_import_receipt/1.0.0" },
+    "receiptId": { "type": "string", "minLength": 1 }, "receiptHash": { "$ref": "#/$defs/sha256" },
+    "packageId": { "type": "string" }, "skillId": { "type": "string" }, "sourceVersion": { "type": "string" },
+    "sourceContentHash": { "type": "string" }, "installedVersion": { "type": "string" }, "installedContentHash": { "type": "string" },
+    "status": { "enum": ["imported", "no_change", "blocked"] },
+    "externalVerificationStatus": { "enum": ["unverified", "verified", "failed"] },
+    "registryOperationReceiptId": { "type": "string" }, "atomicPublished": { "type": "boolean" },
+    "checks": { "$ref": "#/$defs/checks" }, "errors": { "type": "array", "items": { "type": "string" } },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "checks": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "hashes", "paths", "secrets", "dependencies", "conflicts", "fixtures"],
+      "properties": {
+        "schema": { "type": "boolean" }, "hashes": { "type": "boolean" }, "paths": { "type": "boolean" },
+        "secrets": { "type": "boolean" }, "dependencies": { "type": "boolean" }, "conflicts": { "type": "boolean" },
+        "fixtures": { "type": "boolean" }
+      }
+    }
+  }
+}

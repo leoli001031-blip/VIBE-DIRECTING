@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_qa_binding.schema.json",
+  "title": "DirectorSkillQaBindingReport",
+  "description": "QA check that Planner route and Prompt Compiler used the same Skill, Recipe, and Knowledge Pack hashes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "reportId", "routeId", "status", "expectedKnowledgePackHashes", "compiledKnowledgePackHashes", "findings", "reportHash"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_qa_binding/1.0.0" }, "reportId": { "type": "string", "minLength": 1 }, "routeId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["pass", "blocked"] }, "expectedSkillHash": { "type": "string" }, "compiledSkillHash": { "type": "string" },
+    "expectedKnowledgePackHashes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "compiledKnowledgePackHashes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "findings": { "type": "array", "items": { "type": "string", "minLength": 1 } }, "reportHash": { "type": "string", "minLength": 1 }
+  }
+}

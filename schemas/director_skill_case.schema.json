@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_case.schema.json",
+  "title": "DirectorSkillCase",
+  "description": "Fact-bound project outcome and explicit human decision evidence for one Director Skill use.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "caseId", "caseHash", "projectId", "projectRoot", "projectFactHash", "shotId", "actionId", "jobId",
+    "skillId", "skillVersion", "skillContentHash", "routeId", "inputHash", "outputHash", "knowledgePacks", "provider", "qa",
+    "outcome", "summary", "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_case/1.0.0" },
+    "caseId": { "type": "string", "minLength": 1 },
+    "caseHash": { "type": "string", "pattern": "^vdsh_[a-f0-9]{8}$" },
+    "projectId": { "type": "string", "minLength": 1 },
+    "projectRoot": { "type": "string", "minLength": 1 },
+    "projectFactHash": { "type": "string", "minLength": 1 },
+    "shotId": { "type": "string", "minLength": 1 },
+    "actionId": { "type": "string", "minLength": 1 },
+    "jobId": { "type": "string", "minLength": 1 },
+    "skillId": { "type": "string", "minLength": 1 },
+    "skillVersion": { "type": "string", "minLength": 1 },
+    "skillContentHash": { "type": "string", "minLength": 1 },
+    "routeId": { "type": "string", "minLength": 1 },
+    "inputHash": { "type": "string", "minLength": 1 },
+    "outputHash": { "type": "string", "minLength": 1 },
+    "knowledgePacks": { "type": "array", "items": { "$ref": "#/$defs/knowledgeBinding" } },
+    "provider": { "$ref": "#/$defs/providerBinding" },
+    "qa": { "$ref": "#/$defs/qaEvidence" },
+    "humanDecision": { "$ref": "#/$defs/humanDecision" },
+    "outcome": { "enum": ["accepted", "modified", "rejected", "retry_requested", "failed", "needs_review"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "knowledgeBinding": {
+      "type": "object", "additionalProperties": false, "required": ["packId", "version", "hash"],
+      "properties": { "packId": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 }, "hash": { "type": "string", "minLength": 1 } }
+    },
+    "providerBinding": {
+      "type": "object", "additionalProperties": false, "required": ["executionMode"],
+      "properties": {
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" }, "providerId": { "type": "string" }, "modelId": { "type": "string" },
+        "executionMode": { "enum": ["dry_run", "live"] }
+      }
+    },
+    "qaEvidence": {
+      "type": "object", "additionalProperties": false, "required": ["status", "checkedSkillHash", "checkedKnowledgePackHashes", "findings"],
+      "properties": {
+        "status": { "enum": ["not_run", "pass", "warning", "blocked"] }, "checkedSkillHash": { "type": "string", "minLength": 1 },
+        "checkedKnowledgePackHashes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "reportHash": { "type": "string" }, "findings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "humanDecision": {
+      "type": "object", "additionalProperties": false, "required": ["decision", "decidedBy", "decidedAt", "confirmationId"],
+      "properties": {
+        "decision": { "enum": ["accepted", "modified", "rejected", "retry_requested", "failed", "needs_review"] },
+        "decidedBy": { "const": "user" }, "decidedAt": { "type": "string", "format": "date-time" },
+        "confirmationId": { "type": "string", "minLength": 1 }, "note": { "type": "string" }
+      }
+    }
+  }
+}

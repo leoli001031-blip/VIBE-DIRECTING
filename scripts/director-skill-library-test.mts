@@ -7,10 +7,12 @@ import {
   directorSkillCardMarkdown,
   directorSkillFileName,
   parseDirectorSkillStackIndex,
+  parseDirectorSkillStackIndexWithStatus,
   serializeDirectorSkillStackIndex,
   upsertDirectorSkillStackIndex,
   type DirectorSkillCategory,
 } from "../src/core/directorSkillLibrary.ts";
+import { migrateLegacyDirectorSkillCard } from "../src/core/directorSkillContract.ts";
 import type { ShotRecord } from "../src/core/types.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -132,9 +134,43 @@ assert(updatedIndex.skills[0]?.id === narrative.id, "recently saved Skill should
 assert(updatedIndex.skills[0]?.fileName === directorSkillFileName(narrative), "Skill stack item should keep markdown file name");
 assert(updatedIndex.skills[0]?.createdFrom?.strategy === "storyboard_narrative", "Skill stack item should keep source strategy");
 
+const canonicalNarrative = migrateLegacyDirectorSkillCard(narrative);
+assert(canonicalNarrative.ok && canonicalNarrative.definition && canonicalNarrative.recipe, "legacy card should migrate to canonical v2 contracts");
+const canonicalIndex = upsertDirectorSkillStackIndex(createDirectorSkillStackIndex([]), {
+  card: narrative,
+  fileName: directorSkillFileName(narrative),
+  savedAt: "2026-06-18T04:00:00.000Z",
+  definition: canonicalNarrative.definition,
+  recipe: canonicalNarrative.recipe,
+});
+assert(canonicalIndex.skills[0]?.version === canonicalNarrative.definition.version, "v2 index version must match the canonical definition for cold-start identity checks");
+assert(canonicalIndex.skills[0]?.version !== narrative.version, "v2 index must not retain the legacy Markdown Card version when canonical contracts exist");
+
 const parsedIndex = parseDirectorSkillStackIndex(serializeDirectorSkillStackIndex(updatedIndex));
 assert(parsedIndex.skills.length === 2, "serialized Skill stack index should parse back");
 assert(parsedIndex.skills[1]?.name === rapid.name, "parsed Skill stack index should preserve saved cards");
 assert(parseDirectorSkillStackIndex("{bad json").skills.length === 0, "broken Skill stack index should degrade to empty");
+
+const sameMethodOtherShot = buildDirectorSkillCardFromShot(shot({
+  id: "S99",
+  title: "另一个雨夜停顿",
+  storyFunction: "另一段人物关系镜头仍使用故事板叙事方法。",
+  referenceStrategy: "storyboard_narrative",
+  durationSeconds: 8,
+  executionMode: "relationship_wide",
+  primaryAction: "人物停住",
+  camera: "中景",
+}));
+assert(sameMethodOtherShot.id === narrative.id, "same directing method must not create one Skill id per shot");
+
+const legacyIndexText = JSON.stringify({
+  ...updatedIndex,
+  schemaVersion: "director_skill_stack_index_v1",
+  skills: updatedIndex.skills.map(({ definitionPath: _definitionPath, recipePath: _recipePath, contentHash: _contentHash, ...item }) => item),
+});
+const legacyRestore = parseDirectorSkillStackIndexWithStatus(legacyIndexText);
+assert(legacyRestore.ok && legacyRestore.status === "migrated_v1_metadata", "v1 index should be recognized deterministically");
+assert(legacyRestore.index.skills.every((item) => item.enabled === false), "metadata-only v1 Skills must remain disabled");
+assert(legacyRestore.index.skills.every((item) => item.migrationStatus === "requires_source_card"), "v1 metadata must require source-card migration");
 
 console.log(`director-skill-library-test: cards=${cards.map((card) => `${card.name}:${directorSkillFileName(card)}`).join(", ")}`);

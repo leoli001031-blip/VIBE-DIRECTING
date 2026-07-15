@@ -25,6 +25,25 @@ import {
   type DirectorProductionSkillPlan,
 } from "./directorProductionSkill";
 import type { ProjectVibeAssetKind } from "../project/types";
+import type { DirectorSkillDefinition, DirectorSkillRecipe } from "./directorSkillContract";
+import {
+  createDirectorSkillInvocationReceipt,
+  type DirectorSkillInvocationReceipt,
+  type DirectorSkillKnowledgeBinding,
+  type DirectorSkillProjectIdentity,
+} from "./directorSkillEvidence";
+import {
+  applyDirectorSkillPlannerInjection,
+  buildDirectorSkillInjection,
+  directorSkillCompilerOutputHash,
+  formatDirectorSkillPromptBlock,
+  routeDirectorSkills,
+  validateDirectorSkillQaBinding,
+  type DirectorSkillInjection,
+  type DirectorSkillProjectConstraint,
+  type DirectorSkillQaBindingReport,
+  type DirectorSkillRouteResult,
+} from "./directorSkillRouter";
 
 export const STORYBOARD_REFERENCE_PROJECT_PLANNER_VERSION = "storyboard_reference_project_planner_v1";
 
@@ -92,6 +111,18 @@ export interface StoryboardReferenceProjectPlannerInput {
   storyboardOutputRoot?: string;
   videoOutputRoot?: string;
   outputSize?: string;
+  directorSkillContext?: {
+    definitions: DirectorSkillDefinition[];
+    recipes: DirectorSkillRecipe[];
+    knowledgePacks: DirectorSkillKnowledgeBinding[];
+    projectIdentity?: DirectorSkillProjectIdentity;
+    userPreferenceTags?: string[];
+    projectConstraints?: DirectorSkillProjectConstraint[];
+    explicitlySelectedSkillIds?: Record<string, string>;
+    actionIdPrefix?: string;
+    jobIdPrefix?: string;
+    generatedAt?: string;
+  };
 }
 
 export interface StoryboardReferenceProjectShotPlan {
@@ -104,6 +135,10 @@ export interface StoryboardReferenceProjectShotPlan {
   blocked: boolean;
   blockedReasons: string[];
   warnings: string[];
+  directorSkillRoute?: DirectorSkillRouteResult;
+  directorSkillInjection?: DirectorSkillInjection;
+  directorSkillQa?: DirectorSkillQaBindingReport;
+  directorSkillInvocationReceipt?: DirectorSkillInvocationReceipt;
   selectedReferences: {
     sceneBaseline?: StoryboardReferenceAsset;
     storyboardReference?: StoryboardReferenceAsset;
@@ -364,7 +399,7 @@ export function buildStoryboardReferenceProjectPlan(
     if (!dialogueAudio) warnings.push(`镜头 ${shot.id} 还没有可用的声音参考；口型、声线和表演节奏需要后续补齐。`);
     const directorPlan = directorPlanForShot(input, shot);
     const hasExplicitRhythmOverride = Boolean(shot.rhythmProfile || shot.rhythmReason || shot.actionDensity || shot.splitPolicy);
-    const productionSkillPlan = buildDirectorProductionSkillPlan({
+    const baseProductionSkillPlan = buildDirectorProductionSkillPlan({
       shotId: shot.id,
       title: shotTitle(shot),
       durationSeconds: shot.durationSeconds,
@@ -403,6 +438,53 @@ export function buildStoryboardReferenceProjectPlan(
         audio: dialogueAudio ? "locked" : shotAudio ? "missing" : undefined,
       },
     });
+    const directorSkillRoute = input.directorSkillContext?.definitions.length
+      ? routeDirectorSkills({
+          taskId: `${input.directorSkillContext.actionIdPrefix || "project_storyboard_skill"}:${shot.id}`,
+          taskPurpose: "story_planning",
+          shot: {
+            shotId: shot.id,
+            strategyId: baseProductionSkillPlan.strategyId,
+            executionMode: shot.executionMode,
+            durationSeconds: shot.durationSeconds,
+            actionDensity: baseProductionSkillPlan.actionDensity,
+            assetCompleteness: {
+              scene: sceneBaseline ? "ready" : "missing",
+              characters: characterReferences.length ? "ready" : "missing",
+              props: (shot.propAssetIds?.length || propCandidates.length)
+                ? (propReferences.length ? "ready" : "missing")
+                : "ready",
+              audio: shotAudio ? (dialogueAudio ? "ready" : "missing") : "ready",
+            },
+          },
+          provider: {
+            slot: "video.i2v",
+            providerId: "jimeng-video-cli",
+            modelId: "dry-run-default",
+            capabilities: ["structured_prompt", "image_reference", "optional_audio_reference"],
+          },
+          risk: directorPlan.durationBudget.blockers.length
+            ? "high"
+            : directorPlan.durationBudget.warnings.length ? "medium" : "low",
+          userPreferenceTags: input.directorSkillContext.userPreferenceTags || [],
+          projectConstraints: input.directorSkillContext.projectConstraints || [],
+          availableSkills: input.directorSkillContext.definitions,
+          availableRecipes: input.directorSkillContext.recipes,
+          availableKnowledgePacks: input.directorSkillContext.knowledgePacks,
+          explicitlySelectedSkillId: input.directorSkillContext.explicitlySelectedSkillIds?.[shot.id],
+          createdAt: input.directorSkillContext.generatedAt,
+        })
+      : undefined;
+    const directorSkillInjection = directorSkillRoute && input.directorSkillContext
+      ? buildDirectorSkillInjection(directorSkillRoute, {
+          availableSkills: input.directorSkillContext.definitions,
+          availableRecipes: input.directorSkillContext.recipes,
+          availableKnowledgePacks: input.directorSkillContext.knowledgePacks,
+        })
+      : undefined;
+    const productionSkillPlan = directorSkillInjection
+      ? applyDirectorSkillPlannerInjection(baseProductionSkillPlan, directorSkillInjection)
+      : baseProductionSkillPlan;
     const usesStoryboardReference = productionSkillPlan.strategyId !== "omni_reference";
     const explicitStoryboard = usesStoryboardReference
       ? firstReference(
@@ -442,6 +524,7 @@ export function buildStoryboardReferenceProjectPlan(
             directorPlan.microReaction ? `微反应：${directorPlan.microReaction}` : undefined,
             "内部导演 skill：",
             productionSkillImage2PromptBlock(productionSkillPlan),
+            directorSkillInjection ? formatDirectorSkillPromptBlock(directorSkillInjection, "image2") : undefined,
           ]),
           sceneBaseline,
           characterReferences,
@@ -477,8 +560,49 @@ export function buildStoryboardReferenceProjectPlan(
 	            ...(shot.sceneGuidance || []),
 	            "Internal production skill for Seedance:",
 	            productionSkillSeedancePromptBlock(productionSkillPlan),
+	            directorSkillInjection ? formatDirectorSkillPromptBlock(directorSkillInjection, "seedance") : undefined,
 	          ]),
 	        });
+    const directorSkillQa = directorSkillRoute
+      ? validateDirectorSkillQaBinding(directorSkillRoute, directorSkillInjection?.compilerBinding)
+      : undefined;
+    const directorSkillOutputHash = directorSkillRoute
+      ? directorSkillCompilerOutputHash({
+          productionSkillPlan,
+          image2Prompt: image2StoryboardPlan?.prompt,
+          seedancePrompt: seedanceVideoPlan.prompt,
+          compilerBinding: directorSkillInjection?.compilerBinding,
+        })
+      : undefined;
+    const directorSkillInvocationReceipt = directorSkillRoute?.primary
+      && directorSkillQa
+      && directorSkillOutputHash
+      && input.directorSkillContext?.projectIdentity
+      ? createDirectorSkillInvocationReceipt({
+          ...input.directorSkillContext.projectIdentity,
+          shotId: shot.id,
+          actionId: `${input.directorSkillContext.actionIdPrefix || "project_storyboard_skill"}:${shot.id}`,
+          jobId: `${input.directorSkillContext.jobIdPrefix || "project_storyboard_skill_dry_run"}:${shot.id}`,
+          skillId: directorSkillRoute.primary.skillId,
+          skillVersion: directorSkillRoute.primary.version,
+          skillContentHash: directorSkillRoute.primary.contentHash,
+          status: directorSkillQa.status === "pass" ? "validated" : "blocked",
+          routeId: directorSkillRoute.routeId,
+          routingReasons: directorSkillRoute.primary.reasons,
+          inputHash: directorSkillRoute.inputHash,
+          outputHash: directorSkillOutputHash,
+          knowledgePacks: directorSkillRoute.knowledgePacks,
+          provider: { slot: "video.i2v", providerId: "jimeng-video-cli", modelId: "dry-run-default", executionMode: "dry_run" },
+          qa: {
+            status: directorSkillQa.status,
+            checkedSkillHash: directorSkillRoute.primary.contentHash,
+            checkedKnowledgePackHashes: directorSkillQa.compiledKnowledgePackHashes,
+            reportHash: directorSkillQa.reportHash,
+            findings: directorSkillQa.findings,
+          },
+          createdAt: input.directorSkillContext.generatedAt || directorSkillRoute.createdAt,
+        })
+      : undefined;
 
     return {
       shotId: shot.id,
@@ -490,6 +614,10 @@ export function buildStoryboardReferenceProjectPlan(
       blocked: blockedReasons.length > 0,
       blockedReasons: uniqueMessages(blockedReasons),
       warnings: uniqueMessages(warnings),
+      directorSkillRoute,
+      directorSkillInjection,
+      directorSkillQa,
+      directorSkillInvocationReceipt,
       selectedReferences: {
         sceneBaseline,
         storyboardReference,

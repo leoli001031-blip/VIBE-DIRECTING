@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_definition.schema.json",
+  "title": "DirectorSkillDefinition",
+  "description": "Declarative, versioned director method contract. It cannot execute code or grant provider, review, promotion, or delivery authorization.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "id", "semanticKey", "name", "summary", "scope", "maturity", "version", "contentHash",
+    "source", "category", "applicability", "guards", "inputs", "outputs", "dependencies", "conflicts",
+    "providerCompatibility", "recipeIds", "rules", "qaChecks", "contextBudget"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_definition/2.0.0" },
+    "id": { "type": "string", "pattern": "^director\\.skill\\.[a-z0-9_\\u4e00-\\u9fa5]+$" },
+    "semanticKey": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "scope": { "enum": ["system_builtin", "project_local", "user_global", "external_imported"] },
+    "maturity": { "enum": ["candidate", "verified", "trusted", "deprecated"] },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "contentHash": { "type": "string", "pattern": "^vdsh_[a-f0-9]{8}$" },
+    "source": { "enum": ["system", "project_generated", "user_authored", "external_import", "migrated_v1"] },
+    "category": { "type": "string", "minLength": 1 },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskPurposes", "strategyIds", "executionModes", "actionDensities", "requiredAssetStates", "preferenceTags"],
+      "properties": {
+        "taskPurposes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["story_planning", "reference_planning", "prompt_compiler", "qa"] } },
+        "strategyIds": { "type": "array", "uniqueItems": true, "items": { "enum": ["storyboard_narrative", "storyboard_rapid_cut", "omni_reference"] } },
+        "executionModes": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "actionDensities": { "type": "array", "uniqueItems": true, "items": { "enum": ["low", "medium", "high"] } },
+        "durationSeconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "min": { "type": "number", "minimum": 0 }, "max": { "type": "number", "minimum": 0 } }
+        },
+        "requiredAssetStates": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "preferenceTags": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "guards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["useWhen", "avoidWhen", "forbiddenOverrides", "requiresExplicitConfirmation"],
+      "properties": {
+        "useWhen": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "avoidWhen": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "forbiddenOverrides": {
+          "type": "array", "minItems": 6, "uniqueItems": true,
+          "items": { "enum": ["provider_policy", "preflight_gate", "review_gate", "delivery_gate", "confirmation_boundary", "electron_security_boundary"] }
+        },
+        "requiresExplicitConfirmation": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "inputs": { "type": "array", "items": { "$ref": "#/$defs/input" } },
+    "outputs": { "type": "array", "items": { "$ref": "#/$defs/output" } },
+    "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } },
+    "providerCompatibility": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/providerSlot" } },
+    "recipeIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "rules": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "qaChecks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/qaCheck" } },
+    "contextBudget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maxInjectionTokens", "maxRules", "maxCaseSummaries"],
+      "properties": {
+        "maxInjectionTokens": { "type": "integer", "minimum": 1 },
+        "maxRules": { "type": "integer", "minimum": 1 },
+        "maxCaseSummaries": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "migration": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sourceSchemaVersion", "sourceId", "migratedAt", "status"],
+      "properties": {
+        "sourceSchemaVersion": { "type": "string", "minLength": 1 },
+        "sourceId": { "type": "string", "minLength": 1 },
+        "migratedAt": { "type": "string", "format": "date-time" },
+        "status": { "enum": ["migrated", "requires_source_card"] }
+      }
+    }
+  },
+  "$defs": {
+    "input": {
+      "type": "object", "additionalProperties": false, "required": ["name", "type", "required", "description"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["project_fact", "shot_fact", "asset_fact", "user_preference", "provider_capability"] },
+        "required": { "type": "boolean" },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "output": {
+      "type": "object", "additionalProperties": false, "required": ["name", "type", "description"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["planner_guidance", "prompt_fragment", "qa_expectation", "recipe_selection"] },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "dependency": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "id", "optional"],
+      "properties": {
+        "kind": { "enum": ["skill", "recipe", "knowledge_pack"] },
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "contentHash": { "type": "string" },
+        "optional": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    },
+    "conflict": {
+      "type": "object", "additionalProperties": false, "required": ["skillId", "reason", "resolution"],
+      "properties": {
+        "skillId": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "resolution": { "enum": ["system_wins", "project_fact_wins", "higher_trust_wins", "manual_selection_required"] }
+      }
+    },
+    "qaCheck": {
+      "type": "object", "additionalProperties": false, "required": ["id", "severity", "description", "expectedEvidence"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["blocker", "warning"] },
+        "description": { "type": "string", "minLength": 1 },
+        "expectedEvidence": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

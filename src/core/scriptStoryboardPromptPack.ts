@@ -26,7 +26,27 @@ import {
   productionSkillSeedancePromptBlock,
   productionSkillStrategyContractPromptBlock,
   type DirectorProductionSkillPlan,
+  type DirectorProductionStrategyId,
 } from "./directorProductionSkill";
+import {
+  applyDirectorSkillPlannerInjection,
+  buildDirectorSkillInjection,
+  directorSkillCompilerOutputHash,
+  formatDirectorSkillPromptBlock,
+  routeDirectorSkills,
+  validateDirectorSkillQaBinding,
+  type DirectorSkillInjection,
+  type DirectorSkillProjectConstraint,
+  type DirectorSkillQaBindingReport,
+  type DirectorSkillRouteResult,
+} from "./directorSkillRouter";
+import type { DirectorSkillDefinition, DirectorSkillRecipe } from "./directorSkillContract";
+import {
+  createDirectorSkillInvocationReceipt,
+  type DirectorSkillInvocationReceipt,
+  type DirectorSkillKnowledgeBinding,
+  type DirectorSkillProjectIdentity,
+} from "./directorSkillEvidence";
 
 export const SCRIPT_STORYBOARD_PROMPT_PACK_VERSION = "script_storyboard_prompt_pack_v1";
 
@@ -60,6 +80,7 @@ export interface ScriptStoryboardShotInput {
   title: string;
   durationSeconds: number;
   executionMode?: "single_continuous_shot" | "relationship_wide" | "action_insert" | "reaction_closeup" | "planned_cut_sequence";
+  referenceStrategy?: DirectorProductionStrategyId;
   sceneId?: string;
   characterIds?: string[];
   propIds?: string[];
@@ -101,6 +122,18 @@ export interface ScriptStoryboardPromptPackInput {
   image2OutputSize?: string;
   seedanceModelVersion?: string;
   seedanceVideoResolution?: string;
+  directorSkillContext?: {
+    definitions: DirectorSkillDefinition[];
+    recipes: DirectorSkillRecipe[];
+    knowledgePacks: DirectorSkillKnowledgeBinding[];
+    projectIdentity?: DirectorSkillProjectIdentity;
+    userPreferenceTags?: string[];
+    projectConstraints?: DirectorSkillProjectConstraint[];
+    explicitlySelectedSkillIds?: Record<string, string>;
+    actionIdPrefix?: string;
+    jobIdPrefix?: string;
+    generatedAt?: string;
+  };
 }
 
 export interface DirectorStoryboardTableRow {
@@ -142,6 +175,10 @@ export interface ScriptStoryboardPromptPackShot {
   directorRow: DirectorStoryboardTableRow;
   image2StoryboardPlan?: Image2StoryboardReferencePlan;
   seedanceVideoPlan: SeedanceStoryboardVideoPlan;
+  directorSkillRoute?: DirectorSkillRouteResult;
+  directorSkillInjection?: DirectorSkillInjection;
+  directorSkillQa?: DirectorSkillQaBindingReport;
+  directorSkillInvocationReceipt?: DirectorSkillInvocationReceipt;
 }
 
 export interface ScriptStoryboardPromptPack {
@@ -377,7 +414,7 @@ export function buildScriptStoryboardPromptPack(
       reactorResponse: actionQA.reactorResponse,
     });
     const hasExplicitRhythmOverride = Boolean(shot.rhythmProfile || shot.rhythmReason || shot.actionDensity || shot.splitPolicy);
-    const productionSkillPlan = buildDirectorProductionSkillPlan({
+    const baseProductionSkillPlan = buildDirectorProductionSkillPlan({
       shotId: shot.shotId,
       title: shot.title,
       durationSeconds: shot.durationSeconds,
@@ -395,6 +432,7 @@ export function buildScriptStoryboardPromptPack(
       rhythmPlan: hasExplicitRhythmOverride ? rhythmPlan : undefined,
       rhythmOverride: hasExplicitRhythmOverride,
       executionMode: shot.executionMode,
+      referenceStrategy: shot.referenceStrategy,
       actionBeats: shot.actionBeats,
       camera: shot.camera,
       visualDescription: shot.frameDescription,
@@ -405,6 +443,53 @@ export function buildScriptStoryboardPromptPack(
         audio: dialogueAudio ? "locked" : shot.dialogueAudioId ? "missing" : undefined,
       },
     });
+    const directorSkillRoute = input.directorSkillContext?.definitions.length
+      ? routeDirectorSkills({
+          taskId: `${input.directorSkillContext.actionIdPrefix || "storyboard_skill"}:${shot.shotId}`,
+          taskPurpose: "story_planning",
+          shot: {
+            shotId: shot.shotId,
+            strategyId: baseProductionSkillPlan.strategyId,
+            executionMode: shot.executionMode,
+            durationSeconds: shot.durationSeconds,
+            actionDensity: baseProductionSkillPlan.actionDensity,
+            assetCompleteness: {
+              scene: scene ? "ready" : "missing",
+              characters: characters.length ? "ready" : "missing",
+              props: shot.propIds?.length ? (props.length === shot.propIds.length ? "ready" : "partial") : "ready",
+              audio: shot.dialogueAudioId ? (dialogueAudio ? "ready" : "missing") : "ready",
+            },
+          },
+          provider: {
+            slot: "video.i2v",
+            providerId: "jimeng-video-cli",
+            modelId: input.seedanceModelVersion || "dry-run-default",
+            capabilities: ["structured_prompt", "image_reference", "optional_audio_reference"],
+          },
+          risk: actionQA.blockers.length || storyboardDirectorPlan.durationBudget.blockers.length
+            ? "high"
+            : actionQA.warnings.length || storyboardDirectorPlan.durationBudget.warnings.length
+              ? "medium"
+              : "low",
+          userPreferenceTags: input.directorSkillContext.userPreferenceTags || [],
+          projectConstraints: input.directorSkillContext.projectConstraints || [],
+          availableSkills: input.directorSkillContext.definitions,
+          availableRecipes: input.directorSkillContext.recipes,
+          availableKnowledgePacks: input.directorSkillContext.knowledgePacks,
+          explicitlySelectedSkillId: input.directorSkillContext.explicitlySelectedSkillIds?.[shot.shotId],
+          createdAt: input.directorSkillContext.generatedAt,
+        })
+      : undefined;
+    const directorSkillInjection = directorSkillRoute && input.directorSkillContext
+      ? buildDirectorSkillInjection(directorSkillRoute, {
+          availableSkills: input.directorSkillContext.definitions,
+          availableRecipes: input.directorSkillContext.recipes,
+          availableKnowledgePacks: input.directorSkillContext.knowledgePacks,
+        })
+      : undefined;
+    const productionSkillPlan = directorSkillInjection
+      ? applyDirectorSkillPlannerInjection(baseProductionSkillPlan, directorSkillInjection)
+      : baseProductionSkillPlan;
     warnings.push(...actionQA.warnings.map((warning) => `${shot.shotId}: ${warning}`));
     blockers.push(...actionQA.blockers.map((blocker) => `${shot.shotId}: ${blocker}`));
     blockers.push(...storyboardDirectorPlan.durationBudget.blockers.map((blocker) => `${shot.shotId}: ${blocker}`));
@@ -436,6 +521,7 @@ export function buildScriptStoryboardPromptPack(
               ? `Small continuity panels only: ${storyboardDirectorPlan.supportPanels.map((panel) => `${panel.purpose}: ${panel.content}`).join(" / ")}`
               : "",
             shot.animeShotGrammar?.length ? `Anime shot grammar: ${shot.animeShotGrammar.join(" / ")}` : "",
+            directorSkillInjection ? formatDirectorSkillPromptBlock(directorSkillInjection, "image2") : "",
           ].filter(Boolean).join("\n"),
           camera: shot.camera,
           sceneBaseline: scene,
@@ -483,8 +569,54 @@ export function buildScriptStoryboardPromptPack(
         }),
         "Internal production skill for Seedance:",
         productionSkillSeedancePromptBlock(productionSkillPlan),
+        directorSkillInjection ? formatDirectorSkillPromptBlock(directorSkillInjection, "seedance") : undefined,
       ]),
     });
+    const directorSkillQa = directorSkillRoute
+      ? validateDirectorSkillQaBinding(directorSkillRoute, directorSkillInjection?.compilerBinding)
+      : undefined;
+    const directorSkillOutputHash = directorSkillRoute
+      ? directorSkillCompilerOutputHash({
+          productionSkillPlan,
+          image2Prompt: image2StoryboardPlan?.prompt,
+          seedancePrompt: seedanceVideoPlan.prompt,
+          compilerBinding: directorSkillInjection?.compilerBinding,
+        })
+      : undefined;
+    const directorSkillInvocationReceipt = directorSkillRoute?.primary
+      && directorSkillQa
+      && directorSkillOutputHash
+      && input.directorSkillContext?.projectIdentity
+      ? createDirectorSkillInvocationReceipt({
+          ...input.directorSkillContext.projectIdentity,
+          shotId: shot.shotId,
+          actionId: `${input.directorSkillContext.actionIdPrefix || "storyboard_skill"}:${shot.shotId}`,
+          jobId: `${input.directorSkillContext.jobIdPrefix || "storyboard_skill_dry_run"}:${shot.shotId}`,
+          skillId: directorSkillRoute.primary.skillId,
+          skillVersion: directorSkillRoute.primary.version,
+          skillContentHash: directorSkillRoute.primary.contentHash,
+          status: directorSkillQa.status === "pass" ? "validated" : "blocked",
+          routeId: directorSkillRoute.routeId,
+          routingReasons: directorSkillRoute.primary.reasons,
+          inputHash: directorSkillRoute.inputHash,
+          outputHash: directorSkillOutputHash,
+          knowledgePacks: directorSkillRoute.knowledgePacks,
+          provider: {
+            slot: "video.i2v",
+            providerId: "jimeng-video-cli",
+            modelId: input.seedanceModelVersion || "dry-run-default",
+            executionMode: "dry_run",
+          },
+          qa: {
+            status: directorSkillQa.status,
+            checkedSkillHash: directorSkillRoute.primary.contentHash,
+            checkedKnowledgePackHashes: directorSkillQa.compiledKnowledgePackHashes,
+            reportHash: directorSkillQa.reportHash,
+            findings: directorSkillQa.findings,
+          },
+          createdAt: input.directorSkillContext.generatedAt || directorSkillRoute.createdAt,
+        })
+      : undefined;
 
     const directorRow: DirectorStoryboardTableRow = {
       镜号: shot.shotId,
@@ -525,6 +657,10 @@ export function buildScriptStoryboardPromptPack(
       directorRow,
       image2StoryboardPlan,
       seedanceVideoPlan,
+      directorSkillRoute,
+      directorSkillInjection,
+      directorSkillQa,
+      directorSkillInvocationReceipt,
     };
   });
 

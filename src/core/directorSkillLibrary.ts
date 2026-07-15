@@ -3,10 +3,20 @@ import {
   type DirectorProductionSkillPlan,
   type DirectorProductionStrategyId,
 } from "./directorProductionSkill";
+import {
+  directorSkillDefinitionFileName,
+  directorSkillRecipeFileName,
+  directorSkillSemanticId,
+  migrateLegacyDirectorSkillCard,
+  serializeDirectorSkillContract,
+  type DirectorSkillDefinition,
+  type DirectorSkillRecipe,
+} from "./directorSkillContract";
 import type { ShotRecord } from "./types";
 
 export const DIRECTOR_SKILL_CARD_SCHEMA_VERSION = "director_skill_card_v1";
-export const DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION = "director_skill_stack_index_v1";
+export const LEGACY_DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION = "director_skill_stack_index_v1";
+export const DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION = "director_skill_stack_index_v2";
 export const DIRECTOR_SKILL_STACK_INDEX_PATH = "skills/skill-index.json";
 
 export type DirectorSkillCategory = "风格" | "节奏" | "镜头" | "角色" | "模型约束" | "QA";
@@ -43,6 +53,13 @@ export interface DirectorSkillStackItem {
   source: DirectorSkillSource;
   version: string;
   fileName: string;
+  definitionPath?: string;
+  recipePath?: string;
+  contentHash?: string;
+  scope?: DirectorSkillDefinition["scope"];
+  maturity?: DirectorSkillDefinition["maturity"];
+  enabled?: boolean;
+  migrationStatus?: "native_v2" | "migrated_v1" | "requires_source_card";
   savedAt: string;
   createdFrom?: DirectorSkillCard["createdFrom"];
 }
@@ -51,6 +68,25 @@ export interface DirectorSkillStackIndex {
   schemaVersion: typeof DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION;
   updatedAt: string;
   skills: DirectorSkillStackItem[];
+}
+
+export interface DirectorSkillStackIndexParseResult {
+  ok: boolean;
+  status: "restored_v2" | "migrated_v1_metadata" | "invalid";
+  index: DirectorSkillStackIndex;
+  errors: string[];
+}
+
+export interface DirectorSkillArtifacts {
+  card: DirectorSkillCard;
+  definition: DirectorSkillDefinition;
+  recipe: DirectorSkillRecipe;
+  markdownFileName: string;
+  definitionPath: string;
+  recipePath: string;
+  markdown: string;
+  definitionJson: string;
+  recipeJson: string;
 }
 
 export interface DirectorSkillCardBuildOptions {
@@ -107,7 +143,8 @@ function safeSlug(value: string) {
 }
 
 function skillIdFor(plan: DirectorProductionSkillPlan, shot: ShotRecord) {
-  return safeSlug(`${plan.strategyId}-${shot.id}-${shot.title}`).slice(0, 80);
+  void shot;
+  return directorSkillSemanticId(plan.strategyId);
 }
 
 function shotExample(shot: ShotRecord, plan: DirectorProductionSkillPlan) {
@@ -152,8 +189,6 @@ function rulesFor(plan: DirectorProductionSkillPlan) {
   return unique([
     plan.strategyContract.visibleCutSemantics,
     ...plan.strategyContract.promptStructure,
-    ...plan.image2Directive.guidance,
-    ...plan.seedanceDirective.guidance,
     plan.assetAuthorityContract.independentPropRule,
     plan.assetAuthorityContract.componentOwnershipRule,
     plan.assetAuthorityContract.sceneConstraintRule,
@@ -192,7 +227,13 @@ export function directorSkillFileName(card: DirectorSkillCard) {
   return `${safeSlug(`${card.name}-${card.id}`)}.md`;
 }
 
-function stackItemFromCard(card: DirectorSkillCard, fileName: string, savedAt: string): DirectorSkillStackItem {
+function stackItemFromCard(
+  card: DirectorSkillCard,
+  fileName: string,
+  savedAt: string,
+  definition?: DirectorSkillDefinition,
+  recipe?: DirectorSkillRecipe,
+): DirectorSkillStackItem {
   return {
     id: card.id,
     name: card.name,
@@ -200,8 +241,15 @@ function stackItemFromCard(card: DirectorSkillCard, fileName: string, savedAt: s
     category: card.category,
     appliesTo: card.appliesTo,
     source: card.source,
-    version: card.version,
+    version: definition?.version || card.version,
     fileName,
+    definitionPath: definition ? directorSkillDefinitionFileName(definition) : undefined,
+    recipePath: recipe ? directorSkillRecipeFileName(recipe) : undefined,
+    contentHash: definition?.contentHash,
+    scope: definition?.scope,
+    maturity: definition?.maturity,
+    enabled: Boolean(definition),
+    migrationStatus: definition ? (definition.source === "migrated_v1" ? "migrated_v1" : "native_v2") : "requires_source_card",
     savedAt,
     createdFrom: card.createdFrom,
   };
@@ -217,10 +265,25 @@ export function createDirectorSkillStackIndex(skills: DirectorSkillStackItem[] =
 
 export function upsertDirectorSkillStackIndex(
   index: DirectorSkillStackIndex | undefined,
-  input: { card: DirectorSkillCard; fileName: string; savedAt?: string },
+  input: {
+    card: DirectorSkillCard;
+    fileName: string;
+    savedAt?: string;
+    definition?: DirectorSkillDefinition;
+    recipe?: DirectorSkillRecipe;
+  },
 ): DirectorSkillStackIndex {
   const savedAt = input.savedAt || new Date().toISOString();
-  const item = stackItemFromCard(input.card, input.fileName, savedAt);
+  const migrated = input.definition && input.recipe
+    ? { definition: input.definition, recipe: input.recipe }
+    : migrateLegacyDirectorSkillCard(input.card);
+  const item = stackItemFromCard(
+    input.card,
+    input.fileName,
+    savedAt,
+    migrated.definition,
+    migrated.recipe,
+  );
   const existing = index?.skills || [];
   const next = [...existing.filter((skill) => skill.id !== item.id), item]
     .sort((left, right) => right.savedAt.localeCompare(left.savedAt));
@@ -275,6 +338,19 @@ function parseStackItem(value: unknown): DirectorSkillStackItem | undefined {
     source,
     version: stringValue(record.version) || "0.1.0",
     fileName,
+    definitionPath: stringValue(record.definitionPath) || undefined,
+    recipePath: stringValue(record.recipePath) || undefined,
+    contentHash: stringValue(record.contentHash) || undefined,
+    scope: ["system_builtin", "project_local", "user_global", "external_imported"].includes(stringValue(record.scope))
+      ? stringValue(record.scope) as DirectorSkillDefinition["scope"]
+      : undefined,
+    maturity: ["candidate", "verified", "trusted", "deprecated"].includes(stringValue(record.maturity))
+      ? stringValue(record.maturity) as DirectorSkillDefinition["maturity"]
+      : undefined,
+    enabled: typeof record.enabled === "boolean" ? record.enabled : undefined,
+    migrationStatus: ["native_v2", "migrated_v1", "requires_source_card"].includes(stringValue(record.migrationStatus))
+      ? stringValue(record.migrationStatus) as DirectorSkillStackItem["migrationStatus"]
+      : undefined,
     savedAt: stringValue(record.savedAt) || new Date(0).toISOString(),
     createdFrom: createdFrom
       ? {
@@ -287,19 +363,51 @@ function parseStackItem(value: unknown): DirectorSkillStackItem | undefined {
   };
 }
 
-export function parseDirectorSkillStackIndex(content: string): DirectorSkillStackIndex {
+export function parseDirectorSkillStackIndexWithStatus(content: string): DirectorSkillStackIndexParseResult {
   try {
     const parsed = JSON.parse(content) as unknown;
-    if (!parsed || typeof parsed !== "object") return createDirectorSkillStackIndex([]);
+    if (!parsed || typeof parsed !== "object") {
+      return { ok: false, status: "invalid", index: createDirectorSkillStackIndex([]), errors: ["Skill index must be an object"] };
+    }
     const record = parsed as Record<string, unknown>;
-    if (record.schemaVersion !== DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION) return createDirectorSkillStackIndex([]);
+    const isV2 = record.schemaVersion === DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION;
+    const isV1 = record.schemaVersion === LEGACY_DIRECTOR_SKILL_STACK_INDEX_SCHEMA_VERSION;
+    if (!isV2 && !isV1) {
+      return { ok: false, status: "invalid", index: createDirectorSkillStackIndex([]), errors: ["Unsupported Skill index schemaVersion"] };
+    }
     const skills = Array.isArray(record.skills)
       ? record.skills.map(parseStackItem).filter((item): item is DirectorSkillStackItem => Boolean(item))
       : [];
-    return createDirectorSkillStackIndex(skills, stringValue(record.updatedAt) || new Date(0).toISOString());
-  } catch {
-    return createDirectorSkillStackIndex([]);
+    const normalizedSkills = isV1
+      ? skills.map((item) => ({
+          ...item,
+          definitionPath: undefined,
+          recipePath: undefined,
+          contentHash: undefined,
+          scope: "project_local" as const,
+          maturity: "candidate" as const,
+          enabled: false,
+          migrationStatus: "requires_source_card" as const,
+        }))
+      : skills;
+    return {
+      ok: true,
+      status: isV1 ? "migrated_v1_metadata" : "restored_v2",
+      index: createDirectorSkillStackIndex(normalizedSkills, stringValue(record.updatedAt) || new Date(0).toISOString()),
+      errors: isV1 ? ["Legacy Skill metadata restored fail-closed; source card is required before runtime use"] : [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "invalid",
+      index: createDirectorSkillStackIndex([]),
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
   }
+}
+
+export function parseDirectorSkillStackIndex(content: string): DirectorSkillStackIndex {
+  return parseDirectorSkillStackIndexWithStatus(content).index;
 }
 
 export function serializeDirectorSkillStackIndex(index: DirectorSkillStackIndex) {
@@ -348,4 +456,26 @@ export function directorSkillCardMarkdown(card: DirectorSkillCard) {
     card.example,
     "",
   ].join("\n");
+}
+
+export function buildDirectorSkillArtifactsFromShot(
+  shot: ShotRecord,
+  options: DirectorSkillCardBuildOptions = {},
+): DirectorSkillArtifacts {
+  const card = buildDirectorSkillCardFromShot(shot, options);
+  const migrated = migrateLegacyDirectorSkillCard(card);
+  if (!migrated.ok || !migrated.definition || !migrated.recipe) {
+    throw new Error(`Unable to build director Skill v2 artifacts: ${migrated.errors.join("; ")}`);
+  }
+  return {
+    card,
+    definition: migrated.definition,
+    recipe: migrated.recipe,
+    markdownFileName: directorSkillFileName(card),
+    definitionPath: directorSkillDefinitionFileName(migrated.definition),
+    recipePath: directorSkillRecipeFileName(migrated.recipe),
+    markdown: directorSkillCardMarkdown(card),
+    definitionJson: serializeDirectorSkillContract(migrated.definition),
+    recipeJson: serializeDirectorSkillContract(migrated.recipe),
+  };
 }

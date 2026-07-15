@@ -25,6 +25,14 @@ const releaseStages = [
 assert(releaseStages.every((stage) => releaseCommand.includes(stage)), "release command must include every contract, preflight, build, package, and verification stage");
 assert(releaseStages.every((stage, index) => index === 0 || releaseCommand.indexOf(releaseStages[index - 1]) < releaseCommand.indexOf(stage)), "release command must fail fast before building and verify only after packaging");
 
+const localPackageSource = readFileSync(path.join(root, "scripts/package-electron-local.mts"), "utf8");
+assert(
+  localPackageSource.includes('finalArgs.push("--config.mac.identity=-")'),
+  "local package lane must explicitly request electron-builder ad-hoc signing",
+);
+assert(localPackageSource.includes('finalArgs.push("--config.mac.notarize=false")'), "local package lane must keep notarization outside local smoke");
+assert(!localPackageSource.includes("--config.afterSign"), "local package lane must preserve electron-builder hardened-runtime flags and entitlements");
+
 for (const file of [mac.entitlements, mac.entitlementsInherit]) {
   execFileSync("plutil", ["-lint", path.join(root, file)], { stdio: "ignore" });
   const content = readFileSync(path.join(root, file), "utf8");

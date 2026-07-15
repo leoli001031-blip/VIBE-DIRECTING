@@ -136,10 +136,22 @@ import {
   directorSkillCardMarkdown,
   directorSkillFileName,
   parseDirectorSkillStackIndex,
+  parseDirectorSkillStackIndexWithStatus,
   serializeDirectorSkillStackIndex,
   upsertDirectorSkillStackIndex,
   type DirectorSkillStackItem,
 } from "../../core/directorSkillLibrary";
+import {
+  directorSkillDefinitionFileName,
+  directorSkillRecipeFileName,
+  migrateLegacyDirectorSkillCard,
+  serializeDirectorSkillContract,
+  parseDirectorSkillDefinition,
+  parseDirectorSkillRecipe,
+  type DirectorSkillDefinition,
+  type DirectorSkillRecipe,
+} from "../../core/directorSkillContract";
+import { appendProjectDirectorSkillInvocationReceipt } from "../../project/projectDirectorSkillInvocationStore";
 import {
   directorSkillSummaryForShot,
 } from "./directorSkillUi";
@@ -4977,6 +4989,8 @@ export function MinimalAgentPanel({
   const [latestAgentKernelTurn, setLatestAgentKernelTurn] = useState<VibeAgentKernelTurn | undefined>();
   const [agentActionLog, setAgentActionLog] = useState<AgentActionLogItem[]>([]);
   const [savedSkillStack, setSavedSkillStack] = useState<DirectorSkillStackItem[]>([]);
+  const [savedSkillDefinitions, setSavedSkillDefinitions] = useState<DirectorSkillDefinition[]>([]);
+  const [savedSkillRecipes, setSavedSkillRecipes] = useState<DirectorSkillRecipe[]>([]);
   const agentGenerationProjectIdentity: AgentVideoExecutionProjectIdentity = {
     projectId: runtimeState.sourceIndex.projectId,
     projectRoot: localProjectReady && runtimeProjectRootIsLocalFolder(runtimeState.project.root)
@@ -5594,6 +5608,43 @@ export function MinimalAgentPanel({
   }, [attachments.length, latestNewVideoDraftCommittedForProjection, latestPrototypeAgentDemo?.result?.label, text]);
   useEffect(() => {
     let cancelled = false;
+    function acceptSkillContractPair(
+      item: DirectorSkillStackItem,
+      definitionContent: string,
+      recipeContent: string,
+    ): { definition: DirectorSkillDefinition; recipe: DirectorSkillRecipe } | undefined {
+      const definition = parseDirectorSkillDefinition(definitionContent);
+      const recipe = parseDirectorSkillRecipe(recipeContent);
+      if (!definition.ok || !definition.value || !recipe.ok || !recipe.value) return undefined;
+      if (definition.value.id !== item.id
+        || definition.value.version !== item.version
+        || definition.value.contentHash !== item.contentHash
+        || recipe.value.skillId !== definition.value.id
+        || !definition.value.recipeIds.includes(recipe.value.id)) return undefined;
+      return { definition: definition.value, recipe: recipe.value };
+    }
+
+    async function loadDesktopSkillContracts(
+      items: DirectorSkillStackItem[],
+      projectRoot: string,
+      bridge: NonNullable<typeof window.vibeRuntime>,
+    ) {
+      const pairs = await Promise.all(items.map(async (item) => {
+        if (item.enabled === false || !item.definitionPath || !item.recipePath || !item.contentHash) return undefined;
+        try {
+          const root = projectRoot.replace(/\/+$/g, "");
+          const [definitionResult, recipeResult] = await Promise.all([
+            bridge.sandboxReadFile(`${root}/${item.definitionPath}`),
+            bridge.sandboxReadFile(`${root}/${item.recipePath}`),
+          ]);
+          return acceptSkillContractPair(item, definitionResult.content, recipeResult.content);
+        } catch {
+          return undefined;
+        }
+      }));
+      return pairs.filter((pair): pair is { definition: DirectorSkillDefinition; recipe: DirectorSkillRecipe } => Boolean(pair));
+    }
+
     async function loadSkillStack() {
       const projectRoot = runtimeState.project.root?.trim();
       const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
@@ -5613,10 +5664,16 @@ export function MinimalAgentPanel({
         }
       }
       if (desktopIndexContent) {
-        const parsedIndex = parseDirectorSkillStackIndex(desktopIndexContent);
-        if (!cancelled && parsedIndex.skills.length > 0) {
+        const parsedIndexResult = parseDirectorSkillStackIndexWithStatus(desktopIndexContent);
+        const parsedIndex = parsedIndexResult.index;
+        const pairs = bridge && projectRoot
+          ? await loadDesktopSkillContracts(parsedIndex.skills, projectRoot, bridge)
+          : [];
+        if (!cancelled && parsedIndexResult.ok) {
           savedSkillStackProjectKeyRef.current = runtimeProjectKey;
           setSavedSkillStack(parsedIndex.skills);
+          setSavedSkillDefinitions(pairs.map((pair) => pair.definition));
+          setSavedSkillRecipes(pairs.map((pair) => pair.recipe));
           return;
         }
       }
@@ -5625,10 +5682,23 @@ export function MinimalAgentPanel({
         if (!cancelled) {
           if (content) {
             savedSkillStackProjectKeyRef.current = runtimeProjectKey;
-            setSavedSkillStack(parseDirectorSkillStackIndex(content).skills);
+            const parsedIndex = parseDirectorSkillStackIndex(content);
+            const pairs = parsedIndex.skills.map((item) => {
+              if (item.enabled === false || !item.definitionPath || !item.recipePath || !item.contentHash) return undefined;
+              const definitionContent = window.localStorage.getItem(browserSkillStorageKey(runtimeState.project.title, item.definitionPath));
+              const recipeContent = window.localStorage.getItem(browserSkillStorageKey(runtimeState.project.title, item.recipePath));
+              return definitionContent && recipeContent
+                ? acceptSkillContractPair(item, definitionContent, recipeContent)
+                : undefined;
+            }).filter((pair): pair is { definition: DirectorSkillDefinition; recipe: DirectorSkillRecipe } => Boolean(pair));
+            setSavedSkillStack(parsedIndex.skills);
+            setSavedSkillDefinitions(pairs.map((pair) => pair.definition));
+            setSavedSkillRecipes(pairs.map((pair) => pair.recipe));
           } else if (savedSkillStackProjectKeyRef.current !== runtimeProjectKey) {
             savedSkillStackProjectKeyRef.current = runtimeProjectKey;
             setSavedSkillStack([]);
+            setSavedSkillDefinitions([]);
+            setSavedSkillRecipes([]);
           }
         }
         return;
@@ -5636,13 +5706,15 @@ export function MinimalAgentPanel({
       if (!cancelled && savedSkillStackProjectKeyRef.current !== runtimeProjectKey) {
         savedSkillStackProjectKeyRef.current = runtimeProjectKey;
         setSavedSkillStack([]);
+        setSavedSkillDefinitions([]);
+        setSavedSkillRecipes([]);
       }
     }
     void loadSkillStack();
     return () => {
       cancelled = true;
     };
-  }, [runtimeProjectKey, runtimeState.project.root]);
+  }, [runtimeProjectKey, runtimeState.project.root, runtimeState.project.title]);
   const hasPreparedAgentState = Boolean(
     workflow
     || projection
@@ -5728,6 +5800,9 @@ export function MinimalAgentPanel({
     () => shot ? buildDirectorSkillCardFromShot(shot, { projectTitle: runtimeState.project.title }) : undefined,
     [runtimeState.project.title, shot],
   );
+  const selectedSavedSkillDefinition = selectedSkillCard
+    ? savedSkillDefinitions.find((definition) => definition.id === selectedSkillCard.id)
+    : undefined;
   const selectedSkillDraftFile = selectedSkillCard ? directorSkillFileName(selectedSkillCard) : "";
   const restoredPendingSkillSaveRequest = useMemo(() => {
     if (!selectedSkillCard || !selectedSkillDraftFile) return undefined;
@@ -5777,7 +5852,7 @@ export function MinimalAgentPanel({
     : selectedSkillSummary?.label === "故事板叙事"
       ? "按镜头顺序稳住叙事"
       : "锁定主体，再让模型补表演";
-  const selectedSkillOneLine = selectedSkillCard?.summary || selectedSkillSummary?.detail || "按当前镜头选择合适的导演方法。";
+  const selectedSkillOneLine = selectedSavedSkillDefinition?.summary || selectedSkillCard?.summary || selectedSkillSummary?.detail || "按当前镜头选择合适的导演方法。";
   const selectedSkillImpactLabel = selectedSkillCard?.appliesTo?.length
     ? selectedSkillCard.appliesTo.join(" / ")
     : "故事规划 / Seedance prompt / QA";
@@ -5785,6 +5860,46 @@ export function MinimalAgentPanel({
   const agentRecommendedSkillCopy = selectedSkillSummary
     ? `${selectedSkillSummary.label}：${recommendedSkillLabel}。原因：${selectedSkillReasonLabel}。影响 ${selectedSkillImpactLabel}`
     : "先点一个镜头，我会解释适合的做法。";
+  const storyboardProjectPlanInputWithSkills = useMemo(() => {
+    if (!storyboardProjectPlanInput || !savedSkillDefinitions.length || !savedSkillRecipes.length) {
+      return storyboardProjectPlanInput;
+    }
+    const projectRoot = runtimeState.project.root?.trim();
+    const projectId = runtimeState.sourceIndex.projectId?.trim();
+    const existing = storyboardProjectPlanInput.directorSkillContext;
+    const definitions = Array.from(new Map(
+      [...(existing?.definitions || []), ...savedSkillDefinitions]
+        .map((definition) => [`${definition.id}@${definition.version}`, definition] as const),
+    ).values());
+    const recipes = Array.from(new Map(
+      [...(existing?.recipes || []), ...savedSkillRecipes]
+        .map((recipe) => [`${recipe.id}@${recipe.version}`, recipe] as const),
+    ).values());
+    return {
+      ...storyboardProjectPlanInput,
+      directorSkillContext: {
+        definitions,
+        recipes,
+        knowledgePacks: existing?.knowledgePacks || [],
+        projectIdentity: projectRoot && projectId && projectFactHash
+          ? { projectId, projectRoot, projectFactHash }
+          : undefined,
+        userPreferenceTags: existing?.userPreferenceTags || [],
+        projectConstraints: existing?.projectConstraints || [],
+        explicitlySelectedSkillIds: existing?.explicitlySelectedSkillIds,
+        actionIdPrefix: existing?.actionIdPrefix || "agent_feedback_skill",
+        jobIdPrefix: existing?.jobIdPrefix || "agent_feedback_skill_dry_run",
+        generatedAt: existing?.generatedAt,
+      },
+    };
+  }, [
+    projectFactHash,
+    runtimeState.project.root,
+    runtimeState.sourceIndex.projectId,
+    savedSkillDefinitions,
+    savedSkillRecipes,
+    storyboardProjectPlanInput,
+  ]);
   const selectedSkillUseWhenLabel = selectedSkillCard?.useWhen?.[0] || selectedSkillSummary?.reason || "镜头需要明确的导演方法时使用。";
   const selectedSkillAvoidWhenLabel = selectedSkillCard?.avoidWhen?.[0] || "镜头很简单时，不要过度增加约束。";
   const selectedSkillSourceLabel = selectedSkillCard?.createdFrom?.shotTitle
@@ -5914,9 +6029,32 @@ export function MinimalAgentPanel({
     const relativePath = `skills/${skillFileName}`;
     const markdown = directorSkillCardMarkdown(skillCard);
     const savedAt = new Date().toISOString();
+    const migratedSkill = migrateLegacyDirectorSkillCard(skillCard);
+    if (!migratedSkill.ok || !migratedSkill.definition || !migratedSkill.recipe) {
+      rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+        userIntent,
+        title: "AI 导演：保存失败",
+        body: `导演经验合同无法安全迁移：${migratedSkill.errors.join("；")}`,
+        status: "blocked",
+        path: relativePath,
+        next: "保留当前镜头，不会把缺失规则的 Skill 写入运行时。",
+        includeUserMessage: input?.includeUserMessage,
+      }));
+      setStatus("保存失败");
+      clearSkillSaveComposerInput();
+      return;
+    }
+    const definitionPath = directorSkillDefinitionFileName(migratedSkill.definition);
+    const recipePath = directorSkillRecipeFileName(migratedSkill.recipe);
     const nextSkillIndex = upsertDirectorSkillStackIndex(
       createDirectorSkillStackIndex(savedSkillStack),
-      { card: skillCard, fileName: skillFileName, savedAt },
+      {
+        card: skillCard,
+        fileName: skillFileName,
+        savedAt,
+        definition: migratedSkill.definition,
+        recipe: migratedSkill.recipe,
+      },
     );
     const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
     try {
@@ -5928,11 +6066,27 @@ export function MinimalAgentPanel({
         const targetPath = `${projectRoot.replace(/\/+$/g, "")}/${relativePath}`;
         await bridge.sandboxWriteFile(targetPath, markdown);
         await bridge.sandboxWriteFile(
+          `${projectRoot.replace(/\/+$/g, "")}/${definitionPath}`,
+          serializeDirectorSkillContract(migratedSkill.definition),
+        );
+        await bridge.sandboxWriteFile(
+          `${projectRoot.replace(/\/+$/g, "")}/${recipePath}`,
+          serializeDirectorSkillContract(migratedSkill.recipe),
+        );
+        await bridge.sandboxWriteFile(
           `${projectRoot.replace(/\/+$/g, "")}/${DIRECTOR_SKILL_STACK_INDEX_PATH}`,
           serializeDirectorSkillStackIndex(nextSkillIndex),
         );
         savedSkillStackProjectKeyRef.current = runtimeProjectKey;
         setSavedSkillStack(nextSkillIndex.skills);
+        setSavedSkillDefinitions((current) => [
+          ...current.filter((item) => item.id !== migratedSkill.definition!.id),
+          migratedSkill.definition!,
+        ]);
+        setSavedSkillRecipes((current) => [
+          ...current.filter((item) => item.id !== migratedSkill.recipe!.id),
+          migratedSkill.recipe!,
+        ]);
         rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
           userIntent,
           title: "AI 导演：导演经验已保存",
@@ -5945,9 +6099,25 @@ export function MinimalAgentPanel({
         }));
       } else if (typeof window !== "undefined" && window.localStorage) {
         window.localStorage.setItem(browserSkillStorageKey(projectTitle, skillFileName), markdown);
+        window.localStorage.setItem(
+          browserSkillStorageKey(projectTitle, definitionPath),
+          serializeDirectorSkillContract(migratedSkill.definition),
+        );
+        window.localStorage.setItem(
+          browserSkillStorageKey(projectTitle, recipePath),
+          serializeDirectorSkillContract(migratedSkill.recipe),
+        );
         window.localStorage.setItem(browserSkillIndexStorageKey(runtimeProjectKey), serializeDirectorSkillStackIndex(nextSkillIndex));
         savedSkillStackProjectKeyRef.current = runtimeProjectKey;
         setSavedSkillStack(nextSkillIndex.skills);
+        setSavedSkillDefinitions((current) => [
+          ...current.filter((item) => item.id !== migratedSkill.definition!.id),
+          migratedSkill.definition!,
+        ]);
+        setSavedSkillRecipes((current) => [
+          ...current.filter((item) => item.id !== migratedSkill.recipe!.id),
+          migratedSkill.recipe!,
+        ]);
         rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
           userIntent,
           title: "AI 导演：导演经验已暂存",
@@ -7304,13 +7474,28 @@ export function MinimalAgentPanel({
         projectTaskLabel: stagedAgentPlan?.projectTaskLabel,
       };
       const feedbackTargetShotId = finalPreparedSelection.selectedShotId;
-      const nextFeedbackRecompile = feedbackTargetShotId && storyboardProjectPlanInput && shouldBuildShotFeedbackRecompile(nextAgentActionEnvelope)
+      const nextFeedbackRecompile = feedbackTargetShotId && storyboardProjectPlanInputWithSkills && shouldBuildShotFeedbackRecompile(nextAgentActionEnvelope)
         ? buildDirectorFeedbackRecompile({
             feedback: feedbackWithSubmitCheckContext(userIntent, videoSendAction?.qaFeedback),
             targetShotId: feedbackTargetShotId,
-            projectPlanInput: storyboardProjectPlanInput,
+            projectPlanInput: storyboardProjectPlanInputWithSkills,
           })
         : undefined;
+      const directorSkillReceipt = nextFeedbackRecompile?.recompiledShotPlan?.directorSkillInvocationReceipt;
+      if (directorSkillReceipt) {
+        const persisted = await appendProjectDirectorSkillInvocationReceipt(
+          { projectRoot: directorSkillReceipt.projectRoot },
+          {
+            projectId: directorSkillReceipt.projectId,
+            projectRoot: directorSkillReceipt.projectRoot,
+            projectFactHash: directorSkillReceipt.projectFactHash,
+          },
+          directorSkillReceipt,
+        );
+        if (!persisted.ok) {
+          console.warn("Director Skill invocation record was not persisted", persisted.errors);
+        }
+      }
       const nextProjection = buildAgentPanelProjection(nextWorkflow, runtimeState, "review");
       setWorkflow(nextWorkflow);
       setProjection(nextProjection);
@@ -11826,5 +12011,6 @@ export function MinimalAgentPanel({
 
 function shouldBuildShotFeedbackRecompile(action: DirectorAgentActionEnvelope) {
   return action.kind === "revise_story_or_shot"
-    && action.proposedChanges.some((change) => change.field === "selectedScopeDraft");
+    && action.target.kind === "shot"
+    && action.proposedChanges.length > 0;
 }

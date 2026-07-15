@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_invocation_ledger.schema.json",
+  "title": "DirectorSkillInvocationLedger",
+  "description": "Project sidecar ledger for fact-bound Director Skill invocation receipts; it is evidence and never current-task state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "ledgerId", "projectId", "projectRoot", "projectFactHash", "createdAt", "updatedAt", "receipts"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_invocation_ledger/1.0.0" },
+    "ledgerId": { "type": "string", "minLength": 1 }, "projectId": { "type": "string", "minLength": 1 },
+    "projectRoot": { "type": "string", "minLength": 1 }, "projectFactHash": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" },
+    "receipts": { "type": "array", "items": { "$ref": "director_skill_invocation_receipt.schema.json" } }
+  }
+}

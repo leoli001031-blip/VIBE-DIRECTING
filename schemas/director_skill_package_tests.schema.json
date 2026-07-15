@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_skill_package_tests.schema.json",
+  "title": "DirectorSkillPackageTestSuite",
+  "description": "Positive and negative structured Router fixtures required before an external Skill package can be enabled.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "fixtures"],
+  "properties": {
+    "schemaVersion": { "const": "director_skill_package_tests/1.0.0" },
+    "fixtures": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/fixture" } }
+  },
+  "$defs": {
+    "fixture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fixtureId", "kind", "taskPurpose", "actionDensity", "risk", "expectedMatch"],
+      "properties": {
+        "fixtureId": { "type": "string", "minLength": 1 }, "kind": { "enum": ["positive", "negative"] },
+        "taskPurpose": { "enum": ["story_planning", "reference_planning", "prompt_compiler", "quality_assurance"] },
+        "strategyId": { "enum": ["storyboard_narrative", "storyboard_rapid_cut", "omni_reference"] },
+        "executionMode": { "type": "string" }, "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "actionDensity": { "enum": ["low", "medium", "high"] },
+        "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "risk": { "enum": ["low", "medium", "high"] }, "expectedMatch": { "type": "boolean" }
+      }
+    }
+  }
+}

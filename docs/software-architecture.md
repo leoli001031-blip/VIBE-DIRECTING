@@ -937,6 +937,64 @@ Knowledge Pack Manager 是前端后续能力：
 - QA Gate 优先通过 pack hash/version 反查知识包，不重新把整包塞进 Agent。
 - route result 必须记录实际注入片段、摘要 hash、截断原因和未注入原因。
 
+#### Director Skill v2 execution and learning loop
+
+Knowledge Pack 与 Director Skill 是两类不同对象。Knowledge Pack 提供可路由的知识、规则和示例；Director Skill 描述一个可复用、可验证的导演决策方法。Skill 可以依赖特定 Knowledge Pack version/hash，但不能把知识包、一次项目结果或 provider 参数混进自己的稳定身份。
+
+Director Skill v2 使用六层合同：
+
+1. `Skill Definition`：声明语义身份、适用范围、guard、输入输出、依赖、冲突、Recipe、QA checks、context budget、scope、maturity、version 和 content hash。Skill ID 来自稳定 semantic key，不包含 shotId 或镜头标题。
+2. `Recipe`：承载 Planner、Image2、Seedance 和 QA 的编译片段及 provider compatibility。Recipe 不能授权提交，`submitAuthorization` 固定为 `never`，也不能自动批准结果。
+3. `Case`：记录一次项目使用的输入输出 hash、QA、人工 accepted/modified/rejected/retry/failed/needs_review 决定。Case 属于证据，不直接改变 Skill maturity。
+4. `Invocation Receipt`：记录每次推荐、选择、注入和验证，并绑定 projectId、projectRoot、projectFactHash、shotId、actionId、jobId、Skill/Recipe/Knowledge version/hash。损坏、旧 fact、跨项目或 root mismatch 必须 fail closed。
+5. `User-global Registry`：保存 append-only Skill versions、当前版本、pin/enable/deprecate 状态、匿名化 Case evidence 和每次晋级/回滚 receipt。
+6. `Portable Skill Package`：以 manifest、`skill.json`、Recipe、README、匿名 Case 和 fixtures 组成；所有路径相对 package root，正式文件都有 SHA-256，导入通过 staging -> validation -> atomic publish -> receipt。
+
+推荐和执行链路：
+
+```text
+Structured task facts
+-> Director Skill Router
+-> primary / auxiliary / rejected / conflict result
+-> bounded Skill Injection
+-> Story Planner + Prompt Compiler
+-> QA binding check
+-> current fact-bound Invocation Receipt
+-> optional human-reviewed Case
+```
+
+Router 只使用结构化任务目的、镜头策略、时长、动作密度、资产完整度、provider capability、风险、用户偏好和项目约束。优先级固定为：
+
+```text
+system hard boundaries
+> current project facts and constraints
+> trusted user-global Skill
+> project-local candidate recommendation
+```
+
+显示文案、按钮文字和本地化文本不是路由或成功状态输入。Skill Injection 必须显式记录已注入规则、Recipe 和 Knowledge hash；Planner、Prompt Compiler 与 QA 使用同一 binding。hash 不匹配时 QA 必须阻断，不能把“推荐了 Skill”解释为“获得执行授权”。
+
+成熟度和作用域：
+
+- 新沉淀方法先写入当前项目的 `project_local/candidate`，canonical JSON 是事实来源，Markdown 只是可读投影。
+- 相同 semantic key 在不同镜头复用同一个 Skill ID；镜头差异追加为 Case，不复制 Skill。
+- candidate 不跨项目传播。晋级 `user_global/verified` 或 `trusted` 需要至少两个不同项目的 accepted、QA-passed Case，不能存在当前未解决 rejection，并需要独立的用户确认。
+- Skill 更新创建新版本。Registry 支持 pin、disable、deprecate 和 rollback，不原地静默改写历史版本。
+- `rejected`、`retry_requested`、`failed`、`needs_review` 或缺少人工决定的 Case 不能作为晋级证据。
+- `external_imported` 默认 unverified，schema、hash、依赖、冲突和 fixtures 全部通过并经明确导入确认后，才能进入隔离的用户全局库。
+
+Skill 永远不能覆盖或降级 `provider_policy`、`preflight_gate`、`review_gate`、`delivery_gate`、`confirmation_boundary` 或 `electron_security_boundary`。它不能调用任意脚本、携带 API key、授权 provider submit、自动重试、自动批准、晋级媒体或晋级项目事实。
+
+正式项目侧证据路径：
+
+- `skills/definitions/*.json`
+- `skills/recipes/*.json`
+- `skills/skill-index.json`
+- `skills/*.md`
+- `.vibe-runtime/director-skill-invocations.json`
+
+正式用户全局库路径由 App data root 隔离，Registry 相对路径固定为 `director-skills/registry.json`。项目恢复只接受当前项目、当前 root 和当前 fact hash 的 Invocation Ledger；全局 Registry 不进入项目交付包。
+
 ### 8.4 Generation Harness
 
 所有生成都走：
