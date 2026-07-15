@@ -303,6 +303,25 @@ function baseInput() {
   assert(projection.exportWorker.manifest.mvpPackage.previewMediaCount === 1, "export worker must include Preview media from the shared projection");
   assert(projection.exportWorker.manifest.mvpPackage.receiptCount >= 1, "export worker must include receipts");
   assert(projection.exportWorker.manifest.mvpPackage.reportIncluded === true, "export worker must include report.md");
+  const absoluteProjection = buildLocalPreviewExportProjection({
+    runtimeState: {
+      ...runtimeState,
+      project: { ...runtimeState.project, root: "/tmp/projection-demo" },
+    },
+    projectVibe,
+    projectRoot: "/tmp/projection-demo",
+    shots: [{
+      ...sampleShot,
+      startFrame: "/private/tmp/projection-demo/assets/market.txt",
+      endFrame: undefined,
+      videoPath: undefined,
+    }],
+    previewQueue: projection.previewQueue,
+    selectedShotId: "A1_01",
+    generatedAt: "2026-05-01T00:00:00.000Z",
+  });
+  assert(absoluteProjection.previewExport.demoPackageFacts?.selectedKeyframes[0]?.startFrame === "assets/market.txt", "local export must make in-project keyframes project-root-relative");
+  assert(!absoluteProjection.exportWorker.blockers.some((error) => error.includes("selectedKeyframes") || error.includes("includedPaths")), "normalized local keyframe paths must pass export reference validation");
   const action = await runExportAction({ worker: projection.exportWorker });
   assert(action.status === "blocked", "image-only preview must remain outside formal delivery execution");
   assert(action.executedCount === 0 && action.writes?.length === 0, "blocked formal delivery must not write its planned manifests");

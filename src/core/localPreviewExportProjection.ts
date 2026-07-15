@@ -61,6 +61,20 @@ function reviewRequired(item: PreviewQueueItem): boolean {
   return structured.reviewRequired === true || (item.kind === "video_clip" && !item.reviewReceiptId);
 }
 
+function projectRelativeLocalReference(value: string | undefined, projectRoot: string | undefined) {
+  if (!value) return undefined;
+  const normalize = (path: string) => path
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^\/private(?=\/(?:tmp|var)(?:\/|$))/, "")
+    .replace(/^\.\//, "")
+    .replace(/\/$/, "");
+  const path = normalize(value);
+  const root = projectRoot ? normalize(projectRoot) : "";
+  return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
+}
+
 const preferredExportProfiles: ExportProfileKind[] = ["rough_cut", "asset_package", "storyboard_table"];
 
 function readyExportProfileSelection(previewExport: ProjectPreviewExportState): ExportProfileKind[] {
@@ -75,6 +89,12 @@ function readyExportProfileSelection(previewExport: ProjectPreviewExportState): 
 export function buildLocalPreviewExportProjection(input: BuildLocalPreviewExportProjectionInput): LocalPreviewExportProjection {
   const generatedAt = input.generatedAt || input.runtimeState.generatedAt;
   const projectRoot = input.projectRoot || input.runtimeState.project.root;
+  const exportShots = input.shots.map((shot) => ({
+    ...shot,
+    startFrame: projectRelativeLocalReference(shot.startFrame, projectRoot),
+    endFrame: projectRelativeLocalReference(shot.endFrame, projectRoot),
+    videoPath: projectRelativeLocalReference(shot.videoPath, projectRoot),
+  }));
   const previewEvents = queueToPreviewEvents(input.previewQueue);
   const taskViews = input.runtimeState.taskRuns.taskViews.map((task) => ({
     job: task.job,
@@ -86,7 +106,7 @@ export function buildLocalPreviewExportProjection(input: BuildLocalPreviewExport
     generatedAt,
     projectRoot: projectRoot || "project_root",
     previewEvents,
-    shots: input.shots,
+    shots: exportShots,
     jobs: input.runtimeState.taskRuns.jobs,
     taskRuns: input.runtimeState.taskRuns.runs,
     taskViews,

@@ -577,6 +577,38 @@ assert(corruptExport.status === "failed" && corruptExport.receipt.status === "fa
 assert(corruptExport.receipt.outputAssets.length === 0, "invalid export receipt must not claim output assets");
 assert(corruptExport.blockers.some((item) => item.includes("delivery_receipt_invalid")), "invalid delivery receipt blocker missing");
 
+const blockedExport = await runAgentVideoExecution({
+  plan: exportPlan,
+  ledger: createAgentVideoGenerationJobLedger({
+    ledgerId: "p8-blocked-export-ledger",
+    createdAt: generatedAt,
+    ...identity,
+  }),
+  action: "export",
+  actionId: "p8-blocked-export-action",
+  sourceConfirmationId: "p8-blocked-export-confirmation",
+  executionMode: "live",
+  liveExecutionAllowed: true,
+  liveCapability: {
+    providerId: "local-exporter",
+    providerName: "Local Exporter",
+    modelId: "project-export-v1",
+    capability: "export",
+    asyncMode: "sync",
+  },
+  execute: () => ({
+    status: "blocked",
+    providerCalled: false,
+    manifestPath: exportOutputPath,
+    outputAssets: [exportOutputPath],
+    errors: ["[delivery_review_required] Current media still requires exact review evidence."],
+  }),
+  onLedgerSnapshot: persistLedgerSnapshot,
+});
+assert(blockedExport.status === "blocked", "Delivery Gate blocker must remain a blocked execution result");
+assert(blockedExport.receipt.outputAssets.length === 0, "blocked export must not claim planned manifest or output paths");
+assert(blockedExport.blockers.some((item) => item.includes("delivery_review_required")), "blocked export must retain the structured Delivery Gate reason");
+
 const minimalAgentPanelSource = fs.readFileSync("src/ui/director/MinimalAgentPanel.tsx", "utf8");
 const executionControllerSource = fs.readFileSync("src/ui/director/agentVideoExecutionController.ts", "utf8");
 const executionAdapterSource = fs.readFileSync("src/core/agentVideoExecutionAdapter.ts", "utf8");
@@ -597,6 +629,8 @@ assert(/signal\?: AbortSignal[\s\S]*submitProjectImage2AssetGeneration\([\s\S]*o
 assert(/skipConfirm\?: boolean[\s\S]*signal\?: AbortSignal[\s\S]*!options\?\.skipConfirm[\s\S]*submitProjectImage2EndFrame\([\s\S]*options\?\.signal[\s\S]*return \{ \.\.\.submitted, \.\.\.nextState \}/.test(endFrameActionSource), "end-frame generation must avoid duplicate confirmation, pass cancellation, and preserve runtime evidence");
 assert(/function videoRequestSignal\(parentSignal\?: AbortSignal\)[\s\S]*if \(parentSignal\) return \{ signal: parentSignal[\s\S]*controller\.abort\(\)[\s\S]*resumeProjectSeedanceVideo\([\s\S]*request\.signal[\s\S]*return \{ \.\.\.resumed, \.\.\.nextState \}[\s\S]*submitProjectSeedanceVideo\([\s\S]*request\.signal[\s\S]*return \{ \.\.\.submitted, \.\.\.nextState \}/.test(videoActionSource), "video query and submit must let the shared adapter own cancellation, abort manual timeouts, and return runtime evidence");
 assert(/runLocalExportAction\(input\?: \{[\s\S]*agentToolTrace\?:[\s\S]*signal\?: AbortSignal;[\s\S]*exportExecutionReceipt\?: AgentVideoExecutionReceipt;[\s\S]*runExportAction\(\{[\s\S]*signal:\s*input\?\.signal[\s\S]*deliveryConfirmation:\s*exportConfirmationReceipt/.test(appSource), "local export must pass adapter cancellation and the structured export confirmation receipt to the file writer");
+assert(/runLocalExportAction\(input\?: \{[\s\S]*const currentProject = prototypeProjectVibeRef\.current[\s\S]*buildLocalPreviewExportProjection\(\{[\s\S]*projectVibe: currentProject[\s\S]*projectFactHash: hashProjectVibeFacts\(currentProject\)/.test(appSource), "local export execution must rebuild the Delivery Gate from the latest authoritative Project.vibe instead of reusing a stale UI projection");
+assert(/if \(input\.agentActionEnvelope\?\.kind === "prepare_export"\) \{[\s\S]*await openProjectVibeDraft\(prototypeProjectDraftTarget\)[\s\S]*sourceProject = projectOpen\.project/.test(appSource), "confirmed export must reopen the authoritative Project.vibe receipt ledger instead of using a stale UI projection or draft ref");
 assert(packageJson.scripts?.["demo:ready:test"]?.includes("agent-video-execution-adapter:test"), "the P3 execution adapter test must be part of demo readiness");
 assert(packageJson.scripts?.["demo:ready:test"]?.includes("agent-video-execution-controller:test"), "the P6-A execution controller test must be part of demo readiness");
 assert(packageJson.scripts?.["demo:ready:test"]?.includes("agent-video-dry-run-adapter:test"), "the truthful dry-run adapter test must be part of demo readiness");

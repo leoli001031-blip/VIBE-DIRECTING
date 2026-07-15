@@ -512,7 +512,10 @@ function externalTaskId(value: unknown) {
 
 function resultError(value: unknown, fallback: string) {
   const result = record(value);
-  return text(result?.message) || array(result?.blockers).map(text).find(Boolean) || fallback;
+  return text(result?.message)
+    || array(result?.errors).map(text).find(Boolean)
+    || array(result?.blockers).map(text).find(Boolean)
+    || fallback;
 }
 
 function providerCalledForResult(action: AgentVideoExecutionAction, value: unknown) {
@@ -802,6 +805,7 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
   let outputAssets = extractOutputAssets(rawResult);
   const taskId = externalTaskId(rawResult);
   let error = ["blocked", "failed"].includes(resultStatus) ? resultError(rawResult, "Execution was blocked.") : undefined;
+  if (["blocked", "failed", "cancelled"].includes(resultStatus)) outputAssets = [];
   let deliveryReceipt: ExportDeliveryReceipt | undefined;
   if (input.action === "export" && resultStatus === "succeeded") {
     const restored = restoreExportDeliveryReceipt(record(rawResult)?.deliveryReceipt);

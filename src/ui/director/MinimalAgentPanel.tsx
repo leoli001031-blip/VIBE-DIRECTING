@@ -8752,13 +8752,17 @@ export function MinimalAgentPanel({
       visibleAgentTimelineEntries,
     ],
   );
+  const agentCurrentTaskRecoveryTimelineEntries = useMemo(
+    () => mergeVibeAgentTimelineEntries(agentTimelineEntries, restoredAgentTimelineEntries || []),
+    [agentTimelineEntries, restoredAgentTimelineEntries],
+  );
   const agentCurrentTaskCompletedSteps = useMemo(
-    () => agentCurrentTaskCompletedStepsFromTimelineEntries(visibleAgentTimelineEntries, agentGenerationProjectIdentity),
+    () => agentCurrentTaskCompletedStepsFromTimelineEntries(agentCurrentTaskRecoveryTimelineEntries, agentGenerationProjectIdentity),
     [
+      agentCurrentTaskRecoveryTimelineEntries,
       agentGenerationProjectIdentity.projectFactHash,
       agentGenerationProjectIdentity.projectId,
       agentGenerationProjectIdentity.projectRoot,
-      visibleAgentTimelineEntries,
     ],
   );
   const agentCurrentTaskProjection = useMemo(

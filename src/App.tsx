@@ -2623,7 +2623,7 @@ function App() {
           stateSource: normalized.stateSource || { kind: "runtime-state", label: activeLoadTarget.label, path: activeLoadTarget.statePath },
         } satisfies ProjectRuntimeState;
         assertProjectRuntimeState(runtimeReady);
-        if (cancelled) return;
+        if (cancelled || loadedPrototypeProjectDraftStorageModeRef.current === "local") return;
         loadProjectState(runtimeReady);
         if (runtimeReady.storyFlow?.shots?.[0]) {
           setSelectedShotId(runtimeReady.storyFlow.shots[0].id);
@@ -2637,7 +2637,7 @@ function App() {
 
       try {
         const auditData = await fetchJson<ProjectAudit>(activeLoadTarget.auditPath);
-        if (cancelled) return;
+        if (cancelled || loadedPrototypeProjectDraftStorageModeRef.current === "local") return;
         const state = buildProjectRuntimeState(auditData, emptyKnowledgeManifest, {
           stateSource: {
             kind: "runtime-audit-fallback",
@@ -2654,7 +2654,7 @@ function App() {
         }
         return;
       } catch {
-        if (cancelled) return;
+        if (cancelled || loadedPrototypeProjectDraftStorageModeRef.current === "local") return;
         loadProjectState(fallbackRuntimeState);
         if (fallbackRuntimeState.storyFlow.shots[0]) {
           setSelectedShotId(fallbackRuntimeState.storyFlow.shots[0].id);
@@ -3257,8 +3257,6 @@ function App() {
     async function openOrInitializeProjectDraft() {
       const result = await openProjectVibeDraft(prototypeProjectDraftTarget);
       if (cancelled) return;
-      setLoadedPrototypeProjectDraftTargetId(prototypeProjectDraftTargetId);
-      loadedPrototypeProjectDraftStorageModeRef.current = "local";
       if (result.ok && result.project) {
         const knowledgeOpen = await openProjectLocalKnowledgePacks(
           result.project.manifest.projectId,
@@ -3328,6 +3326,8 @@ function App() {
             status: "ready",
           },
         });
+        setLoadedPrototypeProjectDraftTargetId(prototypeProjectDraftTargetId);
+        loadedPrototypeProjectDraftStorageModeRef.current = "local";
         return;
       }
 
@@ -3353,6 +3353,8 @@ function App() {
           setRestoredAgentActionLog([]);
           setRestoredAgentTimelineEntries([]);
           applyProjectVibeProjectState(initialProject, prototypeProjectDraftTarget);
+          setLoadedPrototypeProjectDraftTargetId(prototypeProjectDraftTargetId);
+          loadedPrototypeProjectDraftStorageModeRef.current = "local";
           setProjectFileSelection((current) => current.status === "selected" && current.projectRoot === projectFileSelection.projectRoot
             ? { ...current, detail: "已创建项目文件", hasProjectVibe: true }
             : current);
@@ -4152,12 +4154,14 @@ function App() {
     signal?: AbortSignal;
     exportExecutionReceipt?: AgentVideoExecutionReceipt;
   }) {
-    let projection = localPreviewExportProjection;
-    if (!projection) {
-      const { buildLocalPreviewExportProjection } = await import("./core/localPreviewExportProjection");
-      projection = buildLocalPreviewExportProjection(localPreviewExportInput);
-      setLocalPreviewExportProjection(projection);
-    }
+    const { buildLocalPreviewExportProjection } = await import("./core/localPreviewExportProjection");
+    const currentProject = prototypeProjectVibeRef.current;
+    const projection = buildLocalPreviewExportProjection({
+      ...localPreviewExportInput,
+      projectVibe: currentProject,
+      projectFactHash: hashProjectVibeFacts(currentProject),
+    });
+    setLocalPreviewExportProjection(projection);
     setExportActionState({
       status: "running",
       label: "正在生成导出包",
@@ -4943,11 +4947,18 @@ function App() {
       || workbenchSelectedShotId
       || prototypeProjectVibeRef.current.shots[0]?.id;
 
-    const sourceProject = useCurrentProjectWorkbenchProjectionForRuntime
+    let sourceProject = useCurrentProjectWorkbenchProjectionForRuntime
       ? createProjectVibeFromRuntimeState(workbenchRuntimeState)
       : prototypeProjectVibeRef.current.shots.some((shot) => shot.id === selectedPrototypeShotId)
         ? prototypeProjectVibeRef.current
         : createProjectVibeFromRuntimeState(workbenchRuntimeState);
+    if (input.agentActionEnvelope?.kind === "prepare_export") {
+      const projectOpen = await openProjectVibeDraft(prototypeProjectDraftTarget);
+      if (!projectOpen.ok || !projectOpen.project) {
+        throw new Error(projectOpen.errors[0] || "Current Project.vibe could not be opened for export.");
+      }
+      sourceProject = projectOpen.project;
+    }
     const userIntent = input.userIntent.trim() || (selectedPrototypeShotId ? `整理 ${selectedPrototypeShotId} 的预览画面` : "整理当前项目");
     const now = new Date().toISOString();
     setLatestPrototypeAgentDemo({
