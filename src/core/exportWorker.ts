@@ -1896,14 +1896,16 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withRetry(operation: () => unknown, label: string): Promise<void> {
+async function withRetry(operation: () => unknown, label: string, signal?: AbortSignal): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
+    if (signal?.aborted) throw new Error(`Export cancelled during ${label}.`);
     try {
       await operation();
       return;
     } catch (error) {
       lastError = error;
+      if (signal?.aborted) throw error;
       if (attempt < 2) await delay(1000);
     }
   }
@@ -1941,18 +1943,22 @@ export async function executeExportWorkerPlan(
 
     current += 1;
     onProgress?.({ current, total, label: `${entry.operation} ${entry.kind}` });
+    if (signal?.aborted) {
+      errors.push(`Export cancelled before ${entry.id}.`);
+      break;
+    }
 
     try {
       if (entry.operation === "create_directory") {
-        await withRetry(() => adapter.mkdir(entry.path), entry.id);
+        await withRetry(() => adapter.mkdir(entry.path), entry.id, signal);
       } else if (entry.operation === "write_file") {
-        await withRetry(() => adapter.writeFile(entry.path, entry.content || ""), entry.id);
+        await withRetry(() => adapter.writeFile(entry.path, entry.content || ""), entry.id, signal);
       } else if (entry.operation === "copy_file") {
         if (!adapter.copyFile) {
           errors.push(`${entry.id}: adapter does not implement copyFile.`);
           continue;
         }
-        await withRetry(() => adapter.copyFile!(entry.sourcePath || "", entry.path), entry.id);
+        await withRetry(() => adapter.copyFile!(entry.sourcePath || "", entry.path), entry.id, signal);
       } else {
         errors.push(`${entry.id}: unsupported operation ${String(entry.operation)}`);
         continue;

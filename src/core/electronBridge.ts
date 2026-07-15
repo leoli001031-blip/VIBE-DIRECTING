@@ -35,6 +35,12 @@ export interface ElectronBridge {
   sandboxHashFile?(filePath: string): Promise<{ path: string; hash: string; size: number }>;
   sandboxWriteFile(filePath: string, data: string): Promise<{ written: boolean; path: string; hash: string }>;
   sandboxCopyFile?(sourcePath: string, destinationPath: string): Promise<{ copied: boolean; sourcePath: string; path: string; hash: string; size: number }>;
+  sandboxPublishDirectory?(stagingPath: string, destinationPath: string): Promise<{
+    published: boolean;
+    stagingPath: string;
+    destinationPath: string;
+    previousPath?: string;
+  }>;
   sandboxSpawn(command: string, args: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }>;
 }
 

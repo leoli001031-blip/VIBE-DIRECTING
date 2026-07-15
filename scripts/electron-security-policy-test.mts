@@ -66,6 +66,7 @@ for (const channel of [
   "sandbox:hashFile",
   "sandbox:writeFile",
   "sandbox:copyFile",
+  "sandbox:publishDirectory",
   "sandbox:spawn",
 ]) {
   assert(mainSource.includes(`handleTrustedIpc("${channel}"`), `${channel} must use the trusted IPC wrapper`);

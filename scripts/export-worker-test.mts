@@ -51,10 +51,23 @@ class MemoryExportAdapter {
 }
 
 class MemoryExportBridge {
-  constructor(sourceHashes = {}) {
+  constructor(sourceHashes = {}, options = {}) {
     this.sourceHashes = sourceHashes;
     this.writes = new Map();
     this.copies = new Map();
+    this.publishCalls = [];
+    this.mutationCount = 0;
+    this.failAtMutation = options.failAtMutation || 0;
+    this.failPublish = options.failPublish || false;
+    this.abortController = options.abortController;
+  }
+
+  beforeMutation() {
+    this.mutationCount += 1;
+    if (this.failAtMutation && this.mutationCount >= this.failAtMutation) {
+      this.abortController?.abort();
+      throw new Error(`injected export mutation failure ${this.mutationCount}`);
+    }
   }
 
   async sandboxHashFile(filePath) {
@@ -64,11 +77,13 @@ class MemoryExportBridge {
   }
 
   async sandboxWriteFile(filePath, data) {
+    this.beforeMutation();
     this.writes.set(filePath, data);
     return { written: true, path: filePath, hash: stableHash(data) };
   }
 
   async sandboxCopyFile(sourcePath, destinationPath) {
+    this.beforeMutation();
     this.copies.set(destinationPath, sourcePath);
     return {
       copied: true,
@@ -77,6 +92,21 @@ class MemoryExportBridge {
       hash: this.sourceHashes[sourcePath],
       size: 1,
     };
+  }
+
+  async sandboxPublishDirectory(stagingPath, destinationPath) {
+    this.publishCalls.push({ stagingPath, destinationPath });
+    if (this.failPublish) throw new Error("injected atomic publish failure");
+    const moveEntries = (entries) => {
+      for (const [filePath, value] of [...entries]) {
+        if (!filePath.startsWith(`${stagingPath}/`)) continue;
+        entries.delete(filePath);
+        entries.set(`${destinationPath}/${filePath.slice(stagingPath.length + 1)}`, value);
+      }
+    };
+    moveEntries(this.writes);
+    moveEntries(this.copies);
+    return { published: true, stagingPath, destinationPath };
   }
 }
 
@@ -930,11 +960,39 @@ assert(mismatchedMediaBridge.writes.size === 0 && mismatchedMediaBridge.copies.s
 assert(mismatchedMediaAction.errors?.some((error) => error.includes("delivery_media_hash_mismatch")), "physical media hash mismatch blocker missing");
 
 const liveBridge = new MemoryExportBridge(exactSourceHashes);
+const liveAgentToolTrace = {
+  id: "agent_tool_task_export_portability",
+  inputHash: "agent_tool_input_export_portability",
+  policyBinding: "director_agent_tool_handoff",
+  actionId: deliveryConfirmation.actionId,
+  handoffId: deliveryConfirmation.confirmationId,
+  handler: "project_export",
+  expectedReceipt: "export_receipt",
+  providerSubmitAllowed: false,
+  preflight: {
+    projectWriteReceiptRequired: true,
+    ruleQaRequired: false,
+    textQaRequired: false,
+    noBgmGuardRequired: false,
+    providerSubmitAfterPreflightOnly: false,
+  },
+  projectWriteRequiredBeforeInvocation: true,
+  userConfirmationRequired: true,
+  confirmedAt: deliveryConfirmation.confirmedAt,
+  targetKind: "project",
+  targetIds: [],
+  targetLabel: "Demo Project",
+  selectedShotIds: [],
+  sourceProjectTitle: "Demo Project",
+  sourceProjectRoot: projectRoot,
+  totalShots: 2,
+};
 const liveExportAction = await runExportAction({
   worker: plannedState,
   projectRoot,
   bridge: liveBridge,
   deliveryConfirmation,
+  agentToolTrace: liveAgentToolTrace,
 });
 assert(liveExportAction.status === "ready", `exact confirmed export should succeed: ${(liveExportAction.errors || []).join("; ")}`);
 assert(liveExportAction.deliveryReceipt?.executionMode === "live", "filesystem export receipt must declare live local execution");
@@ -946,6 +1004,72 @@ assert(liveExportAction.deliveryReceipt?.confirmationId === deliveryConfirmation
 assert(liveExportAction.deliveryReceipt?.reviewBindings.length === 2, "delivery receipt must bind every approved review receipt and media identity");
 assert(liveExportAction.deliveryReceipt?.reviewBindings.every((binding) => binding.reviewReceiptId && binding.shotId && binding.sourceReceiptId && binding.outputHash), "delivery receipt review identity is incomplete");
 assert(liveExportAction.deliveryReceipt?.outputs.length === liveBridge.writes.size + liveBridge.copies.size, "delivery receipt must list only actual written and copied outputs");
+assert(liveBridge.publishCalls.length === 1, "live export must publish exactly one fully staged package");
+assert([...liveBridge.writes.keys(), ...liveBridge.copies.keys()].every((path) => !path.includes("/.vibe-staging/")), "successful export must leave no current transaction files under staging");
+const liveExportManifest = JSON.parse(liveBridge.writes.get(`${projectRoot}/exports/current/export_manifest.json`));
+assert(liveExportManifest.agentToolTrace.sourceProjectRoot === "project_root", "portable export manifest must replace the local sourceProjectRoot with the symbolic project root");
+assert(!JSON.stringify(liveExportManifest).includes(projectRoot), "portable export manifest must not leak the local project root");
+
+const failedMutationAbort = new AbortController();
+const failedMutationBridge = new MemoryExportBridge(exactSourceHashes, {
+  failAtMutation: 5,
+  abortController: failedMutationAbort,
+});
+const failedMutationAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: failedMutationBridge,
+  deliveryConfirmation,
+  signal: failedMutationAbort.signal,
+});
+assert(failedMutationAction.status === "failed", "an injected staged write failure must fail the export action");
+assert(!failedMutationAction.deliveryReceipt, "a partial staged package must not receive a delivery receipt");
+assert(failedMutationBridge.publishCalls.length === 0, "a partial staged package must never reach publish");
+assert([...failedMutationBridge.writes.keys(), ...failedMutationBridge.copies.keys()].every((path) => path.includes("/.vibe-staging/")), "partial writes must stay isolated under staging");
+assert([...failedMutationBridge.writes.keys(), ...failedMutationBridge.copies.keys()].every((path) => !path.startsWith(`${projectRoot}/exports/current/`)), "partial writes must not touch the final export directory");
+
+const cancelledExportController = new AbortController();
+const cancelledExportBridge = new MemoryExportBridge(exactSourceHashes);
+const cancelledExportAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: cancelledExportBridge,
+  deliveryConfirmation,
+  signal: cancelledExportController.signal,
+  onProgress(progress) {
+    if (progress.current === 5) cancelledExportController.abort();
+  },
+});
+assert(cancelledExportAction.status === "failed", "an export cancelled mid-plan must fail closed");
+assert(!cancelledExportAction.deliveryReceipt, "a cancelled staged package must not receive a delivery receipt");
+assert(cancelledExportBridge.publishCalls.length === 0, "a cancelled staged package must never reach publish");
+assert([...cancelledExportBridge.writes.keys(), ...cancelledExportBridge.copies.keys()].every((path) => path.includes("/.vibe-staging/")), "cancelled export writes must stay isolated under staging");
+
+const publishFailureBridge = new MemoryExportBridge(exactSourceHashes, { failPublish: true });
+publishFailureBridge.writes.set(`${projectRoot}/exports/current/existing.txt`, "previous package");
+const publishFailureAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: publishFailureBridge,
+  deliveryConfirmation,
+});
+assert(publishFailureAction.status === "failed", "an atomic publish failure must fail the export action");
+assert(!publishFailureAction.deliveryReceipt, "a publish failure must not receive a delivery receipt");
+assert(publishFailureBridge.publishCalls.length === 1, "a complete staged package should attempt publish once");
+assert(publishFailureBridge.writes.get(`${projectRoot}/exports/current/existing.txt`) === "previous package", "publish failure must preserve the previous final package");
+assert([...publishFailureBridge.writes.keys(), ...publishFailureBridge.copies.keys()].some((path) => path.includes("/.vibe-staging/")), "publish failure must retain staged evidence outside the final package");
+
+const staleStagingBridge = new MemoryExportBridge(exactSourceHashes);
+staleStagingBridge.writes.set(`${projectRoot}/exports/.vibe-staging/stale-transaction/evidence.txt`, "stale evidence");
+const staleStagingAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: staleStagingBridge,
+  deliveryConfirmation,
+});
+assert(staleStagingAction.status === "ready", "unrelated stale staging evidence must not block a new complete transaction");
+assert(staleStagingBridge.writes.get(`${projectRoot}/exports/.vibe-staging/stale-transaction/evidence.txt`) === "stale evidence", "a new export must not delete unrelated stale staging evidence");
+assert(staleStagingBridge.publishCalls.length === 1, "the current staging transaction must publish exactly once");
 
 const duplicateBridge = new MemoryExportBridge(exactSourceHashes);
 const duplicateAction = await runExportAction({

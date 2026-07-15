@@ -5683,10 +5683,19 @@ export function MinimalAgentPanel({
       && newVideoDraftReadyForAgent,
   );
   const activeNewVideoDraftConfirmation = readyNewVideoDraftForAgent;
+  const agentReadinessTimelineEntries = mergeVibeAgentTimelineEntries(
+    mergeVibeAgentTimelineEntries(visibleAgentTimelineEntries, agentTimelineEntries),
+    restoredAgentTimelineEntries || [],
+  );
+  const timelineShowsExportReady = agentTimelineHasSucceededLiveExecution(
+    agentReadinessTimelineEntries,
+    "export",
+    agentGenerationProjectIdentity,
+  );
   const exportActionStopsConfirmation = Boolean(
     exportAction
       && exportAction.status !== "idle",
-  );
+  ) || timelineShowsExportReady;
   const exportReadyForConfirmation = Boolean(
     currentView === "export"
       && !exportActionStopsConfirmation
@@ -5697,6 +5706,7 @@ export function MinimalAgentPanel({
       && (
         exportAction?.status === "running"
         || exportAction?.status === "ready"
+        || timelineShowsExportReady
         || exportReadyForConfirmation
       ),
   );
@@ -6004,10 +6014,6 @@ export function MinimalAgentPanel({
   const referenceHasReviewableOutput = (referenceReviewCount > 0 && referenceDisplayableCount > 0)
     || realSampleAction?.reviewableOutput === true;
   const referencesReadyAfterReview = referenceLockedCount > 0 && referenceDisplayableCount > 0 && referenceMissingCount === 0 && !referenceNeedsReview;
-  const agentReadinessTimelineEntries = mergeVibeAgentTimelineEntries(
-    mergeVibeAgentTimelineEntries(visibleAgentTimelineEntries, agentTimelineEntries),
-    restoredAgentTimelineEntries || [],
-  );
   const timelineShowsReferenceReady = agentTimelineHasSucceededLiveExecution(
     agentReadinessTimelineEntries,
     "prepare_references",

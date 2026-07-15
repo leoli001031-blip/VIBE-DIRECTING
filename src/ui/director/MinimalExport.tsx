@@ -171,6 +171,7 @@ export function MinimalExport({
   audioPlanning,
   exportWorker,
   exportAction,
+  exportCompleted = false,
   localProjectReady = true,
   pendingConfirmationLabel,
   onRunExport,
@@ -179,6 +180,7 @@ export function MinimalExport({
   audioPlanning: AudioPlanningState;
   exportWorker?: ExportWorkerState;
   exportAction?: ExportActionState;
+  exportCompleted?: boolean;
   localProjectReady?: boolean;
   pendingConfirmationLabel?: string;
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace" | "signal" | "exportExecutionReceipt">) => unknown | Promise<unknown>;
@@ -191,6 +193,7 @@ export function MinimalExport({
   const blockedProfiles = profiles.length - readyProfiles;
   const exportBlockedByAgentConfirmation = Boolean(pendingConfirmationLabel);
   const canPrepareExport = Boolean(onRunExport)
+    && !exportCompleted
     && !exportBlockedByAgentConfirmation
     && exportAction?.status !== "running"
     && Boolean(exportWorker?.manifest.mvpPackage.reportIncluded)
@@ -205,11 +208,11 @@ export function MinimalExport({
   const videoSummaryLabel = finalVideoPending ? "视频素材" : "视频结果";
   const readyProfileLabel = "可打包资料";
   const blockedProfileLabel = canPrepareExport ? "后续可补" : "待处理";
-  const exportPackageReady = exportAction?.status === "ready" || /已生成/.test(exportAction?.label || "");
+  const exportPackageReady = exportCompleted || exportAction?.status === "ready" || /已生成/.test(exportAction?.label || "");
   const exportPackageReadyLabel = checklistExport ? "交付清单已生成" : packageGeneratedLabel;
   const exportActionLabel = exportActionVisibleLabel(exportAction, checklistExport, packageGeneratedLabel);
   const exportActionDetail = exportActionVisibleDetail(exportAction, checklistExport, packageGeneratedLabel);
-  const exportReadyLabel = exportAction?.status === "ready"
+  const exportReadyLabel = exportPackageReady
     ? checklistExport ? "清单已生成" : "已生成包"
     : canPrepareExport ? `待确认${packageLabel}` : "未就绪";
   const gateBlockerLabels = uniqueBlockerLabels(gate.blockedReasons);
@@ -262,7 +265,9 @@ export function MinimalExport({
           <span>{exportAction?.status === "running" ? "正在生成" : exportPackageReady ? packageGeneratedLabel : canPrepareExport ? `去右侧确认${packageLabel}` : `生成${packageLabel}`}</span>
         </button>
         <small className="muted-copy">
-          {exportBlockedByAgentConfirmation
+          {exportCompleted
+            ? `${plannedFiles} 个文件 · ${packageContentSummary(exportWorker)} · ${exportWorker?.exportRoot || "exports"}`
+            : exportBlockedByAgentConfirmation
             ? `先处理右侧消息里的「${pendingConfirmationLabel}」，确认前不会导出文件。`
             : canPrepareExport
               ? `右侧消息里确认后，才会写入 ${exportWorker?.exportRoot || "exports"}。`
@@ -298,7 +303,9 @@ export function MinimalExport({
         <div>
           <strong>{exportPackageReady ? exportPackageReadyLabel : canPrepareExport ? `等待你确认生成${packageLabel}` : "资料包还没准备好"}</strong>
           <small className="muted-copy">
-            {canPrepareExport
+            {exportCompleted
+              ? `已写入 ${exportWorker?.exportRoot || "exports"}，可以复核交付内容。`
+              : canPrepareExport
               ? "右侧 AI 导演会说明写入文件范围，确认前不会导出文件。"
               : gate.blockedReasons.length ? blockerLabel(gate.blockedReasons[0]) : "等待项目内容同步"}
           </small>

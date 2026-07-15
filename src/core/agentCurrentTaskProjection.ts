@@ -140,6 +140,7 @@ export interface AgentCurrentTaskProjection {
   confirmationId?: string;
   actionId?: string;
   jobId?: string;
+  completion?: Pick<AgentCurrentTaskCompletedStep, "step" | "executionMode" | "actionId" | "completedAt">;
   blockers: string[];
   facts: AgentCurrentTaskFact[];
 }
@@ -389,6 +390,7 @@ function buildProjection(input: {
   confirmationId?: string;
   actionId?: string;
   jobId?: string;
+  completion?: AgentCurrentTaskProjection["completion"];
   blockers?: string[];
   effect?: AgentCurrentTaskEffect;
   facts: AgentCurrentTaskFact[];
@@ -406,6 +408,7 @@ function buildProjection(input: {
     confirmationId: input.confirmationId,
     actionId: input.actionId,
     jobId: input.jobId,
+    completion: input.completion,
     blockers: input.blockers || [],
     facts: input.facts,
   };
@@ -576,6 +579,12 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
       source: "pipeline_plan",
       step: "idle",
       label: exportCompletion.executionMode === "dry_run" ? "执行边界验证完成" : "继续描述想法",
+      completion: {
+        step: exportCompletion.step,
+        executionMode: exportCompletion.executionMode,
+        actionId: exportCompletion.actionId,
+        completedAt: exportCompletion.completedAt,
+      },
       blockers: [],
       facts: factsForInput(input),
     });

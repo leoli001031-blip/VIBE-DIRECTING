@@ -288,7 +288,11 @@ function createProjectAgentTimeline(input: {
 }
 
 function normalizeProjectAgentRoot(value: string) {
-  const normalized = value.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\.\//, "");
+  const normalized = value.trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/g, "")
+    .replace(/^\.\//, "")
+    .replace(/^\/private\/tmp(?=\/|$)/, "/tmp");
   const runtimeRootIndex = normalized.indexOf(".vibe-runtime/");
   if (runtimeRootIndex >= 0) return normalized.slice(runtimeRootIndex);
   return normalized;

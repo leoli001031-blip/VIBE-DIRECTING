@@ -614,6 +614,70 @@ function registerIpcHandlers() {
     };
   });
 
+  handleTrustedIpc("sandbox:publishDirectory", async (_event, stagingPath: string, destinationPath: string) => {
+    if (!stagingPath || typeof stagingPath !== "string") {
+      throw new Error("sandbox:publishDirectory requires a stagingPath");
+    }
+    if (!destinationPath || typeof destinationPath !== "string") {
+      throw new Error("sandbox:publishDirectory requires a destinationPath");
+    }
+    const staging = projectRootScope.resolveOpenedProjectPath(stagingPath, "sandbox:publishDirectory staging");
+    const destination = projectRootScope.resolveOpenedProjectPath(destinationPath, "sandbox:publishDirectory destination");
+    const projectRoot = projectRootScope.findRoot(staging);
+    if (!projectRoot || projectRootScope.findRoot(destination) !== projectRoot) {
+      throw new Error("sandbox:publishDirectory paths must use the same opened project folder.");
+    }
+    const stagingRelative = path.relative(projectRoot, staging).replace(/\\/g, "/");
+    const destinationRelative = path.relative(projectRoot, destination).replace(/\\/g, "/");
+    const exportBase = stagingRelative.startsWith("exports/.vibe-staging/")
+      ? "exports"
+      : stagingRelative.startsWith("reports/exports/.vibe-staging/")
+        ? "reports/exports"
+        : "";
+    if (!exportBase || !destinationRelative.startsWith(`${exportBase}/`) || destinationRelative.includes("/.vibe-")) {
+      throw new Error("sandbox:publishDirectory is limited to a staged export and its final export directory.");
+    }
+    const stagingStat = await fs.promises.lstat(staging);
+    if (!stagingStat.isDirectory() || stagingStat.isSymbolicLink()) {
+      throw new Error("sandbox:publishDirectory stagingPath must be a real directory.");
+    }
+    if (fs.existsSync(destination)) {
+      const destinationStat = await fs.promises.lstat(destination);
+      if (!destinationStat.isDirectory() || destinationStat.isSymbolicLink()) {
+        throw new Error("sandbox:publishDirectory destinationPath must be a real directory.");
+      }
+    }
+
+    const previousRoot = projectRootScope.resolveOpenedProjectPath(
+      path.join(projectRoot, exportBase, ".vibe-previous"),
+      "sandbox:publishDirectory previous root",
+    );
+    await fs.promises.mkdir(previousRoot, { recursive: true });
+    const previousPath = projectRootScope.resolveOpenedProjectPath(
+      path.join(previousRoot, `${path.basename(destination)}-${Date.now()}-${crypto.randomUUID()}`),
+      "sandbox:publishDirectory previous path",
+    );
+    let previousMoved = false;
+    try {
+      if (fs.existsSync(destination)) {
+        await fs.promises.rename(destination, previousPath);
+        previousMoved = true;
+      }
+      await fs.promises.rename(staging, destination);
+    } catch (error) {
+      if (previousMoved && !fs.existsSync(destination) && fs.existsSync(previousPath)) {
+        await fs.promises.rename(previousPath, destination);
+      }
+      throw error;
+    }
+    return {
+      published: true,
+      stagingPath: staging,
+      destinationPath: destination,
+      ...(previousMoved ? { previousPath } : {}),
+    };
+  });
+
   handleTrustedIpc("sandbox:spawn", async (_event, command: string, args: string[]) => {
     if (!command || typeof command !== "string") {
       throw new Error("sandbox:spawn requires a command");

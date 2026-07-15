@@ -191,6 +191,48 @@ assert.equal(rootRestored.ok, true);
 assert.equal(rootRestored.status, "restored");
 assert.equal(rootRestored.timeline.entries.some((entry) => entry.id === "agent_action_report_relative_root"), true);
 
+const tmpAliasTarget = {
+  storageKey: "project-agent-timeline-tmp-alias-test",
+  projectPath: projectVibeFileName,
+  projectRoot: "/tmp/agent-timeline-local-project",
+};
+const tmpAliasTimeline = appendVibeAgentTimelineEntries(
+  createVibeAgentTimelineDocument({
+    projectId: project.manifest.projectId,
+    projectTitle: project.manifest.title,
+    projectRoot: "/private/tmp/agent-timeline-local-project",
+    generatedAt,
+  }),
+  [{
+    id: "agent_action_report_private_tmp_root",
+    type: "action_result",
+    createdAt: generatedAt,
+    title: "完成结果：导出已完成",
+    body: "本地交付包已写入。",
+    toolName: "export_project",
+    actionKind: "prepare_export",
+    status: "done",
+  }] satisfies VibeAgentTimelineEntry[],
+  generatedAt,
+);
+storage.setItem(
+  `${tmpAliasTarget.storageKey}:${projectAgentTimelinePath}`,
+  JSON.stringify(tmpAliasTimeline),
+);
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async () => {
+  throw new Error("runtime unavailable in timeline unit test");
+};
+const tmpAliasRestored = await openProjectAgentTimeline(tmpAliasTarget, {
+  project,
+  projectRoot: tmpAliasTarget.projectRoot,
+  generatedAt,
+});
+globalThis.fetch = originalFetch;
+assert.equal(tmpAliasRestored.ok, true);
+assert.equal(tmpAliasRestored.status, "restored");
+assert.equal(tmpAliasRestored.timeline.entries.some((entry) => entry.id === "agent_action_report_private_tmp_root"), true);
+
 const boundTurnEntries = bindProjectAgentTimelineEntriesToIdentity([
   {
     id: "current_turn_confirmation",

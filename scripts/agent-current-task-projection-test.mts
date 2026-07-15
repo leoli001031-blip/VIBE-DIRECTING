@@ -426,6 +426,8 @@ const completedExportProjection = buildAgentCurrentTaskProjection({
 assert(completedExportProjection.step === "idle", "completed export should not remain the current confirmation task");
 assert(!completedExportProjection.requiresConfirmation, "completed export should not require another confirmation");
 assert(!completedExportProjection.confirmationId, "completed export should not expose a stale confirmation id");
+assert(completedExportProjection.completion?.step === "export", "completed export should expose structured terminal completion");
+assert(completedExportProjection.completion?.executionMode === undefined, "legacy completion without a mode should remain unclaimed");
 
 const completedExportClosesEarlierPipelineProjection = buildAgentCurrentTaskProjection({
   projectObservation: missingReferencesObservation,
@@ -464,6 +466,7 @@ const completedExportClosesEarlierPipelineProjection = buildAgentCurrentTaskProj
 assert(completedExportClosesEarlierPipelineProjection.step === "idle", "a current-fact export completion must close earlier prerequisite steps after restart");
 assert(!completedExportClosesEarlierPipelineProjection.requiresConfirmation, "a completed current-fact export must not revive an older prerequisite confirmation");
 assert(!completedExportClosesEarlierPipelineProjection.confirmationId, "a completed current-fact export must leave older confirmation cards as history");
+assert(completedExportClosesEarlierPipelineProjection.completion?.executionMode === "live", "live export completion should remain structured for downstream delivery surfaces");
 
 const validatedExportProjection = buildAgentCurrentTaskProjection({
   pipelinePlan: plan({
@@ -486,6 +489,7 @@ const validatedExportProjection = buildAgentCurrentTaskProjection({
 });
 assert(validatedExportProjection.step === "idle", "dry export validation should close only the validation pipeline boundary");
 assert(validatedExportProjection.label === "执行边界验证完成", "dry export completion must not claim a real export package exists");
+assert(validatedExportProjection.completion?.executionMode === "dry_run", "dry export completion should stay structured as validation only");
 
 const staleFactExportCompletionProjection = buildAgentCurrentTaskProjection({
   projectObservation: exportReadyObservation,
@@ -863,5 +867,57 @@ const terminalJobProjection = buildAgentCurrentTaskProjection({
 assert(terminalJobProjection.source === "pipeline_plan", "terminal jobs must not become the current task source");
 assert(!terminalJobProjection.jobId, "terminal jobs should not expose a current job id");
 assert(!terminalJobProjection.confirmationId, "terminal jobs must consume their old confirmation instead of reviving it");
+
+for (const terminalStatus of ["failed", "cancelled"] as const) {
+  const terminalLedger = structuredClone(runningVideo.ledger);
+  terminalLedger.jobs[0]!.status = terminalStatus;
+  terminalLedger.jobs[0]!.statusHistory = [
+    ...terminalLedger.jobs[0]!.statusHistory.filter((event) => event.status !== "running"),
+    { status: terminalStatus, at: `2026-07-07T00:00:5${terminalStatus === "failed" ? "4" : "5"}.000Z` },
+  ];
+  const failedOrCancelledProjection = buildAgentCurrentTaskProjection({
+    pipelinePlan: submitVideoPlan,
+    jobLedger: terminalLedger,
+    currentProjectId: "agent-current-task-project",
+    currentProjectRoot: "/tmp/agent-current-task-project",
+    currentProjectFactHash: "agent-current-task-facts",
+    timelineConfirmations: [{
+      confirmationId: "submit_video_confirmation",
+      step: "submit_video",
+      status: "waiting",
+      actionId: "submit_video_action",
+      projectId: "agent-current-task-project",
+      projectRoot: "/tmp/agent-current-task-project",
+      projectFactHash: "agent-current-task-facts",
+      createdAt: "2026-07-07T00:00:50.000Z",
+    }],
+  });
+  assert(failedOrCancelledProjection.source === "pipeline_plan", `${terminalStatus} jobs must remain historical instead of becoming the current task`);
+  assert(!failedOrCancelledProjection.jobId, `${terminalStatus} jobs must not expose a current job id`);
+  assert(!failedOrCancelledProjection.confirmationId, `${terminalStatus} jobs must consume their old confirmation instead of reviving it`);
+}
+
+const otherProjectExportCompletion = buildAgentCurrentTaskProjection({
+  projectObservation: exportReadyObservation,
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: true,
+    localProjectReady: true,
+    referenceMissingCount: 0,
+    videoSubmitted: true,
+  }),
+  currentProjectId: "project-b",
+  currentProjectRoot: "/tmp/project-b",
+  currentProjectFactHash: "facts-b",
+  completedSteps: [{
+    step: "export",
+    projectId: "project-a",
+    projectRoot: "/tmp/project-a",
+    projectFactHash: "facts-a",
+    executionMode: "live",
+  }],
+});
+assert(otherProjectExportCompletion.step === "export", "Project A delivery completion must not close Project B's export task");
+assert(otherProjectExportCompletion.requiresConfirmation, "Project B must retain its own export confirmation boundary");
 
 console.log("agent-current-task-projection-test passed");

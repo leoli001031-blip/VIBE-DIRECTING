@@ -44,6 +44,12 @@ export interface ExportActionBridge {
   sandboxHashFile?(filePath: string): Promise<{ path: string; hash: string; size: number }>;
   sandboxWriteFile(filePath: string, data: string): Promise<{ written: boolean; path: string; hash: string }>;
   sandboxCopyFile?(sourcePath: string, destinationPath: string): Promise<{ copied: boolean; sourcePath: string; path: string; hash: string; size: number }>;
+  sandboxPublishDirectory?(stagingPath: string, destinationPath: string): Promise<{
+    published: boolean;
+    stagingPath: string;
+    destinationPath: string;
+    previousPath?: string;
+  }>;
 }
 
 export interface RunExportActionInput {
@@ -76,8 +82,17 @@ class MemoryExportAdapter implements ExportWorkerAdapter {
 
 class BridgeExportAdapter implements ExportWorkerAdapter {
   readonly outputs: ExportDeliveryReceiptOutput[] = [];
+  readonly stagingRoot: string;
 
-  constructor(private readonly projectRoot: string, private readonly bridge: ExportActionBridge) {}
+  constructor(
+    private readonly projectRoot: string,
+    private readonly exportRoot: string,
+    transactionId: string,
+    private readonly bridge: ExportActionBridge,
+  ) {
+    const stagingBase = exportRoot.startsWith("reports/exports/") ? "reports/exports" : "exports";
+    this.stagingRoot = `${stagingBase}/.vibe-staging/${transactionId}`;
+  }
 
   mkdir() {
     return undefined;
@@ -88,8 +103,16 @@ class BridgeExportAdapter implements ExportWorkerAdapter {
     return `${root}/${path}`;
   }
 
+  private stagingPath(path: string) {
+    if (path === this.exportRoot) return this.stagingRoot;
+    if (!path.startsWith(`${this.exportRoot}/`)) {
+      throw new Error(`Export path is outside the transaction root: ${path}`);
+    }
+    return `${this.stagingRoot}/${path.slice(this.exportRoot.length + 1)}`;
+  }
+
   async writeFile(path: string, content: string) {
-    const result = await this.bridge.sandboxWriteFile(this.projectPath(path), content);
+    const result = await this.bridge.sandboxWriteFile(this.projectPath(this.stagingPath(path)), content);
     this.outputs.push({ operation: "write_file", path, outputHash: result.hash });
   }
 
@@ -97,7 +120,10 @@ class BridgeExportAdapter implements ExportWorkerAdapter {
     if (!this.bridge.sandboxCopyFile) {
       throw new Error("Electron export bridge does not implement copyFile.");
     }
-    const result = await this.bridge.sandboxCopyFile(this.projectPath(sourcePath), this.projectPath(destinationPath));
+    const result = await this.bridge.sandboxCopyFile(
+      this.projectPath(sourcePath),
+      this.projectPath(this.stagingPath(destinationPath)),
+    );
     this.outputs.push({
       operation: "copy_file",
       path: destinationPath,
@@ -106,6 +132,18 @@ class BridgeExportAdapter implements ExportWorkerAdapter {
       outputHash: normalizeSha256(result.hash),
       size: result.size,
     });
+  }
+
+  async publish() {
+    if (!this.bridge.sandboxPublishDirectory) {
+      throw new Error("Electron export bridge does not implement atomic directory publish.");
+    }
+    const result = await this.bridge.sandboxPublishDirectory(
+      this.projectPath(this.stagingRoot),
+      this.projectPath(this.exportRoot),
+    );
+    if (!result.published) throw new Error("Electron export bridge did not publish the staged directory.");
+    return result;
   }
 }
 
@@ -133,6 +171,21 @@ function serialize(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function portableAgentToolTrace(trace: ExportActionToolTrace): ExportActionToolTrace {
+  return {
+    ...trace,
+    sourceProjectRoot: trace.sourceProjectRoot ? "project_root" : undefined,
+  };
+}
+
+function exportTransactionId(worker: ExportWorkerState, deliveryGate: ExportDeliveryGateState) {
+  return `${worker.manifest.manifestId}-${stableHash({
+    projectFactHash: deliveryGate.identity.projectFactHash,
+    actionId: deliveryGate.authorization?.actionId,
+    confirmationId: deliveryGate.authorization?.confirmationId,
+  })}`;
+}
+
 function executableWorker(worker: ExportWorkerState, deliveryGate: ExportDeliveryGateState, agentToolTrace?: ExportActionToolTrace): ExportWorkerState {
   const retainedBlockers = worker.blockers.filter((item) => !/^\[delivery_/.test(item));
   const blockers = Array.from(new Set([...retainedBlockers, ...exportDeliveryBlockerMessages(deliveryGate)])).sort();
@@ -141,7 +194,7 @@ function executableWorker(worker: ExportWorkerState, deliveryGate: ExportDeliver
   const manifest = {
     ...worker.manifest,
     readiness,
-    ...(agentToolTrace ? { agentToolTrace } : {}),
+    ...(agentToolTrace ? { agentToolTrace: portableAgentToolTrace(agentToolTrace) } : {}),
   };
   const manifestContent = serialize(manifest);
   return {
@@ -225,12 +278,33 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
   const worker = executableWorker(input.worker, deliveryGate, input.agentToolTrace);
   const memoryAdapter = new MemoryExportAdapter();
   const bridgeAdapter = input.bridge && input.projectRoot
-    ? new BridgeExportAdapter(input.projectRoot, input.bridge)
+    ? new BridgeExportAdapter(
+      input.projectRoot,
+      worker.exportRoot,
+      exportTransactionId(worker, deliveryGate),
+      input.bridge,
+    )
     : undefined;
   const adapter = bridgeAdapter
     ? bridgeAdapter
     : memoryAdapter;
   const plannedWriteCount = worker.entries.filter((entry) => entry.operation === "write_file").length;
+  if (bridgeAdapter && !input.bridge?.sandboxPublishDirectory) {
+    return {
+      status: "blocked",
+      label: "导出还未就绪",
+      detail: "当前 packaged App 缺少原子发布能力。",
+      exportRoot: worker.exportRoot,
+      manifestPath: manifestPath(worker),
+      executedCount: 0,
+      plannedWriteCount,
+      writes: [],
+      errors: ["[delivery_atomic_publish_unavailable] Electron export bridge cannot publish a staged package atomically."],
+      agentToolTrace: input.agentToolTrace,
+      deliveryGate,
+      outputAssets: [],
+    };
+  }
   if (worker.canExecute && input.bridge && input.projectRoot) {
     const mediaErrors = await verifyDeliveryMediaHashes({ worker, bridge: input.bridge, projectRoot: input.projectRoot });
     if (mediaErrors.length) {
@@ -278,6 +352,27 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
       deliveryGate,
       outputAssets: [],
     };
+  }
+
+  if (bridgeAdapter) {
+    try {
+      await bridgeAdapter.publish();
+    } catch (error) {
+      return {
+        status: "failed",
+        label: "导出失败",
+        detail: "交付包未发布，已有交付内容保持不变。",
+        exportRoot: worker.exportRoot,
+        manifestPath: manifestPath(worker),
+        executedCount: result.executed.length,
+        plannedWriteCount,
+        writes: [],
+        errors: [`[delivery_atomic_publish_failed] ${error instanceof Error ? error.message : String(error)}`],
+        agentToolTrace: input.agentToolTrace,
+        deliveryGate,
+        outputAssets: [],
+      };
+    }
   }
 
   const executionMode = bridgeAdapter ? "live" : "dry_run";

@@ -345,6 +345,27 @@ function projectStatusViewWithCommittedDraft(status: ProjectStatusViewModel, com
   };
 }
 
+function projectStatusViewWithCompletedExport(
+  status: ProjectStatusViewModel,
+  currentTask: AgentCurrentTaskProjection | undefined,
+  directorView: DirectorView,
+): ProjectStatusViewModel {
+  if (
+    directorView !== "export"
+    || currentTask?.completion?.step !== "export"
+    || currentTask.completion.executionMode !== "live"
+  ) return status;
+  return {
+    ...status,
+    stage: "导出已完成",
+    doing: "已写入当前项目的 exports 文件夹。",
+    waitingFor: "最后复核交付内容",
+    nextAction: "查看交付内容",
+    tone: "ready",
+    issue: undefined,
+  };
+}
+
 function restoredAgentVideoPermissionContract(
   draft: ProjectAgentStagedPlanDraft | undefined,
   fallback: AgentVideoPermissionContract,
@@ -944,11 +965,15 @@ export function DirectorMode({
     surfaceAgentCommand,
   ]);
   const projectStatusView = useMemo(
-    () => projectStatusViewWithCommittedDraft(
-      projectStatusViewWithActiveVideo(rawProjectStatusView, creatorDesk),
-      isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo),
+    () => projectStatusViewWithCompletedExport(
+      projectStatusViewWithCommittedDraft(
+        projectStatusViewWithActiveVideo(rawProjectStatusView, creatorDesk),
+        isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo),
+      ),
+      agentCurrentTaskProjection,
+      directorView,
     ),
-    [creatorDesk, latestPrototypeAgentDemo, rawProjectStatusView],
+    [agentCurrentTaskProjection, creatorDesk, directorView, latestPrototypeAgentDemo, rawProjectStatusView],
   );
   const newVideoEntryStatusView = useMemo(
     () => showNewVideoStart ? newVideoEntryProjectStatusView(newVideoStatus, restoredNewVideoDraft) : undefined,
@@ -1214,6 +1239,8 @@ export function DirectorMode({
               audioPlanning={runtimeState.audioPlanning}
               exportWorker={exportWorker}
               exportAction={exportAction}
+              exportCompleted={agentCurrentTaskProjection?.completion?.step === "export"
+                && agentCurrentTaskProjection.completion.executionMode === "live"}
               localProjectReady={localProjectReady}
               pendingConfirmationLabel={pendingAgentConfirmationForSurfaces}
               onRunExport={onRunExport}

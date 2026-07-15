@@ -117,6 +117,14 @@ function registerHandlers() {
     };
   });
 
+  ipcMain.handle("sandbox:publishDirectory", async (_event, stagingPath, destinationPath) => {
+    const staging = path.resolve(stagingPath);
+    const destination = path.resolve(destinationPath);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.renameSync(staging, destination);
+    return { published: true, stagingPath: staging, destinationPath: destination };
+  });
+
   ipcMain.handle("sandbox:spawn", async () => ({
     exitCode: 0,
     stdout: "",
@@ -149,6 +157,10 @@ app.whenReady().then(async () => {
         const watch = await bridge.sandboxWatch(selection.projectRoot);
         const copyTarget = selection.projectRoot + "/bridge-smoke-copy.txt";
         const copy = await bridge.sandboxCopyFile(target, copyTarget);
+        const publishStaging = selection.projectRoot + "/exports/.vibe-staging/bridge-smoke";
+        await bridge.sandboxWriteFile(publishStaging + "/item.txt", "published");
+        const publishDestination = selection.projectRoot + "/exports/bridge-smoke-published";
+        const publish = await bridge.sandboxPublishDirectory(publishStaging, publishDestination);
         const unwatch = await bridge.sandboxUnwatch(watch.watchId);
         const spawned = await bridge.sandboxSpawn("node", ["--version"]);
         return {
@@ -158,6 +170,7 @@ app.whenReady().then(async () => {
           hashed,
           watch,
           copy,
+          publish,
           unwatch,
           spawned,
           hasBridge: true,
@@ -224,12 +237,14 @@ app.whenReady().then(async () => {
   assert(result.watch.watching === true, "sandboxWatch should accept the selected project root");
   assert(result.watch.watchId === "bridge-smoke-watch-1", "sandboxWatch should return a clone-safe watch id");
   assert(result.copy.copied === true, "sandboxCopyFile should report success");
+  assert(result.publish.published === true, "sandboxPublishDirectory should report success");
   assert(result.unwatch.unwatched === true, "sandboxUnwatch should close the clone-safe watch id");
   assert(result.spawned.exitCode === 0, "sandboxSpawn bridge should return a successful response");
   assert(existsSync(path.join(projectRoot, "bridge-smoke.txt")), "bridge smoke file should exist on disk");
   assert(readFileSync(path.join(projectRoot, "bridge-smoke.txt"), "utf8") === "ok", "bridge smoke file should persist expected content");
   assert(existsSync(path.join(projectRoot, "bridge-smoke-copy.txt")), "bridge smoke copied file should exist on disk");
   assert(readFileSync(path.join(projectRoot, "bridge-smoke-copy.txt"), "utf8") === "ok", "bridge smoke copied file should persist expected content");
+  assert(readFileSync(path.join(projectRoot, "exports/bridge-smoke-published/item.txt"), "utf8") === "published", "bridge smoke should publish the staged directory");
 
   console.log("electron-bridge-smoke-test: Electron preload/IPC/filesystem bridge smoke completed.");
 } finally {
