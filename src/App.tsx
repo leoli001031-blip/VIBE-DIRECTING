@@ -2852,14 +2852,18 @@ function App() {
     projectId: effectiveRuntimeProjectIdentity?.projectId,
     projectRoot: effectiveRuntimeProjectIdentity?.projectRoot,
     oneShot: projectImage2OneShotState.summary,
+    reviewReceipts: prototypeProjectVibe.receipts?.reviewReceipts,
   }), [
     effectiveRuntimeProjectIdentity?.projectId,
     effectiveRuntimeProjectIdentity?.projectRoot,
     projectImage2OneShotState.summary,
     projectRealChainRelayQueue,
     projectRealChainState.summary,
+    prototypeProjectVibe.receipts?.reviewReceipts,
     workbenchRuntimeState.storyFlow.shots,
   ]);
+  const returnedVideoPreviewCount = currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.returned).length;
+  const pendingVideoReviewCount = currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.reviewRequired).length;
   const currentProjectPreviewQueue = useMemo(() => {
     const base = effectiveRuntimeProjectBinding.status === "bound"
       ? currentProjectPreviewProjection.queue
@@ -5997,15 +6001,30 @@ function App() {
       || asset.status === "planned";
   }).length;
   const gatedVideoSubmitAction = useMemo(() => {
-    if (!videoSubmitAction || pendingReferenceReviewCount <= 0) return videoSubmitAction;
-    if (videoSubmitAction.status === "blocked") return videoSubmitAction;
+    if (!videoSubmitAction) return videoSubmitAction;
+    const previewApproved = returnedVideoPreviewCount > 0 && pendingVideoReviewCount === 0;
+    const projectedVideoSubmitAction = previewApproved && videoSubmitAction.status === "needs_review"
+      ? {
+          ...videoSubmitAction,
+          status: "idle" as const,
+          message: "视频已通过预览审查；未锁定为项目事实，导出仍需单独确认。",
+          suggestedActionLabel: "查看交付",
+        }
+      : videoSubmitAction;
+    const withReviewProjection = {
+      ...projectedVideoSubmitAction,
+      returnedCount: returnedVideoPreviewCount,
+      reviewCount: pendingVideoReviewCount,
+    };
+    if (pendingReferenceReviewCount <= 0 || returnedVideoPreviewCount > 0) return withReviewProjection;
+    if (projectedVideoSubmitAction.status === "blocked") return withReviewProjection;
     return {
-      ...videoSubmitAction,
+      ...withReviewProjection,
       disabled: true,
       ready: false,
       message: "先确认参考素材，再发送视频。",
     };
-  }, [pendingReferenceReviewCount, videoSubmitAction]);
+  }, [pendingReferenceReviewCount, pendingVideoReviewCount, returnedVideoPreviewCount, videoSubmitAction]);
 
   function lockVoiceSourceForProject(sourceId: string) {
     const generatedAt = new Date().toISOString();

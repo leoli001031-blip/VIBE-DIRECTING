@@ -913,7 +913,7 @@ function assertCreatorPanelContract() {
   assert(/pendingReferenceReviewCount/.test(appSource), "App must block video submit while references still need review");
   assert(/pendingReferenceReviewCount\s*=\s*workbenchRuntimeState\.visualMemory\.assets\.filter/.test(appSource), "Video submit gate must derive reference blockers from visual memory assets");
   assert(!/pendingReferenceReviewCount[\s\S]{0,260}framePlan\.(?:reviewCount|missingCount)/.test(appSource), "Video submit gate must not treat missing video/shot outputs as reference review blockers");
-  assert(/if \(!videoSubmitAction \|\| pendingReferenceReviewCount <= 0\) return videoSubmitAction;[\s\S]*if \(videoSubmitAction\.status === "blocked"\) return videoSubmitAction;/.test(appSource), "Video submit gate must preserve concrete QA blockers so the Agent can recover the blocked shot instead of showing generic reference review copy");
+  assert(/if \(!videoSubmitAction\) return videoSubmitAction;[\s\S]*if \(projectedVideoSubmitAction\.status === "blocked"\) return withReviewProjection;/.test(appSource), "Video submit gate must preserve concrete QA blockers so the Agent can recover the blocked shot instead of showing generic reference review copy");
   assert(/先确认参考素材，再发送视频/.test(appSource), "Video submit gate should use creator-facing review copy");
   assert(/videoSendAction=\{gatedVideoSubmitAction\}/.test(appSource), "DirectorMode must receive the gated video submit action");
   assert(/onRetryMissingBatch=\{runMissingVisualsFromStory\}/.test(app), "DirectorMode must route missing visuals through the story fallback handler");

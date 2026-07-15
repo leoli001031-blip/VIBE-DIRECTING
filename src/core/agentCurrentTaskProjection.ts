@@ -126,6 +126,7 @@ export interface AgentCurrentTaskProjectionInput {
   currentProjectFactHash?: string;
   completedSteps?: AgentCurrentTaskCompletedStep[];
   referenceReviewCount?: number;
+  videoReviewCount?: number;
   facts?: AgentCurrentTaskFact[];
 }
 
@@ -479,6 +480,19 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
       effect: "none",
       blockers: [],
       facts: factsForInput(input, [{ label: "待复核", value: `${referenceReviewCount} 项` }]),
+    });
+  }
+
+  const videoReviewCount = Math.max(0, Math.floor(input.videoReviewCount || 0));
+  if (videoReviewCount > 0) {
+    return buildProjection({
+      source: "project_observation",
+      step: "submit_video",
+      label: "复核视频",
+      requiresConfirmation: false,
+      effect: "none",
+      blockers: [],
+      facts: factsForInput(input, [{ label: "待复核", value: `${videoReviewCount} 项` }]),
     });
   }
 

@@ -624,6 +624,8 @@ export function DirectorMode({
     suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
     recoveryTargetShotIds?: string[];
+    returnedCount?: number;
+    reviewCount?: number;
   };
   webSearchSettings?: AgentWebSearchSettings;
   webSearchReady?: boolean;

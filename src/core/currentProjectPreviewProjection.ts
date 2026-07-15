@@ -1,5 +1,6 @@
 import type { PreviewQueueItem, PreviewQueueItemKind } from "./previewPlayerQueue";
 import type { ProjectImage2OneShotStatus } from "./projectImage2Types";
+import type { ProjectVibeReviewReceipt } from "../project/types";
 import {
   buildJimengVideoStatusProjection,
   type JimengVideoStatusProjection,
@@ -133,6 +134,7 @@ export interface CurrentProjectPreviewQueueItem extends PreviewQueueItem {
   providerRequestId?: string;
   outputHash?: string;
   outputSha256?: string;
+  reviewReceiptId?: string;
   promptText?: string;
   promptPath?: string;
   referencePaths?: string[];
@@ -175,6 +177,7 @@ export interface BuildCurrentProjectPreviewProjectionInput {
   previewPlan?: CurrentProjectPreviewPlanInput;
   relayQueue?: VideoRelayQueueState;
   oneShot?: ProjectImage2OneShotStatus;
+  reviewReceipts?: ProjectVibeReviewReceipt[];
   projectId?: string;
   projectRoot?: string;
   generatedAt?: string;
@@ -196,6 +199,48 @@ function numberValue(value: unknown): number | undefined {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
+function normalizedReviewPath(value: string | undefined) {
+  return cleanPath(value)
+    ?.replace(/^file:\/+/, "")
+    .replace(/^\.\//, "")
+    .replace(/\/{2,}/g, "/");
+}
+
+function cleanPath(value: string | undefined) {
+  return stringValue(value)?.replace(/\\/g, "/");
+}
+
+function latestMatchingReviewReceipt(input: {
+  receipts: ProjectVibeReviewReceipt[] | undefined;
+  shotId?: string;
+  mediaPath?: string;
+  sourceReceiptId?: string;
+  outputHash?: string;
+}) {
+  const mediaPath = normalizedReviewPath(input.mediaPath);
+  const sourceReceiptId = stringValue(input.sourceReceiptId);
+  const outputHash = stringValue(input.outputHash);
+  if (!mediaPath || !sourceReceiptId || !outputHash) return undefined;
+
+  let latest: ProjectVibeReviewReceipt | undefined;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const receipt of input.receipts || []) {
+    if (
+      normalizedReviewPath(receipt.outputPath) !== mediaPath
+      || stringValue(receipt.sourceReceiptId) !== sourceReceiptId
+      || stringValue(receipt.outputHash) !== outputHash
+      || (input.shotId && receipt.shotId !== input.shotId)
+    ) continue;
+    const createdAt = Date.parse(receipt.createdAt);
+    const createdAtTime = Number.isFinite(createdAt) ? createdAt : 0;
+    if (!latest || createdAtTime >= latestTime) {
+      latest = receipt;
+      latestTime = createdAtTime;
+    }
+  }
+  return latest;
 }
 
 function asPreviewItem(value: unknown): CurrentProjectPreviewItemInput | undefined {
@@ -617,10 +662,22 @@ export function buildCurrentProjectPreviewProjection(
   const items = sortedItems(previewItemList(summary, input.previewItems, clips, input.relayQueue, input.oneShot)).map((item, index): CurrentProjectPreviewQueueItem => {
     const shotId = stringValue(item.shotId);
     const clip = shotId ? clipsByShotId.get(shotId) : undefined;
-    const status = normalizeStatus(item.status, item.previewStatus, item.runtimeTruthStatus, clip?.status);
+    const sourceReceiptId = stringValue(item.sourceReceiptId) || stringValue(item.providerReceiptId) || stringValue(item.providerRequestId) || stringValue(clip?.sourceReceiptId) || stringValue(clip?.providerReceiptId) || stringValue(clip?.providerRequestId);
+    const outputHash = stringValue(item.outputHash) || stringValue(item.outputSha256) || stringValue(item.providerOutputSha256) || stringValue(clip?.outputHash) || stringValue(clip?.outputSha256) || stringValue(clip?.providerOutputSha256);
     const mediaPath = itemMediaPath(item, clip);
+    const reviewReceipt = latestMatchingReviewReceipt({
+      receipts: input.reviewReceipts,
+      shotId,
+      mediaPath,
+      sourceReceiptId,
+      outputHash,
+    });
+    const previewApproved = reviewReceipt?.status === "approved" && reviewReceipt.humanReviewed;
+    const status = previewApproved
+      ? "approved"
+      : normalizeStatus(item.status, item.previewStatus, item.runtimeTruthStatus, clip?.status);
     const blocked = itemBlocked(item, status, clip);
-    const reviewRequired = itemReviewRequired(item, clip, reviewShots);
+    const reviewRequired = previewApproved ? false : itemReviewRequired(item, clip, reviewShots);
     const durationSeconds = safeDuration(item.durationSeconds)
       ?? safeDuration(item.duration_seconds)
       ?? safeDuration(item.duration)
@@ -638,18 +695,19 @@ export function buildCurrentProjectPreviewProjection(
       source: currentProjectPreviewProjectionSource,
       order: numberValue(item.order) ?? numberValue(clip?.order) ?? index + 1,
       status,
-      sourceReceiptId: stringValue(item.sourceReceiptId) || stringValue(item.providerReceiptId) || stringValue(item.providerRequestId) || stringValue(clip?.sourceReceiptId) || stringValue(clip?.providerReceiptId) || stringValue(clip?.providerRequestId),
+      sourceReceiptId,
       providerReceiptId: stringValue(item.providerReceiptId) || stringValue(clip?.providerReceiptId),
       providerRequestId: stringValue(item.providerRequestId) || stringValue(clip?.providerRequestId),
-      outputHash: stringValue(item.outputHash) || stringValue(item.outputSha256) || stringValue(item.providerOutputSha256) || stringValue(clip?.outputHash) || stringValue(clip?.outputSha256) || stringValue(clip?.providerOutputSha256),
+      outputHash,
       outputSha256: stringValue(item.outputSha256) || stringValue(item.providerOutputSha256) || stringValue(clip?.outputSha256) || stringValue(clip?.providerOutputSha256),
+      reviewReceiptId: previewApproved ? reviewReceipt.id : undefined,
       promptText: stringValue(item.promptText),
       promptPath: stringValue(item.promptPath),
       referencePaths: Array.isArray(item.referencePaths) ? item.referencePaths : undefined,
       promptHash: stringValue(item.promptHash),
-      previewStatus: item.previewStatus || clip?.status,
+      previewStatus: previewApproved ? "approved" : item.previewStatus || clip?.status,
       runtimeTruthStatus: item.runtimeTruthStatus,
-      previewQaStatus: item.previewQaStatus || clip?.previewQaStatus,
+      previewQaStatus: previewApproved ? "approved" : item.previewQaStatus || clip?.previewQaStatus,
       productionQaStatus: item.productionQaStatus || clip?.productionQaStatus,
       reviewRequired,
       blocked,

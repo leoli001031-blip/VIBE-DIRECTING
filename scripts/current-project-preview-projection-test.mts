@@ -256,6 +256,88 @@ assert(approvedMergedRelayItem?.status === "approved", "approved preview state m
 assert(approvedMergedRelayItem?.reviewRequired === false, "approved preview item must not become needs-review after relay merge");
 assert(approvedMergedRelayProjection.reviewCount === 0, "approved merged relay video should clear preview review count");
 
+const receiptApprovedRelayProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "preview_ready_with_review",
+    projectId: currentProject.projectId,
+    projectRoot: currentProject.projectRoot,
+    previewItems: [{
+      id: "runtime-receipt-approved-video",
+      shotId: "S01",
+      order: 1,
+      mediaPath: "/workspace/self-contained/videos/S01.mp4",
+      outputExists: true,
+      status: "returned_with_review_overlay",
+      previewQaStatus: "needs_review",
+      productionQaStatus: "needs_review",
+      reviewRequired: true,
+      sourceReceiptId: "seedance_submit_relay_s01",
+      outputHash: "sha256:relay-s01",
+    }],
+  },
+  previewPlan,
+  relayQueue: returnedRelayQueue,
+  reviewReceipts: [{
+    id: "review_preview_only_s01",
+    createdAt: "2026-07-15T00:00:00.000Z",
+    status: "approved",
+    reviewerId: "local_user",
+    humanReviewed: true,
+    shotId: "S01",
+    sourceReceiptId: "seedance_submit_relay_s01",
+    outputPath: "/workspace/self-contained/videos/S01.mp4",
+    outputHash: "sha256:relay-s01",
+    retryRequested: false,
+    lateOutput: false,
+    providerSelfReportIgnored: true,
+    promotionAuthorized: false,
+    evidenceRefs: ["preview#runtime-receipt-approved-video"],
+    blockers: [],
+  }],
+});
+const receiptApprovedRelayItem = receiptApprovedRelayProjection.items.find((item) => item.shotId === "S01");
+assert(receiptApprovedRelayItem?.status === "approved", "an exact human review receipt should approve the preview projection");
+assert(receiptApprovedRelayItem?.reviewReceiptId === "review_preview_only_s01", "preview approval should retain the exact review receipt id");
+assert(receiptApprovedRelayItem?.reviewRequired === false, "preview-only approval should clear the review overlay");
+assert(receiptApprovedRelayItem?.productionQaStatus !== "approved", "preview-only approval must not rewrite production QA as approved");
+assert(receiptApprovedRelayProjection.reviewCount === 0, "hash-bound preview approval should clear the video review count");
+
+const mismatchedReceiptProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "preview_ready_with_review",
+    projectId: currentProject.projectId,
+    projectRoot: currentProject.projectRoot,
+    previewItems: [{
+      id: "runtime-mismatched-receipt-video",
+      shotId: "S01",
+      mediaPath: "/workspace/self-contained/videos/S01.mp4",
+      outputExists: true,
+      status: "returned_with_review_overlay",
+      reviewRequired: true,
+      sourceReceiptId: "seedance_submit_relay_s01",
+      outputHash: "sha256:relay-s01",
+    }],
+  },
+  reviewReceipts: [{
+    id: "review_wrong_hash_s01",
+    createdAt: "2026-07-15T00:00:01.000Z",
+    status: "approved",
+    humanReviewed: true,
+    shotId: "S01",
+    sourceReceiptId: "seedance_submit_relay_s01",
+    outputPath: "/workspace/self-contained/videos/S01.mp4",
+    outputHash: "sha256:different-output",
+    retryRequested: false,
+    lateOutput: false,
+    providerSelfReportIgnored: true,
+    promotionAuthorized: false,
+    evidenceRefs: [],
+    blockers: [],
+  }],
+});
+assert(mismatchedReceiptProjection.reviewCount === 1, "a receipt for a different output hash must not clear review");
+assert(!mismatchedReceiptProjection.items[0]?.reviewReceiptId, "a mismatched receipt must not bind to the preview item");
+
 const defaultDurationProjection = buildCurrentProjectPreviewProjection({
   summary,
   previewPlan: { ...previewPlan, clips: previewPlan.clips.map(({ durationSeconds, ...clip }) => clip) },

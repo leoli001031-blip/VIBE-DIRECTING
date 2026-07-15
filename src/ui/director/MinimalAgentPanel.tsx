@@ -4878,6 +4878,8 @@ export function MinimalAgentPanel({
     suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
     recoveryTargetShotIds?: string[];
+    returnedCount?: number;
+    reviewCount?: number;
   };
   webSearchSettings?: AgentWebSearchSettings;
   webSearchReady?: boolean;
@@ -6026,6 +6028,14 @@ export function MinimalAgentPanel({
     "submit_video",
     agentGenerationProjectIdentity,
   );
+  const videoReturnedCountForAgent = Math.max(0, Math.floor(
+    videoSendAction?.returnedCount
+      ?? (timelineShowsVideoReady || videoSendAction?.status === "needs_review" ? 1 : 0),
+  ));
+  const videoReviewCountForAgent = Math.max(0, Math.floor(
+    videoSendAction?.reviewCount
+      ?? (timelineShowsVideoReady || videoSendAction?.status === "needs_review" ? 1 : 0),
+  ));
   const referenceMissingCountForAgent = referenceExecutionSatisfiedForAgent ? 0 : referenceMissingCount;
   const referenceReviewCountForAgent = referenceHasReviewableOutput
     ? referenceReviewableCount
@@ -6033,7 +6043,7 @@ export function MinimalAgentPanel({
       ? 0
       : referenceReviewableCount;
   const referenceReadyCountForAgent = referencesUsableForAgent ? Math.max(referenceLockedCount, 1) : referenceLockedCount;
-  const videoSubmittedForAgent = Boolean(videoAlreadySent || videoBusy || videoCanResume || timelineShowsVideoReady || timelineHasVideoValidation);
+  const videoSubmittedForAgent = Boolean(videoAlreadySent || videoBusy || videoCanResume || videoReturnedCountForAgent > 0 || timelineHasVideoValidation);
   const realSampleLabel = realSampleBusy
     ? "生成中"
     : referenceHasReviewableOutput
@@ -8340,12 +8350,20 @@ export function MinimalAgentPanel({
         referenceMissingCount,
         referenceReviewCount: referencesUsableForAgent ? 0 : Math.max(referenceReviewCountForAgent, composerProjectInbox.needsReviewCount),
         referenceReadyCount: referenceReadyCountForAgent,
-        videoStatus: timelineShowsVideoReady ? "needs_review" : videoSendAction?.status || "not_generated",
-        videoStatusLabel: timelineShowsVideoReady ? "视频本地验证已记录" : videoSendAction?.suggestedActionLabel || "未发送视频",
-        videoDetail: timelineShowsVideoReady ? "视频本地验证结果已记录，可以导出交付包。" : videoSendAction?.message || "",
-        videoWaitingCount: !timelineShowsVideoReady && videoSendAction?.status === "submitted" ? 1 : 0,
-        videoCompletedCount: !timelineShowsVideoReady && videoSendAction?.status === "needs_review" ? 1 : 0,
-        videoReviewCount: timelineShowsVideoReady || videoSendAction?.status === "needs_review" ? 1 : 0,
+        videoStatus: videoReviewCountForAgent > 0
+          ? "needs_review"
+          : videoReturnedCountForAgent > 0
+            ? "approved"
+            : videoSendAction?.status || "not_generated",
+        videoStatusLabel: videoReviewCountForAgent > 0
+          ? "视频待复核"
+          : videoReturnedCountForAgent > 0
+            ? "视频已通过预览审查"
+            : videoSendAction?.suggestedActionLabel || "未发送视频",
+        videoDetail: videoSendAction?.message || "",
+        videoWaitingCount: videoReturnedCountForAgent === 0 && videoSendAction?.status === "submitted" ? 1 : 0,
+        videoCompletedCount: videoReturnedCountForAgent,
+        videoReviewCount: videoReviewCountForAgent,
         videoCanResume,
         image2Running: realSampleBusy || endFrameBusy,
         referenceExecutionValidated: timelineHasReferenceValidation,
@@ -8373,6 +8391,8 @@ export function MinimalAgentPanel({
       timelineHasVideoValidation,
       timelineShowsReferenceReady,
       videoCanResume,
+      videoReturnedCountForAgent,
+      videoReviewCountForAgent,
       videoSendAction?.message,
       videoSendAction?.status,
       videoSendAction?.suggestedActionLabel,
@@ -8764,6 +8784,7 @@ export function MinimalAgentPanel({
       currentProjectFactHash: projectFactHash,
       completedSteps: agentCurrentTaskCompletedSteps,
       referenceReviewCount: referenceReviewCountForAgent,
+      videoReviewCount: videoReviewCountForAgent,
       facts: projectStatusView?.facts,
     }),
     [
@@ -8785,6 +8806,7 @@ export function MinimalAgentPanel({
       projectStatusView,
       projectFactHash,
       referenceReviewCountForAgent,
+      videoReviewCountForAgent,
       runtimeState.project.root,
       runtimeState.sourceIndex.projectId,
       restoredAgentStagedPlanDraft,

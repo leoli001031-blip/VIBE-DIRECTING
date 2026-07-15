@@ -86,6 +86,35 @@ try {
     running: () => false,
   });
 
+  const beforePreviewApproval = loadProject(projectVibePath);
+  const previewApproveInput = api.reviewDecisionRequestInput(
+    new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=approve`),
+    {
+      receiptId: "review_preview_only_video_s01",
+      reviewerId: "local_user",
+      item: {
+        id: "preview_video_s01",
+        shotId: "S01",
+        label: "P6S01 returned video",
+        mediaPath: "project-root/video/seedance/P6S01.mp4",
+        sourceReceiptId: "seedance_submit_external_task_s01",
+        outputHash: "sha256:preview-only-video",
+      },
+    },
+  );
+  const previewApprovePayload = api.currentProjectReviewDecisionResponse(previewApproveInput, { running: false }, source);
+  assert(previewApprovePayload.ok === true && previewApprovePayload.status === "approved", "approve should persist a preview review receipt");
+  assert(previewApprovePayload.promotionOperationCount === 0, "preview approval must not stage asset or visual-memory promotion operations");
+  const previewApprovedProject = loadProject(projectVibePath);
+  const previewReceipt = previewApprovedProject.receipts?.reviewReceipts.find((receipt) => receipt.id === "review_preview_only_video_s01");
+  assert(previewReceipt?.outputPath === "video/seedance/P6S01.mp4", "preview approval should persist a project-relative media path");
+  assert(previewReceipt?.sourceReceiptId === "seedance_submit_external_task_s01", "preview approval should remain bound to the provider receipt");
+  assert(previewReceipt?.outputHash === "sha256:preview-only-video", "preview approval should remain bound to the exact output hash");
+  assert(previewReceipt?.promotionAuthorized === false, "preview approval must not authorize project-fact promotion");
+  assert(previewApprovedProject.assets.length === beforePreviewApproval.assets.length, "preview approval must not add an asset");
+  assert(previewApprovedProject.visualMemory.entries.length === beforePreviewApproval.visualMemory.entries.length, "preview approval must not add visual memory");
+  assert(JSON.stringify(previewApprovedProject.shots) === JSON.stringify(beforePreviewApproval.shots), "preview approval must not mutate shot facts");
+
   const lockInput = api.reviewDecisionRequestInput(
     new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=lock`),
     {

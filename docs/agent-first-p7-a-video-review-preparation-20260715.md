@@ -5,6 +5,10 @@ Date: 2026-07-15
 Status: READY FOR HUMAN DECISION. No approval, rejection, promotion, retry, or
 export has been executed.
 
+Follow-up: the user selected preview-only approval. The applied decision and
+packaged cold-start evidence are recorded in
+`docs/agent-first-p7-b-review-gate-closure-20260715.md`.
+
 Readiness label:
 `P7-A real video review prepared; awaiting explicit human decision`.
 

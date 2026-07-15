@@ -40,7 +40,11 @@ function observation(input: {
   referenceReviewCount?: number;
   referenceReadyCount?: number;
   videoSubmitted?: boolean;
+  videoReturnedCount?: number;
+  videoReviewCount?: number;
 }) {
+  const videoReturnedCount = input.videoReturnedCount || 0;
+  const videoReviewCount = input.videoReviewCount || 0;
   return buildProjectObservation({
     localProjectReady: input.localProjectReady,
     projectTitle: "雨夜便利店",
@@ -50,12 +54,12 @@ function observation(input: {
     referenceMissingCount: input.referenceMissingCount,
     referenceReviewCount: input.referenceReviewCount || 0,
     referenceReadyCount: input.referenceReadyCount || 0,
-    videoStatus: input.videoSubmitted ? "submitted" : "not_generated",
-    videoStatusLabel: input.videoSubmitted ? "已发送" : "未提交视频",
+    videoStatus: videoReviewCount > 0 ? "needs_review" : videoReturnedCount > 0 ? "approved" : input.videoSubmitted ? "submitted" : "not_generated",
+    videoStatusLabel: videoReviewCount > 0 ? "待复核" : videoReturnedCount > 0 ? "已通过预览审查" : input.videoSubmitted ? "已发送" : "未提交视频",
     videoDetail: input.videoSubmitted ? "视频已提交。" : "先完成参考。",
-    videoWaitingCount: input.videoSubmitted ? 1 : 0,
-    videoCompletedCount: 0,
-    videoReviewCount: 0,
+    videoWaitingCount: input.videoSubmitted && videoReturnedCount === 0 ? 1 : 0,
+    videoCompletedCount: videoReturnedCount,
+    videoReviewCount,
     videoCanResume: false,
     image2Running: false,
   });
@@ -291,6 +295,46 @@ assert(!referenceReviewProjection.requiresConfirmation, "reviewing an existing o
 assert(referenceReviewProjection.effect === "none", "reference review must not claim a generation effect");
 assert(!referenceReviewProjection.confirmationId, "a stale reference-generation confirmation must not own the review task");
 assert(factValue(referenceReviewProjection.facts, "待复核") === "1 项", "reference review should expose the structured review count");
+
+const videoReviewProjection = buildAgentCurrentTaskProjection({
+  projectObservation: observation({
+    localProjectReady: true,
+    shotCount: 1,
+    referenceMissingCount: 0,
+    referenceReadyCount: 1,
+    videoSubmitted: true,
+    videoReturnedCount: 1,
+    videoReviewCount: 1,
+  }),
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: true,
+    localProjectReady: true,
+    referenceMissingCount: 0,
+    videoSubmitted: true,
+  }),
+  videoReviewCount: 1,
+  currentProjectId: "project-current",
+  currentProjectRoot: "/tmp/project-current",
+  currentProjectFactHash: "facts-current",
+  timelineConfirmations: [{
+    confirmationId: "premature_export_confirmation",
+    step: "export",
+    status: "waiting",
+    projectId: "project-current",
+    projectRoot: "/tmp/project-current",
+    projectFactHash: "facts-current",
+    createdAt: "2026-07-15T00:00:00.000Z",
+    label: "导出交付包",
+  }],
+});
+assert(videoReviewProjection.step === "submit_video", "a returned video must remain in the video stage until preview review is complete");
+assert(videoReviewProjection.label === "复核视频", "a returned video should make review the current task");
+assert(videoReviewProjection.source === "project_observation", "video review should be driven by structured current output state");
+assert(!videoReviewProjection.requiresConfirmation, "reviewing a returned video must not create another provider or export confirmation");
+assert(videoReviewProjection.effect === "none", "video review must not claim submission or export effects");
+assert(!videoReviewProjection.confirmationId, "a premature export confirmation must not own the video review task");
+assert(factValue(videoReviewProjection.facts, "待复核") === "1 项", "video review should expose the structured review count");
 
 const saveLocationRoute = route({
   text: "选择保存位置",
