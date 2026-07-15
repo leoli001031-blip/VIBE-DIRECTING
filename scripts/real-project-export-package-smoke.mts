@@ -1,8 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { buildExportBuilderState } from "../src/core/exportBuilder.ts";
 import { buildExportWorkerState, executeExportWorkerPlan } from "../src/core/exportWorker.ts";
+import { hashProjectVibeFacts } from "../src/project/index.ts";
 import type { ProjectVibeDocument } from "../src/project/types.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -322,35 +323,28 @@ const worker = buildExportWorkerState({
   profileSelection: "all",
   executionMode: "adapter_execution",
   confirmation: true,
+  delivery: {
+    identity: {
+      projectId: project.manifest.projectId,
+      projectRoot: process.cwd(),
+      projectFactHash: hashProjectVibeFacts(project),
+    },
+  },
 });
-assert(worker.canExecute, `export worker should execute: ${worker.blockers.join("; ")}`);
+assert(!worker.canExecute, "legacy needs_review acceptance media must remain outside formal export execution");
 
 const result = await executeExportWorkerPlan(worker, new DiskExportAdapter(process.cwd()));
-assert(result.ok, `export worker failed: ${result.errors.join("; ")}`);
-
-const manifestPath = path.join(process.cwd(), exportRoot, "export_manifest.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-assert(manifest.mvpPackage.projectVibeIncluded === true, "export should include Project.vibe");
-assert(manifest.mvpPackage.videoResultCount >= 1, "export should include video result");
-assert(manifest.mvpPackage.videoNeedsReviewCount >= 1, "real video should remain needs_review");
-assert(manifest.mvpPackage.videoApprovedCount === 0, "real video should not auto-approve");
-assert(manifest.mvpPackage.receiptCount >= 1, "export should include receipts");
-
-const copiedVideo = path.join(process.cwd(), exportRoot, "final-video/01_MS01.mp4");
-assert(existsSync(copiedVideo), "export should copy final video to stable final-video path");
-assert(statSync(copiedVideo).size > 0, "copied final video should be non-empty");
+assert(!result.ok && result.executed.length === 0, "blocked legacy acceptance media must perform zero writes");
 
 const report = {
   ok: true,
   exportRoot,
-  manifestPath,
-  copiedVideo: path.relative(process.cwd(), copiedVideo).replace(/\\/g, "/"),
+  deliveryStatus: worker.deliveryGate.status,
+  blockers: worker.blockers,
   executedCount: result.executed.length,
-  videoNeedsReviewCount: manifest.mvpPackage.videoNeedsReviewCount,
-  videoApprovedCount: manifest.mvpPackage.videoApprovedCount,
+  videoNeedsReviewCount: worker.manifest.mvpPackage.videoNeedsReviewCount,
+  videoApprovedCount: worker.manifest.mvpPackage.videoApprovedCount,
   audioPath,
   providerCalledExternalDuringExport: false,
 };
-const reportPath = path.join(process.cwd(), exportRoot, "real_project_acceptance_report.json");
-writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 console.log(JSON.stringify(report, null, 2));

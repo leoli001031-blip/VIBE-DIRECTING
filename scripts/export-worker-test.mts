@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import { buildExportWorkerState, executeExportWorkerPlan } from "../src/core/exportWorker.ts";
+import { runExportAction } from "../src/core/exportAction.ts";
+import { EXPORT_DELIVERY_CONFIRMATION_SCHEMA_VERSION } from "../src/core/exportDeliveryGate.ts";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -45,6 +47,36 @@ class MemoryExportAdapter {
 
   copyFile(sourcePath, destinationPath) {
     this.copies.set(destinationPath, sourcePath);
+  }
+}
+
+class MemoryExportBridge {
+  constructor(sourceHashes = {}) {
+    this.sourceHashes = sourceHashes;
+    this.writes = new Map();
+    this.copies = new Map();
+  }
+
+  async sandboxHashFile(filePath) {
+    const hash = this.sourceHashes[filePath];
+    if (!hash) throw new Error(`missing fixture hash: ${filePath}`);
+    return { path: filePath, hash, size: 1 };
+  }
+
+  async sandboxWriteFile(filePath, data) {
+    this.writes.set(filePath, data);
+    return { written: true, path: filePath, hash: stableHash(data) };
+  }
+
+  async sandboxCopyFile(sourcePath, destinationPath) {
+    this.copies.set(destinationPath, sourcePath);
+    return {
+      copied: true,
+      sourcePath,
+      path: destinationPath,
+      hash: this.sourceHashes[sourcePath],
+      size: 1,
+    };
   }
 }
 
@@ -213,10 +245,11 @@ const source = {
         taskId: "job_video_S01",
         submitId: "submit_s01",
         providerTaskId: "jimeng_task_s01",
+        sourceReceiptId: "provider_receipt_s01",
         reviewStatus: "needs_review",
         videoPath: "outputs/videos/S01.mp4",
         firstFrameProtectedVideoPath: "outputs/videos/S01_firstframe-hold.mp4",
-        outputHash: "sha256_s01",
+        outputHash: `sha256:${"1".repeat(64)}`,
         receiptPaths: ["receipts/video/S01_submit.json"],
         queueLogPaths: ["receipts/video/S01_query.jsonl"],
         resumeCommand: "dreamina query_result --submit_id=submit_s01 --download_dir=outputs/videos",
@@ -259,9 +292,10 @@ const source = {
         taskId: "job_video_S02",
         submitId: "submit_s02",
         providerTaskId: "jimeng_task_s02",
+        sourceReceiptId: "provider_receipt_s02",
         reviewStatus: "needs_review",
         videoPath: "outputs/videos/S02.mp4",
-        outputHash: "sha256_s02",
+        outputHash: `sha256:${"2".repeat(64)}`,
         receiptPaths: ["receipts/video/S02_submit.json"],
         queueLogPaths: ["receipts/video/S02_query.jsonl"],
         durationSeconds: 5,
@@ -518,6 +552,47 @@ const projectVibe = {
       runtimeFixtureUsed: false,
     },
   ],
+  receipts: {
+    scriptPlanningReceipts: [],
+    promptKeyframePlanningReceipts: [],
+    batchReceipts: [],
+    reviewReceipts: [
+      {
+        id: "review_s01_exact",
+        createdAt: "2026-05-01T00:01:00.000Z",
+        status: "approved",
+        reviewerId: "human_reviewer",
+        humanReviewed: true,
+        shotId: "S01",
+        sourceReceiptId: "provider_receipt_s01",
+        outputPath: "outputs/videos/S01.mp4",
+        outputHash: `sha256:${"1".repeat(64)}`,
+        retryRequested: false,
+        lateOutput: false,
+        providerSelfReportIgnored: true,
+        promotionAuthorized: false,
+        evidenceRefs: ["receipt#provider_receipt_s01"],
+        blockers: [],
+      },
+      {
+        id: "review_s02_exact",
+        createdAt: "2026-05-01T00:02:00.000Z",
+        status: "approved",
+        reviewerId: "human_reviewer",
+        humanReviewed: true,
+        shotId: "S02",
+        sourceReceiptId: "provider_receipt_s02",
+        outputPath: "outputs/videos/S02.mp4",
+        outputHash: `sha256:${"2".repeat(64)}`,
+        retryRequested: false,
+        lateOutput: false,
+        providerSelfReportIgnored: true,
+        promotionAuthorized: false,
+        evidenceRefs: ["receipt#provider_receipt_s02"],
+        blockers: [],
+      },
+    ],
+  },
   sourceIndex: {
     id: "source_index_current",
     updatedAt: generatedAt,
@@ -529,6 +604,20 @@ const projectVibe = {
     assetRefs: ["project.vibe#assets/asset_scene_beach", "project.vibe#assets/asset_prop_sign", "project.vibe#assets/style_research_style001"],
     runReceiptRefs: ["project.vibe#runs/run_preview_s01", "project.vibe#runs/run_research_style001_20260519000000"],
   },
+};
+
+const deliveryIdentity = {
+  projectId: "demo_project",
+  projectRoot: "/tmp/demo_project",
+  projectFactHash: "fact_hash_demo_current",
+};
+
+const deliveryConfirmation = {
+  schemaVersion: EXPORT_DELIVERY_CONFIRMATION_SCHEMA_VERSION,
+  confirmationId: "confirm_export_demo_current",
+  actionId: "export_demo_current",
+  ...deliveryIdentity,
+  confirmedAt: "2026-05-01T00:03:00.000Z",
 };
 
 const audioPlanning = {
@@ -620,6 +709,37 @@ const audioPlanning = {
   notes: [],
 };
 
+const unreviewedProjectVibe = structuredClone(projectVibe);
+unreviewedProjectVibe.receipts.reviewReceipts = [];
+const unreviewedPlan = buildExportWorkerState({
+  source,
+  projectVibe: unreviewedProjectVibe,
+  projectTitle: "Demo Project",
+  exportRoot: "exports/unreviewed",
+  generatedAt,
+  profileSelection: "all",
+  delivery: { identity: deliveryIdentity },
+});
+assert(unreviewedPlan.deliveryGate.status === "blocked", "needs_review media must block the Delivery Gate");
+assert(unreviewedPlan.deliveryGate.blockers.some((blocker) => blocker.code === "delivery_review_required"), "needs_review blocker code missing");
+
+const legacyBooleanConfirmation = buildExportWorkerState({
+  source,
+  projectVibe: unreviewedProjectVibe,
+  projectTitle: "Demo Project",
+  exportRoot: "exports/unreviewed",
+  generatedAt,
+  profileSelection: "all",
+  executionMode: "adapter_execution",
+  confirmation: true,
+  delivery: { identity: deliveryIdentity },
+});
+const legacyBooleanAdapter = new MemoryExportAdapter();
+const legacyBooleanResult = await executeExportWorkerPlan(legacyBooleanConfirmation, legacyBooleanAdapter);
+assert(!legacyBooleanResult.ok, "legacy boolean confirmation must not bypass the Delivery Gate");
+assert(legacyBooleanAdapter.files.size === 0 && legacyBooleanAdapter.copies.size === 0, "blocked needs_review export must perform zero writes and copies");
+
+const projectVibeBeforeGate = JSON.stringify(projectVibe);
 const plannedState = buildExportWorkerState({
   source,
   projectVibe,
@@ -629,12 +749,17 @@ const plannedState = buildExportWorkerState({
   exportRoot: "exports/current",
   generatedAt,
   profileSelection: "all",
+  delivery: { identity: deliveryIdentity },
 });
 
 assert(plannedState.phase === "phase_27_export_worker_mvp", "phase id drifted");
 assert(plannedState.scope === "export_project_io_contract", "scope must be export/project IO contract");
 assert(plannedState.readiness === "planned", "plan-only ready source should produce planned state");
 assert(plannedState.canExecute === false, "plan-only state must not execute");
+assert(plannedState.deliveryGate.status === "ready_for_confirmation", "exact human approvals should only advance to an independent export confirmation");
+assert(plannedState.deliveryGate.canPrepare === true && plannedState.deliveryGate.canExecute === false, "review approval may prepare export but cannot execute it");
+assert(plannedState.deliveryGate.media.every((item) => item.reviewStatus === "approved" && item.promotionAuthorized === false), "review approval must remain separate from project-fact promotion");
+assert(JSON.stringify(projectVibe) === projectVibeBeforeGate, "building the Delivery Gate must not promote or mutate Project.vibe facts");
 for (const key of [
   "projectRootRelativeOnly",
   "exportScopeOnly",
@@ -683,10 +808,14 @@ const executableState = buildExportWorkerState({
   generatedAt,
   profileSelection: "all",
   executionMode: "adapter_execution",
-  confirmation: true,
+  delivery: {
+    identity: deliveryIdentity,
+    confirmation: deliveryConfirmation,
+  },
 });
 assert(executableState.readiness === "ready", `executable state should be ready: ${executableState.blockers.join("; ")}`);
 assert(executableState.canExecute === true, "confirmed adapter execution should be executable");
+assert(executableState.deliveryGate.status === "authorized", "independent export confirmation should authorize the exact current media set");
 
 const adapter = new MemoryExportAdapter();
 const result = await executeExportWorkerPlan(executableState, adapter);
@@ -700,8 +829,148 @@ for (const entry of executableState.entries.filter((item) => item.operation === 
 }
 assert(adapter.files.size === 16, "MVP export should write Project.vibe, video records, final video/audio manifests, package manifests, project references, report, and profile manifests");
 assert(adapter.copies.size === 2, "MVP export should copy existing project-relative videos into final-video");
-assert(adapter.copies.get("reports/exports/current/final-video/01_S01.mp4") === "outputs/videos/S01_firstframe-hold.mp4", "S01 first-frame protected video should be copied to stable final-video path");
+assert(adapter.copies.get("reports/exports/current/final-video/01_S01.mp4") === "outputs/videos/S01.mp4", "S01 exact reviewed video should be copied to the stable final-video path");
 assert(adapter.copies.get("reports/exports/current/final-video/02_S02.mp4") === "outputs/videos/S02.mp4", "S02 video should be copied to stable final-video path");
+
+const noExportConfirmation = await runExportAction({ worker: plannedState });
+assert(noExportConfirmation.status === "blocked", "review approval must not double as export approval");
+assert(noExportConfirmation.executedCount === 0 && noExportConfirmation.writes?.length === 0, "missing export confirmation must perform zero writes");
+assert(noExportConfirmation.errors?.some((error) => error.includes("delivery_confirmation_required")), "missing independent export confirmation blocker missing");
+
+function projectWithReviewMutation(mutate) {
+  const next = structuredClone(projectVibe);
+  mutate(next.receipts.reviewReceipts, next);
+  return next;
+}
+
+function gateForProject(nextProject, nextSource = source) {
+  return buildExportWorkerState({
+    source: nextSource,
+    projectVibe: nextProject,
+    projectTitle: "Demo Project",
+    exportRoot: "exports/gate-matrix",
+    generatedAt,
+    profileSelection: "all",
+    delivery: { identity: deliveryIdentity },
+  }).deliveryGate;
+}
+
+for (const [label, mutate] of [
+  ["outputHash", (receipts) => { receipts[0].outputHash = `sha256:${"9".repeat(64)}`; }],
+  ["sourceReceiptId", (receipts) => { receipts[0].sourceReceiptId = "provider_receipt_other"; }],
+  ["shotId", (receipts) => { receipts[0].shotId = "S99"; }],
+  ["outputPath", (receipts) => { receipts[0].outputPath = "outputs/videos/S01_replaced.mp4"; }],
+]) {
+  const mismatchedGate = gateForProject(projectWithReviewMutation(mutate));
+  assert(mismatchedGate.status === "blocked", `${label} mismatch must invalidate the old approval`);
+  assert(mismatchedGate.blockers.some((blocker) => blocker.code === "delivery_review_identity_mismatch"), `${label} mismatch blocker code missing`);
+}
+
+const nonHumanGate = gateForProject(projectWithReviewMutation((receipts) => {
+  receipts[0].humanReviewed = false;
+}));
+assert(nonHumanGate.status === "blocked", "provider or automated approval must not authorize delivery");
+assert(nonHumanGate.blockers.some((blocker) => blocker.code === "delivery_review_not_human"), "non-human review blocker missing");
+
+for (const [status, blockerCode] of [
+  ["rejected", "delivery_review_rejected"],
+  ["retry_requested", "delivery_review_retry_requested"],
+  ["needs_review", "delivery_review_required"],
+]) {
+  const decisionGate = gateForProject(projectWithReviewMutation((receipts) => {
+    receipts.push({
+      ...receipts[0],
+      id: `review_s01_${status}_latest`,
+      createdAt: "2026-05-01T00:04:00.000Z",
+      status,
+      humanReviewed: true,
+      retryRequested: status === "retry_requested",
+      promotionAuthorized: false,
+    });
+  }));
+  assert(decisionGate.status === "blocked", `latest ${status} decision must block delivery`);
+  assert(decisionGate.blockers.some((blocker) => blocker.code === blockerCode), `${status} blocker code missing`);
+}
+
+const missingVideoSource = structuredClone(source);
+missingVideoSource.demoPackageFacts.videoResults[0].videoPath = undefined;
+const missingVideoGate = gateForProject(projectVibe, missingVideoSource);
+assert(missingVideoGate.status === "blocked", "missing video must block formal delivery");
+assert(missingVideoGate.blockers.some((blocker) => blocker.code === "delivery_media_missing"), "missing video blocker code missing");
+
+const staleConfirmation = {
+  ...deliveryConfirmation,
+  projectFactHash: "fact_hash_before_edit",
+};
+const staleConfirmationAction = await runExportAction({
+  worker: plannedState,
+  deliveryConfirmation: staleConfirmation,
+});
+assert(staleConfirmationAction.status === "blocked", "a stale project-fact confirmation must not authorize export");
+assert(staleConfirmationAction.executedCount === 0, "stale confirmation must perform zero operations");
+assert(staleConfirmationAction.errors?.some((error) => error.includes("delivery_confirmation_fact_hash_mismatch")), "stale fact blocker code missing");
+
+const projectRoot = deliveryIdentity.projectRoot;
+const exactSourceHashes = {
+  [`${projectRoot}/outputs/videos/S01.mp4`]: "1".repeat(64),
+  [`${projectRoot}/outputs/videos/S02.mp4`]: "2".repeat(64),
+};
+const mismatchedMediaBridge = new MemoryExportBridge({
+  ...exactSourceHashes,
+  [`${projectRoot}/outputs/videos/S01.mp4`]: "9".repeat(64),
+});
+const mismatchedMediaAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: mismatchedMediaBridge,
+  deliveryConfirmation,
+});
+assert(mismatchedMediaAction.status === "blocked", "a replaced media file must fail hash preflight");
+assert(mismatchedMediaBridge.writes.size === 0 && mismatchedMediaBridge.copies.size === 0, "media hash mismatch must fail before any write or copy");
+assert(mismatchedMediaAction.errors?.some((error) => error.includes("delivery_media_hash_mismatch")), "physical media hash mismatch blocker missing");
+
+const liveBridge = new MemoryExportBridge(exactSourceHashes);
+const liveExportAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: liveBridge,
+  deliveryConfirmation,
+});
+assert(liveExportAction.status === "ready", `exact confirmed export should succeed: ${(liveExportAction.errors || []).join("; ")}`);
+assert(liveExportAction.deliveryReceipt?.executionMode === "live", "filesystem export receipt must declare live local execution");
+assert(liveExportAction.deliveryReceipt?.projectId === deliveryIdentity.projectId, "delivery receipt projectId drifted");
+assert(liveExportAction.deliveryReceipt?.projectRoot === deliveryIdentity.projectRoot, "delivery receipt projectRoot drifted");
+assert(liveExportAction.deliveryReceipt?.projectFactHash === deliveryIdentity.projectFactHash, "delivery receipt fact hash drifted");
+assert(liveExportAction.deliveryReceipt?.actionId === deliveryConfirmation.actionId, "delivery receipt actionId drifted");
+assert(liveExportAction.deliveryReceipt?.confirmationId === deliveryConfirmation.confirmationId, "delivery receipt confirmationId drifted");
+assert(liveExportAction.deliveryReceipt?.reviewBindings.length === 2, "delivery receipt must bind every approved review receipt and media identity");
+assert(liveExportAction.deliveryReceipt?.reviewBindings.every((binding) => binding.reviewReceiptId && binding.shotId && binding.sourceReceiptId && binding.outputHash), "delivery receipt review identity is incomplete");
+assert(liveExportAction.deliveryReceipt?.outputs.length === liveBridge.writes.size + liveBridge.copies.size, "delivery receipt must list only actual written and copied outputs");
+
+const duplicateBridge = new MemoryExportBridge(exactSourceHashes);
+const duplicateAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: duplicateBridge,
+  deliveryConfirmation,
+  completedDeliveryReceipts: [liveExportAction.deliveryReceipt],
+});
+assert(duplicateAction.status === "blocked", "the same terminal export action must not execute twice");
+assert(duplicateBridge.writes.size === 0 && duplicateBridge.copies.size === 0, "duplicate terminal action must perform zero writes and copies");
+assert(duplicateAction.errors?.some((error) => error.includes("delivery_action_already_completed")), "duplicate action blocker missing");
+
+const corruptReceiptBridge = new MemoryExportBridge(exactSourceHashes);
+const corruptReceiptAction = await runExportAction({
+  worker: plannedState,
+  projectRoot,
+  bridge: corruptReceiptBridge,
+  deliveryConfirmation,
+  completedDeliveryReceipts: [{ schemaVersion: "export_delivery_receipt/0.1.0", actionId: deliveryConfirmation.actionId }],
+});
+assert(corruptReceiptAction.status === "blocked", "corrupt delivery receipt must fail closed");
+assert(corruptReceiptBridge.writes.size === 0 && corruptReceiptBridge.copies.size === 0, "corrupt receipt must fail before adapter mutation");
+assert(corruptReceiptAction.errors?.some((error) => error.includes("delivery_receipt_invalid")), "corrupt receipt blocker missing");
+
 const exportedProject = JSON.parse(adapter.files.get("reports/exports/current/Project.vibe"));
 assert(exportedProject.manifest.title === "Demo Project", "Project.vibe must be included in the MVP package");
 assert(JSON.stringify(exportedProject).includes("style_research_style001"), "Project.vibe export must include the locked project reference asset");
@@ -714,8 +983,8 @@ const previewMedia = JSON.parse(adapter.files.get("reports/exports/current/previ
 assert(previewMedia.media.length === 2, "preview media manifest must include active preview media");
 const videoManifest = JSON.parse(adapter.files.get("reports/exports/current/videos/video_manifest.json"));
 assert(videoManifest.summary.total === 2, "video manifest must include two video rows");
-assert(videoManifest.summary.needsReview === 2, "video manifest must default returned videos to needs_review");
-assert(videoManifest.videos.every((video) => video.reviewLabel === "待复核" && video.autoPromoted === false), "video manifest must use review-first labels without auto promotion");
+assert(videoManifest.summary.needsReview === 0 && videoManifest.summary.approved === 2, "video manifest must expose only exact human-approved review receipts");
+assert(videoManifest.videos.every((video) => video.reviewLabel === "已通过" && video.autoPromoted === false), "approved videos must remain non-promoted project candidates");
 assert(videoManifest.videos[0].referenceEvidence.storyboardReferencePath === "outputs/storyboards/S01-storyboard.png", "video manifest must export storyboard reference evidence");
 assert(videoManifest.videos[0].referenceEvidence.sceneReferencePath === "assets/scenes/rainy-rooftop.png", "video manifest must export scene/weather reference evidence");
 assert(videoManifest.videos[0].referenceEvidence.characterReferencePaths.length === 2, "video manifest must export character reference evidence");
@@ -730,7 +999,7 @@ const videoReceipts = JSON.parse(adapter.files.get("reports/exports/current/rece
 assert(videoReceipts.queuePolicy.defaultConcurrentSubmissions === 1, "video receipts must document Jimeng single-concurrency default");
 assert(videoReceipts.items.length === 2, "video receipts must mirror video result rows");
 const videoReport = adapter.files.get("reports/exports/current/video-report/summary.md");
-assert(videoReport.includes("待复核: 2") && videoReport.includes("已通过: 0") && videoReport.includes("缺失: 0"), "video report must summarize review states");
+assert(videoReport.includes("待复核: 0") && videoReport.includes("已通过: 2") && videoReport.includes("缺失: 0"), "video report must summarize review states");
 assert(videoReport.includes("分镜参考：outputs/storyboards/S01-storyboard.png"), "video report must explain storyboard reference in user language");
 assert(videoReport.includes("场景/天气参考：assets/scenes/rainy-rooftop.png"), "video report must explain scene/weather reference in user language");
 assert(videoReport.includes("角色参考：assets/characters/hina.png, assets/characters/ren.png"), "video report must explain character references in user language");
@@ -742,7 +1011,7 @@ const finalVideoManifest = JSON.parse(adapter.files.get("reports/exports/current
 assert(finalVideoManifest.renderedFinalVideo === false, "final video manifest must not pretend a stitched final render exists");
 assert(finalVideoManifest.copyItems.length === 2, "final video manifest must include copy items");
 assert(finalVideoManifest.copyItems[0].stablePath === "final-video/01_S01.mp4", "final video manifest must use stable final-video paths");
-assert(finalVideoManifest.copyItems[0].sourceHash === "sha256_s01", "final video manifest must record source hash");
+assert(finalVideoManifest.copyItems[0].sourceHash === `sha256:${"1".repeat(64)}`, "final video manifest must record source hash");
 assert(!JSON.stringify(finalVideoManifest).includes("/Users/lichenhao"), "final video manifest must not leak local absolute paths");
 assert(!/Bearer|tvly-|sk-exportsecret/i.test(JSON.stringify(finalVideoManifest)), "final video manifest must not leak audio secret-like refs");
 const audioManifest = JSON.parse(adapter.files.get("reports/exports/current/audio/manifest.json"));
@@ -772,7 +1041,7 @@ assert(!/tvly-test-secret|bearer\s+tvly/i.test(knowledgeReferencesText), "projec
 assert(knowledgeReferences.localAbsolutePathsIncluded === false && knowledgeReferences.credentialMaterialIncluded === false, "project reference manifest must declare redaction policy");
 const report = adapter.files.get("reports/exports/current/report.md");
 assert(report.includes("MVP Export Report") && report.includes("Locked assets: 2") && report.includes("Project references: 1"), "MVP export report must summarize package contents");
-assert(report.includes("Video review: 待复核 2 / 已通过 0 / 缺失 0"), "MVP export report must summarize video review state");
+assert(report.includes("Video review: 待复核 0 / 已通过 2 / 缺失 0"), "MVP export report must summarize video review state");
 assert(report.includes("参考证据: 1"), "MVP export report must count reference evidence rows in user language");
 assert(report.includes("分镜参考：outputs/storyboards/S01-storyboard.png"), "MVP export report must include readable reference evidence");
 assert(report.includes("导演策略:") && report.includes("节奏：日漫情绪特写"), "MVP export report must include readable director strategy");
@@ -781,7 +1050,7 @@ assert(exportManifest.mvpPackage.projectVibeIncluded === true, "export manifest 
 assert(exportManifest.mvpPackage.lockedAssetCount === 2, "export manifest must summarize locked assets");
 assert(exportManifest.mvpPackage.previewMediaCount === 2, "export manifest must summarize preview media");
 assert(exportManifest.mvpPackage.videoResultCount === 2, "export manifest must summarize videos");
-assert(exportManifest.mvpPackage.videoNeedsReviewCount === 2, "export manifest must keep videos in needs_review by default");
+assert(exportManifest.mvpPackage.videoNeedsReviewCount === 0 && exportManifest.mvpPackage.videoApprovedCount === 2, "export manifest must count exact approved videos");
 assert(exportManifest.mvpPackage.finalVideoCopyCount === 2, "export manifest must summarize final-video copies");
 assert(exportManifest.mvpPackage.referenceEvidenceCount === 1, "export manifest must summarize reference evidence rows");
 assert(exportManifest.mvpPackage.videoReportIncluded === true, "export manifest must declare video report inclusion");
@@ -890,6 +1159,7 @@ assert(!executableState.entries.some((entry) => /\.(fcpxml|edl|prproj|drp|xml)$/
 const schema = readJson("schemas/export_worker.schema.json");
 assert(schema.properties.phase.const === "phase_27_export_worker_mvp", "schema phase const missing");
 assert(schema.properties.scope.const === "export_project_io_contract", "schema scope const missing");
+assert(schema.required.includes("deliveryGate"), "schema must require the structured Delivery Gate");
 assert(schema.$defs.operation.enum.length === 3, "schema must allow only create_directory/write_file/copy_file");
 for (const [key, expected] of Object.entries(executableState.hardLocks)) {
   assert(schema.$defs.hardLocks.required.includes(key), `schema hard lock ${key} must be required`);
@@ -897,6 +1167,11 @@ for (const [key, expected] of Object.entries(executableState.hardLocks)) {
 }
 
 const sourceText = fs.readFileSync("src/core/exportWorker.ts", "utf8");
+const localProjectionSource = fs.readFileSync("src/core/localPreviewExportProjection.ts", "utf8");
+const exportActionSource = fs.readFileSync("src/core/exportAction.ts", "utf8");
+assert(!/previewApprovalReceipt|projectVibeWithPreviewApprovals|approved\|已通过/.test(localProjectionSource), "local export projection must not synthesize review receipts from display copy");
+assert(/sourceReceiptId: item\.sourceReceiptId[\s\S]*outputHash: item\.outputHash[\s\S]*reviewReceiptId: item\.reviewReceiptId/.test(localProjectionSource), "local export projection must preserve exact media review identity");
+assert(/sandboxHashFile[\s\S]*delivery_media_hash_mismatch[\s\S]*executeExportWorkerPlan/.test(exportActionSource), "real export must hash reviewed media before adapter writes");
 for (const forbidden of [
   /from\s+["']node:fs["']/,
   /from\s+["']fs["']/,

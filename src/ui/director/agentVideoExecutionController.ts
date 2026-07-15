@@ -75,6 +75,7 @@ export interface AgentVideoExecutionController {
 type ProductActionRunner = (
   target: AgentControlledToolInvocationTarget | undefined,
   signal: AbortSignal,
+  context: AgentVideoExecutionContext,
 ) => unknown | Promise<unknown>;
 
 export interface AgentVideoConfirmedProductActionInput {
@@ -394,7 +395,7 @@ export async function runAgentVideoConfirmedProductAction(
     prompt: input.userIntent,
     timeoutMs: execution.timeoutMs,
     perform: execution.live && execution.runner
-      ? (context) => execution.runner?.(execution.target, context.signal)
+      ? (context) => execution.runner?.(execution.target, context.signal, context)
       : undefined,
   }));
   const productAdapter = buildMinimalAgentProductAdapter({

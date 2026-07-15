@@ -17,6 +17,7 @@ import {
 } from "../../core/projectTransaction";
 import type { AssetRecord, ShotRecord } from "../../core/types";
 import type { VibeAgentKernelTurn, VibeAgentTimelineEntry } from "../../agent-core/types";
+import type { AgentVideoExecutionReceipt } from "../../core/agentVideoExecutionAdapter";
 import { formatShotNumber } from "./MinimalStoryFlow";
 
 export type AgentPlanPhase = "idle" | "review" | "confirmed";
@@ -44,6 +45,7 @@ export type AgentControlledToolInvocationTarget = {
   signal?: AbortSignal;
   videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
+  exportExecutionReceipt?: AgentVideoExecutionReceipt;
 };
 
 export const defaultAgentVideoSubmitContract: AgentVideoSubmitContract = {

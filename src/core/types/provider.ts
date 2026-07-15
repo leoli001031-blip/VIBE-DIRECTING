@@ -924,6 +924,9 @@ export interface PreviewEvent {
   mediaPath?: string;
   qaStatus: GateStatus;
   sourceTaskId?: string;
+  sourceReceiptId?: string;
+  outputHash?: string;
+  reviewReceiptId?: string;
 }
 
 export type PreviewPlanStatus = "ready" | "draft_only" | "blocked";
@@ -1002,7 +1005,7 @@ export interface DemoPackagePromptRequestPreview {
   providerSubmissionForbidden: true;
 }
 
-export type DemoPackageVideoReviewStatus = "needs_review" | "approved" | "missing";
+export type DemoPackageVideoReviewStatus = "needs_review" | "approved" | "rejected" | "retry_requested" | "missing";
 
 export interface DemoPackageReferenceEvidence {
   referencePolicyVersion?: string;
@@ -1035,6 +1038,8 @@ export interface DemoPackageVideoResult {
   taskId?: string;
   submitId?: string;
   providerTaskId?: string;
+  sourceReceiptId?: string;
+  reviewReceiptId?: string;
   reviewStatus: DemoPackageVideoReviewStatus;
   videoPath?: string;
   firstFrameProtectedVideoPath?: string;

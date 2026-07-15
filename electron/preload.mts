@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld("vibeRuntime", {
   sandboxUnwatch: (watchId: string) => ipcRenderer.invoke("sandbox:unwatch", watchId),
   sandboxFileExists: (filePath: string) => ipcRenderer.invoke("sandbox:fileExists", filePath),
   sandboxReadFile: (filePath: string) => ipcRenderer.invoke("sandbox:readFile", filePath),
+  sandboxHashFile: (filePath: string) => ipcRenderer.invoke("sandbox:hashFile", filePath),
   sandboxWriteFile: (filePath: string, data: string) => ipcRenderer.invoke("sandbox:writeFile", filePath, data),
   sandboxCopyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke("sandbox:copyFile", sourcePath, destinationPath),
   sandboxSpawn: (command: string, args: string[]) => ipcRenderer.invoke("sandbox:spawn", command, args),

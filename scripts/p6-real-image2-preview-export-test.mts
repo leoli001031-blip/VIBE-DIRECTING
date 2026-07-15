@@ -10,6 +10,7 @@ import { buildPreviewExportState } from "../src/core/previewExport.ts";
 import { buildPreviewPlayerQueue } from "../src/core/previewPlayerQueue.ts";
 import { deriveProjectRealChainStatus } from "../src/core/projectRealChainStatus.ts";
 import type { GenerationHealthReport, GenerationJob, QaPromotionReport, ShotRecord, TaskRun } from "../src/core/types.ts";
+import { hashProjectVibeFacts } from "../src/project/index.ts";
 import { projectVibeModelVersion, type ProjectVibeDocument } from "../src/project/types.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -433,6 +434,7 @@ const localProjection = buildLocalPreviewExportProjection({
   shots,
   projectVibe,
   projectRoot: ".",
+  projectFactHash: hashProjectVibeFacts(projectVibe),
   selectedShotId: facts.shotId,
   generatedAt: facts.generatedAt,
   exportRoot: "exports/p6-live-local-projection",
@@ -457,32 +459,27 @@ try {
     generatedAt: facts.generatedAt,
     profileSelection: ["rough_cut", "asset_package", "storyboard_table", "developer_archive"],
     executionMode: "adapter_execution",
-    confirmation: true,
+    delivery: {
+      identity: {
+        projectId: projectVibe.manifest.projectId,
+        projectRoot,
+        projectFactHash: hashProjectVibeFacts(projectVibe),
+      },
+    },
   });
-  assert(worker.canExecute, `export worker should be executable: ${worker.blockers.join("; ")}`);
+  assert(!worker.canExecute, "image-only P6 evidence must remain outside formal export execution");
+  assert(worker.blockers.some((blocker) => blocker.includes("delivery_media_missing")), "missing-video blocker should be explicit");
 
   const result = await executeExportWorkerPlan(worker, new DiskExportAdapter(projectRoot));
-  assert(result.ok, `export worker execution failed: ${result.errors.join("; ")}`);
-
-  const exportRoot = path.join(projectRoot, "exports/p6-live-preview-export");
-  const exportManifest = JSON.parse(await readFile(path.join(exportRoot, "export_manifest.json"), "utf8"));
-  assert(exportManifest.mvpPackage.projectVibeIncluded === true, "export must include Project.vibe");
-  assert(exportManifest.mvpPackage.previewMediaCount === p6Projection.returnedImageCount, "export must include every live preview media reference");
-  assert(exportManifest.mvpPackage.receiptCount >= 1, "export must include receipt references");
-
-  const previewMedia = JSON.parse(await readFile(path.join(exportRoot, "preview_media.json"), "utf8"));
-  assert(previewMedia.media?.length === p6Projection.returnedImageCount, "preview_media manifest must include every returned image");
-  assert(previewMedia.media?.some((item) => item.mediaPath === facts.outputPath), "preview_media manifest must reference live output path");
-  assert(previewMedia.media?.every((item) => item.type === "image_hold"), "preview_media manifest must keep image_hold type");
-
-  const reportMd = await readFile(path.join(exportRoot, "report.md"), "utf8");
-  assert(reportMd.includes(`Preview media: ${p6Projection.returnedImageCount}`), "export report must count live preview media");
-  assertNoRawSecret(exportManifest, "export manifest");
-  assertNoRawSecret(previewMedia, "preview media manifest");
-  assertNoRawSecret(reportMd, "export report");
+  assert(!result.ok && result.executed.length === 0, "blocked image-only export must perform zero writes");
+  await access(path.join(projectRoot, "exports/p6-live-preview-export/export_manifest.json"))
+    .then(() => { throw new Error("FAIL: blocked image-only export wrote a manifest"); })
+    .catch((error) => {
+      if (error instanceof Error && error.message.startsWith("FAIL:")) throw error;
+    });
 
   console.log(
-    `p6-real-image2-preview-export-test: ok (${outputFacts.length} output(s), ${p6Projection.needsReviewCount} review, ${result.executed.length} writes)`,
+    `p6-real-image2-preview-export-test: ok (${outputFacts.length} image output(s), Delivery Gate blocked, ${result.executed.length} writes)`,
   );
 } finally {
   await rm(projectRoot, { recursive: true, force: true });

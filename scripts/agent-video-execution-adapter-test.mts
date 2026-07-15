@@ -8,6 +8,7 @@ import {
   buildAgentVideoPipelinePlan,
   createAgentVideoGenerationJobLedger,
 } from "../src/core/agentVideoProductionContract.ts";
+import { EXPORT_DELIVERY_RECEIPT_SCHEMA_VERSION } from "../src/core/exportDeliveryGate.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -481,6 +482,101 @@ const retried = await runAgentVideoExecution({
 assert(retried.status === "completed" && retried.receipt.attempt === 2, "explicit retry must create a second successful attempt");
 assert(retried.ledger.jobs.filter((job) => job.actionId.startsWith("p3-manual-retry")).length === 2, "explicit retry should retain both attempt records");
 
+const exportPlan = buildAgentVideoPipelinePlan({
+  planId: "p8-delivery-plan",
+  generatedAt,
+  storyDraftPresent: true,
+  storyConfirmed: true,
+  localProjectReady: true,
+  referenceMissingCount: 0,
+  videoSubmitted: true,
+});
+const exportActionId = "p8-export-action";
+const exportConfirmationId = "p8-export-confirmation";
+const exportOutputPath = "exports/current/export_manifest.json";
+const exportProjectVibePath = "exports/current/Project.vibe";
+const deliveryReceipt = {
+  schemaVersion: EXPORT_DELIVERY_RECEIPT_SCHEMA_VERSION,
+  receiptId: "export_delivery_p8_export_action_p8_export_confirmation",
+  status: "succeeded" as const,
+  ...identity,
+  actionId: exportActionId,
+  confirmationId: exportConfirmationId,
+  reviewBindings: [{
+    reviewReceiptId: "review_p8_s01",
+    reviewedAt: generatedAt,
+    shotId: "S01",
+    outputPath: "video/S01.mp4",
+    sourceReceiptId: "provider_receipt_p8_s01",
+    outputHash: `sha256:${"8".repeat(64)}`,
+    humanReviewed: true as const,
+    promotionAuthorized: false,
+  }],
+  executionMode: "live" as const,
+  outputs: [
+    { operation: "write_file" as const, path: exportOutputPath, outputHash: "vck_export" },
+    { operation: "write_file" as const, path: exportProjectVibePath, outputHash: "vck_project" },
+  ],
+  createdAt: generatedAt,
+};
+const exportLedger = createAgentVideoGenerationJobLedger({
+  ledgerId: "p8-export-ledger",
+  createdAt: generatedAt,
+  ...identity,
+});
+const exported = await runAgentVideoExecution({
+  plan: exportPlan,
+  ledger: exportLedger,
+  action: "export",
+  actionId: exportActionId,
+  sourceConfirmationId: exportConfirmationId,
+  executionMode: "live",
+  liveExecutionAllowed: true,
+  liveCapability: {
+    providerId: "local-exporter",
+    providerName: "Local Exporter",
+    modelId: "project-export-v1",
+    capability: "export",
+    asyncMode: "sync",
+  },
+  execute: () => ({
+    status: "ready",
+    providerCalled: false,
+    outputAssets: [exportOutputPath, exportProjectVibePath],
+    deliveryReceipt,
+  }),
+  onLedgerSnapshot: persistLedgerSnapshot,
+});
+assert(exported.status === "completed" && exported.receipt.status === "succeeded", "complete delivery receipt should allow a live local export to finish");
+assert(exported.receipt.deliveryReceipt?.receiptId === deliveryReceipt.receiptId, "delivery receipt must persist inside the Agent execution receipt");
+assert(restoreAgentVideoExecutionReceipt(exported.receipt, identity).ok, "cold-start receipt restore must accept the current complete delivery receipt");
+
+const corruptExport = await runAgentVideoExecution({
+  plan: exportPlan,
+  ledger: createAgentVideoGenerationJobLedger({
+    ledgerId: "p8-corrupt-export-ledger",
+    createdAt: generatedAt,
+    ...identity,
+  }),
+  action: "export",
+  actionId: "p8-corrupt-export-action",
+  sourceConfirmationId: "p8-corrupt-export-confirmation",
+  executionMode: "live",
+  liveExecutionAllowed: true,
+  liveCapability: {
+    providerId: "local-exporter",
+    providerName: "Local Exporter",
+    modelId: "project-export-v1",
+    capability: "export",
+    asyncMode: "sync",
+  },
+  execute: () => ({ status: "ready", providerCalled: false, outputAssets: [exportOutputPath] }),
+  onLedgerSnapshot: persistLedgerSnapshot,
+});
+assert(corruptExport.status === "failed" && corruptExport.receipt.status === "failed", "missing delivery receipt must fail closed instead of restoring export completion");
+assert(corruptExport.receipt.outputAssets.length === 0, "invalid export receipt must not claim output assets");
+assert(corruptExport.blockers.some((item) => item.includes("delivery_receipt_invalid")), "invalid delivery receipt blocker missing");
+
 const minimalAgentPanelSource = fs.readFileSync("src/ui/director/MinimalAgentPanel.tsx", "utf8");
 const executionControllerSource = fs.readFileSync("src/ui/director/agentVideoExecutionController.ts", "utf8");
 const executionAdapterSource = fs.readFileSync("src/core/agentVideoExecutionAdapter.ts", "utf8");
@@ -492,7 +588,7 @@ const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8")) as { scr
 assert(/createAgentVideoExecutionController\([\s\S]*runExecution[\s\S]*runFooterExecution/.test(executionControllerSource) && /runAgentVideoConfirmedProductAction\([\s\S]*controller:\s*agentVideoExecutionController/.test(minimalAgentPanelSource) && /function runFooterAgentVideoExecution[\s\S]*agentVideoExecutionController\.runFooterExecution/.test(minimalAgentPanelSource), "Agent confirmations and footer actions must retain one configured execution controller");
 assert((executionAdapterSource.match(/await input\.onTimelineEntries\?\.\(entries\);/g) || []).length === 1, "shared execution must publish each timeline batch once");
 assert(/const inFlight = new Map[\s\S]*const existing = inFlight\.get\(inFlightKey\)[\s\S]*if \(existing\) return existing[\s\S]*inFlight\.set\(inFlightKey, execution\)[\s\S]*inFlight\.delete\(inFlightKey\)/.test(executionControllerSource), "the shared execution controller must collapse concurrent calls for the same project action and operation");
-assert(/createReferences:\s*\(target\) => runExecution\([\s\S]*action:\s*"prepare_references"[\s\S]*submitVideo:[\s\S]*action:\s*"submit_video"[\s\S]*queryVideo:[\s\S]*operation:\s*"query"[\s\S]*runExport:[\s\S]*action:\s*"export"/.test(executionControllerSource) && /execution\.runner\?\.\(execution\.target, context\.signal\)/.test(executionControllerSource), "Agent product callbacks must receive the shared adapter cancellation signal");
+assert(/createReferences:\s*\(target\) => runExecution\([\s\S]*action:\s*"prepare_references"[\s\S]*submitVideo:[\s\S]*action:\s*"submit_video"[\s\S]*queryVideo:[\s\S]*operation:\s*"query"[\s\S]*runExport:[\s\S]*action:\s*"export"/.test(executionControllerSource) && /execution\.runner\?\.\(execution\.target, context\.signal, context\)/.test(executionControllerSource), "Agent product callbacks must receive the shared adapter cancellation signal and execution receipt context");
 assert(/onCreateImage2EndFrame\(\{[\s\S]*skipConfirm:\s*true[\s\S]*confirmationReceiptId:\s*context\.receipt\.confirmationReceiptId[\s\S]*signal:\s*context\.signal/.test(minimalAgentPanelSource), "footer end-frame execution must reuse the shared confirmation and cancellation boundary");
 assert(/function agentTimelineLiveExecutionCoversProjectedState[\s\S]*executionMode === "live"[\s\S]*projectFactHash/.test(executionControllerSource) && /agentTimelineLiveExecutionCoversProjectedState\([\s\S]*"prepare_references"[\s\S]*agentTimelineLiveExecutionCoversProjectedState\([\s\S]*"submit_video"/.test(minimalAgentPanelSource), "passive product state must not duplicate a matching fact-bound shared execution receipt");
 assert(/const keyConfigured = useMemo\([\s\S]*\(\) => isAssetKeyConfigured\(providerConfigStatuses\)[\s\S]*\[providerConfigStatuses\]/.test(imageActionSource), "reference execution must fail closed until provider status explicitly reports a configured key");
@@ -500,7 +596,7 @@ assert(!/providerConfigStatuses\.length === 0 \|\| isAssetKeyConfigured/.test(im
 assert(/signal\?: AbortSignal[\s\S]*submitProjectImage2AssetGeneration\([\s\S]*options\?\.signal[\s\S]*return \{ \.\.\.submitted, \.\.\.nextState \}/.test(imageActionSource), "reference generation must pass cancellation and return runtime evidence to the adapter");
 assert(/skipConfirm\?: boolean[\s\S]*signal\?: AbortSignal[\s\S]*!options\?\.skipConfirm[\s\S]*submitProjectImage2EndFrame\([\s\S]*options\?\.signal[\s\S]*return \{ \.\.\.submitted, \.\.\.nextState \}/.test(endFrameActionSource), "end-frame generation must avoid duplicate confirmation, pass cancellation, and preserve runtime evidence");
 assert(/function videoRequestSignal\(parentSignal\?: AbortSignal\)[\s\S]*if \(parentSignal\) return \{ signal: parentSignal[\s\S]*controller\.abort\(\)[\s\S]*resumeProjectSeedanceVideo\([\s\S]*request\.signal[\s\S]*return \{ \.\.\.resumed, \.\.\.nextState \}[\s\S]*submitProjectSeedanceVideo\([\s\S]*request\.signal[\s\S]*return \{ \.\.\.submitted, \.\.\.nextState \}/.test(videoActionSource), "video query and submit must let the shared adapter own cancellation, abort manual timeouts, and return runtime evidence");
-assert(/runLocalExportAction\(input\?: \{ agentToolTrace\?:[\s\S]*signal\?: AbortSignal \}\)[\s\S]*runExportAction\(\{[\s\S]*signal:\s*input\?\.signal/.test(appSource), "local export must pass adapter cancellation to the file writer");
+assert(/runLocalExportAction\(input\?: \{[\s\S]*agentToolTrace\?:[\s\S]*signal\?: AbortSignal;[\s\S]*exportExecutionReceipt\?: AgentVideoExecutionReceipt;[\s\S]*runExportAction\(\{[\s\S]*signal:\s*input\?\.signal[\s\S]*deliveryConfirmation:\s*exportConfirmationReceipt/.test(appSource), "local export must pass adapter cancellation and the structured export confirmation receipt to the file writer");
 assert(packageJson.scripts?.["demo:ready:test"]?.includes("agent-video-execution-adapter:test"), "the P3 execution adapter test must be part of demo readiness");
 assert(packageJson.scripts?.["demo:ready:test"]?.includes("agent-video-execution-controller:test"), "the P6-A execution controller test must be part of demo readiness");
 assert(packageJson.scripts?.["demo:ready:test"]?.includes("agent-video-dry-run-adapter:test"), "the truthful dry-run adapter test must be part of demo readiness");

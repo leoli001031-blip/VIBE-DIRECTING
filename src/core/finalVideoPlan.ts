@@ -78,7 +78,7 @@ function sourceIsUsable(path?: string): boolean {
 
 function stableVideoPath(result: DemoPackageVideoResult, index: number): string {
   const id = safeId(result.shotId || result.id || `clip_${index + 1}`);
-  return `final-video/${String(index + 1).padStart(2, "0")}_${id}${extensionFor(result.firstFrameProtectedVideoPath || result.videoPath)}`;
+  return `final-video/${String(index + 1).padStart(2, "0")}_${id}${extensionFor(result.videoPath)}`;
 }
 
 function audioOutputPaths(audioPlanning?: AudioPlanningState): string[] {
@@ -115,7 +115,7 @@ export function buildFinalVideoCompositionPlan(input: {
   audioPlanning?: AudioPlanningState;
 }): FinalVideoCompositionPlan {
   const copyItems = input.videoResults.map((result, index): FinalVideoCopyItem => {
-    const sourcePath = result.firstFrameProtectedVideoPath || result.videoPath;
+    const sourcePath = result.videoPath;
     const sourceHash = result.outputHash;
     const status: FinalVideoCopyStatus = !sourceIsUsable(sourcePath) ? "missing_source" : sourceHash ? "copy_ready" : "hash_unverified";
     return {

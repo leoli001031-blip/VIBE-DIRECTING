@@ -96,6 +96,24 @@ export function buildExportWorkerPlaceholderState(input: BuildExportWorkerPlaceh
     confirmed: false,
     readiness,
     canExecute: false,
+    deliveryGate: {
+      schemaVersion: "export_delivery_gate/0.1.0",
+      status: "blocked",
+      identity: {
+        projectId: "",
+        projectFactHash: "",
+      },
+      media: [],
+      reviewBindings: [],
+      canPrepare: false,
+      canExecute: false,
+      blockers: [
+        {
+          code: "delivery_confirmation_required",
+          message: "Open Export to build the current structured Delivery Gate.",
+        },
+      ],
+    },
     entries: [
       {
         id: "export_dir_runtime_placeholder",

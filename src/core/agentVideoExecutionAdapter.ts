@@ -1,5 +1,9 @@
 import type { VibeAgentTimelineEntry } from "../agent-core/types";
 import {
+  restoreExportDeliveryReceipt,
+  type ExportDeliveryReceipt,
+} from "./exportDeliveryGate";
+import {
   AGENT_VIDEO_PROVIDER_REGISTRY_SCHEMA_VERSION,
   planAgentVideoProductionAction,
   recordAgentVideoGenerationJobExecution,
@@ -57,6 +61,7 @@ export interface AgentVideoExecutionReceipt {
   liveSubmitAllowed: boolean;
   externalTaskId?: string;
   outputAssets: string[];
+  deliveryReceipt?: ExportDeliveryReceipt;
   timeoutMs?: number;
   attempt: number;
   createdAt: string;
@@ -125,6 +130,25 @@ export function restoreAgentVideoExecutionReceipt(
     && (candidate.providerCalled === true || candidate.liveSubmitAllowed === true || (Array.isArray(candidate.outputAssets) && candidate.outputAssets.length > 0))
   ) {
     errors.push("Dry-run execution receipts cannot claim provider calls, live submission, or output assets.");
+  }
+  const deliveryReceiptRestore = candidate.deliveryReceipt === undefined
+    ? undefined
+    : restoreExportDeliveryReceipt(candidate.deliveryReceipt);
+  if (deliveryReceiptRestore && (!deliveryReceiptRestore.ok || !deliveryReceiptRestore.receipt)) {
+    errors.push(`Execution receipt deliveryReceipt is invalid: ${deliveryReceiptRestore.errors.join(" ")}`);
+  }
+  if (candidate.action === "export" && candidate.executionMode === "live" && candidate.status === "succeeded") {
+    const deliveryReceipt = deliveryReceiptRestore?.receipt;
+    if (!deliveryReceipt) {
+      errors.push("Succeeded live export execution requires a valid deliveryReceipt.");
+    } else {
+      if (deliveryReceipt.projectId !== candidate.projectId) errors.push("Delivery receipt projectId does not match execution receipt.");
+      if (normalizeReceiptProjectRoot(deliveryReceipt.projectRoot) !== normalizeReceiptProjectRoot(text(candidate.projectRoot))) errors.push("Delivery receipt projectRoot does not match execution receipt.");
+      if (deliveryReceipt.projectFactHash !== candidate.projectFactHash) errors.push("Delivery receipt projectFactHash does not match execution receipt.");
+      if (deliveryReceipt.actionId !== candidate.actionId) errors.push("Delivery receipt actionId does not match execution receipt.");
+      if (deliveryReceipt.confirmationId !== candidate.confirmationReceiptId) errors.push("Delivery receipt confirmationId does not match execution receipt.");
+      if (deliveryReceipt.executionMode !== "live" || deliveryReceipt.status !== "succeeded") errors.push("Succeeded live export requires a succeeded live delivery receipt.");
+    }
   }
   if (errors.length) return { ok: false, status: "invalid", errors };
   const executionReceipt = candidate as unknown as AgentVideoExecutionReceipt;
@@ -469,6 +493,7 @@ function extractOutputAssets(value: unknown) {
     outputPath(result.outputPath),
     outputPath(result.outputVideoPath),
     outputPath(result.manifestPath),
+    ...array(result.outputAssets).map(text),
     ...assets.flatMap((asset) => [outputPath(asset?.path), outputPath(asset?.imageUrl)]),
     ...relayItems.flatMap((item) => [outputPath(item?.outputVideoPath), ...array(item?.localMediaPaths).map(outputPath)]),
   ].filter((item): item is string => Boolean(item))));
@@ -772,11 +797,34 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     };
   }
 
-  const resultStatus = liveResultStatus(rawResult);
+  let resultStatus = liveResultStatus(rawResult);
   const providerCalled = providerCalledForResult(input.action, rawResult);
-  const outputAssets = extractOutputAssets(rawResult);
+  let outputAssets = extractOutputAssets(rawResult);
   const taskId = externalTaskId(rawResult);
-  const error = ["blocked", "failed"].includes(resultStatus) ? resultError(rawResult, "Execution was blocked.") : undefined;
+  let error = ["blocked", "failed"].includes(resultStatus) ? resultError(rawResult, "Execution was blocked.") : undefined;
+  let deliveryReceipt: ExportDeliveryReceipt | undefined;
+  if (input.action === "export" && resultStatus === "succeeded") {
+    const restored = restoreExportDeliveryReceipt(record(rawResult)?.deliveryReceipt);
+    deliveryReceipt = restored.receipt;
+    const receiptOutputAssets = deliveryReceipt?.outputs.map((output) => output.path).sort() || [];
+    const declaredOutputAssets = [...outputAssets].sort();
+    const deliveryErrors = [
+      restored.ok && deliveryReceipt ? "" : `invalid receipt: ${restored.errors.join(" ")}`,
+      deliveryReceipt?.projectId === input.ledger.projectId ? "" : "projectId mismatch",
+      normalizeReceiptProjectRoot(deliveryReceipt?.projectRoot) === normalizeReceiptProjectRoot(input.ledger.projectRoot) ? "" : "projectRoot mismatch",
+      deliveryReceipt?.projectFactHash === input.ledger.projectFactHash ? "" : "projectFactHash mismatch",
+      deliveryReceipt?.actionId === input.actionId ? "" : "actionId mismatch",
+      deliveryReceipt?.confirmationId === input.sourceConfirmationId ? "" : "confirmationId mismatch",
+      deliveryReceipt?.executionMode === "live" && deliveryReceipt.status === "succeeded" ? "" : "execution mode or status mismatch",
+      JSON.stringify(receiptOutputAssets) === JSON.stringify(declaredOutputAssets) ? "" : "output list mismatch",
+    ].filter(Boolean);
+    if (deliveryErrors.length) {
+      resultStatus = "failed";
+      error = `[delivery_receipt_invalid] Export execution did not return a current complete delivery receipt: ${deliveryErrors.join("; ")}`;
+      outputAssets = [];
+      deliveryReceipt = undefined;
+    }
+  }
 
   if (resultStatus === "running" || resultStatus === "timed_out") {
     const recorded = recordAgentVideoGenerationJobExecution({
@@ -814,6 +862,7 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
   }
 
   const finalReceipt = receipt(input, resultStatus, generatedAt, job, error ? [error] : []);
+  if (deliveryReceipt) finalReceipt.deliveryReceipt = deliveryReceipt;
   await rememberTimeline(input, [timelineEntry({ executionInput: input, receipt: finalReceipt, createdAt: finalReceipt.updatedAt, phase: "result" })], timelineEntries);
   const adapterStatus: AgentVideoExecutionAdapterStatus = resultStatus === "succeeded"
     ? "completed"

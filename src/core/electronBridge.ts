@@ -32,6 +32,7 @@ export interface ElectronBridge {
   sandboxUnwatch?(watchId: string): Promise<{ unwatched: boolean; watchId: string; reason?: string }>;
   sandboxFileExists?(filePath: string): Promise<{ exists: boolean; path: string }>;
   sandboxReadFile(filePath: string): Promise<{ content: string; hash: string; path: string }>;
+  sandboxHashFile?(filePath: string): Promise<{ path: string; hash: string; size: number }>;
   sandboxWriteFile(filePath: string, data: string): Promise<{ written: boolean; path: string; hash: string }>;
   sandboxCopyFile?(sourcePath: string, destinationPath: string): Promise<{ copied: boolean; sourcePath: string; path: string; hash: string; size: number }>;
   sandboxSpawn(command: string, args: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }>;

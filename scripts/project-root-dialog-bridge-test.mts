@@ -64,6 +64,7 @@ try {
   assert(/projectRootScope\.resolveOpenedProjectPath\(filePath,\s*"sandbox:writeFile"\)/.test(mainSource), "sandbox write must be scoped to opened project roots");
   assert(/projectRootScope\.resolveOpenedProjectPath\(sourcePath,\s*"sandbox:copyFile source"\)/.test(mainSource), "sandbox copy source must be scoped to opened project roots");
   assert(/projectRootScope\.resolveOpenedProjectPath\(destinationPath,\s*"sandbox:copyFile destination"\)/.test(mainSource), "sandbox copy destination must be scoped to opened project roots");
+  assert(/projectRootScope\.resolveOpenedProjectPath\(filePath,\s*"sandbox:hashFile"\)/.test(mainSource), "sandbox hash preflight must remain scoped to opened project roots");
   assert(/spawnAllowed/.test(mainSource), "sandbox spawn must use an allowlist");
   assert(/sandbox:spawn is limited to local runtime version checks/.test(mainSource), "sandbox spawn must fail closed for arbitrary commands");
   assert(/electron-runtime/.test(mainSource), "packaged runtime server must use the bundled runtime entry");

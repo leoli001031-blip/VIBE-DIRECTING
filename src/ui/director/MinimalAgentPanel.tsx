@@ -4511,6 +4511,7 @@ function runtimeProjectRootIsLocalFolder(projectRoot?: string) {
 
 function exportWorkerReadyForAgentConfirmation(worker?: ExportWorkerState) {
   if (!worker || worker.blockers.length) return false;
+  if (!worker.deliveryGate.canPrepare || worker.deliveryGate.status !== "ready_for_confirmation") return false;
   if (worker.readiness === "ready") return true;
   return Boolean(worker.manifest.mvpPackage.reportIncluded && worker.manifest.files.length > 0);
 }
@@ -4724,6 +4725,7 @@ function agentCurrentTaskCompletedStepsFromTimelineEntries(
     if (!done) continue;
     const step = agentCurrentTaskStepFromTimelineEntry(entry);
     if (!step) continue;
+    if (step === "export" && !executionReceipt) continue;
     const projectId = executionReceipt?.projectId || stringValue(entry.details?.projectId);
     const projectRoot = executionReceipt?.projectRoot || stringValue(entry.details?.projectRoot);
     const projectFactHash = executionReceipt?.projectFactHash || stringValue(entry.details?.sourceFactHash) || stringValue(entry.details?.projectFactHash);
@@ -4912,7 +4914,7 @@ export function MinimalAgentPanel({
   onCreateP6RealSample?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onCreateImage2EndFrame?: (target?: Pick<AgentControlledToolInvocationTarget, "skipConfirm" | "confirmationReceiptId" | "confirmedAt" | "signal">) => unknown | Promise<unknown>;
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
-  onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace" | "signal">) => unknown | Promise<unknown>;
+  onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace" | "signal" | "exportExecutionReceipt">) => unknown | Promise<unknown>;
   onOpenResultView?: (view: DirectorView) => void;
   onRetryMissingBatch?: (target?: Pick<AgentControlledToolInvocationTarget, "signal">) => unknown | Promise<unknown>;
   onSelectShot?: (id: string, additive?: boolean) => void;
@@ -7734,7 +7736,11 @@ export function MinimalAgentPanel({
       exportProject: {
         live: exportLive,
         perform: onRunExport
-          ? (target, signal) => onRunExport({ agentToolTrace: target?.agentToolTrace, signal })
+          ? (target, signal, context) => onRunExport({
+              agentToolTrace: target?.agentToolTrace,
+              signal,
+              exportExecutionReceipt: context.receipt,
+            })
           : undefined,
       },
     });
@@ -8163,7 +8169,10 @@ export function MinimalAgentPanel({
             actionId: "footer_project_export",
             confirmationReceiptId: "footer_action_export",
             timeoutMs: 2 * 60 * 1000,
-            perform: (context) => onRunExport?.({ signal: context.signal }),
+            perform: (context) => onRunExport?.({
+              signal: context.signal,
+              exportExecutionReceipt: context.receipt,
+            }),
           });
         },
       }

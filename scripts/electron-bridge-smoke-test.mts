@@ -78,6 +78,12 @@ function registerHandlers() {
     return { content, hash: sha256(content), path: resolved };
   });
 
+  ipcMain.handle("sandbox:hashFile", async (_event, filePath) => {
+    const resolved = path.resolve(filePath);
+    const bytes = fs.readFileSync(resolved);
+    return { path: resolved, hash: sha256(bytes), size: bytes.length };
+  });
+
   ipcMain.handle("sandbox:writeFile", async (_event, filePath, data) => {
     const resolved = path.resolve(filePath);
     fs.mkdirSync(path.dirname(resolved), { recursive: true });
@@ -139,6 +145,7 @@ app.whenReady().then(async () => {
         const target = selection.projectRoot + "/bridge-smoke.txt";
         const write = await bridge.sandboxWriteFile(target, "ok");
         const read = await bridge.sandboxReadFile(target);
+        const hashed = await bridge.sandboxHashFile(target);
         const watch = await bridge.sandboxWatch(selection.projectRoot);
         const copyTarget = selection.projectRoot + "/bridge-smoke-copy.txt";
         const copy = await bridge.sandboxCopyFile(target, copyTarget);
@@ -148,6 +155,7 @@ app.whenReady().then(async () => {
           selection,
           write,
           read,
+          hashed,
           watch,
           copy,
           unwatch,
@@ -212,6 +220,7 @@ app.whenReady().then(async () => {
   assert(result.selection.displayName === "Electron Bridge Smoke", "project chooser IPC should return display name");
   assert(result.write.written === true, "sandboxWriteFile should report success");
   assert(result.read.content === "ok", "sandboxReadFile should read back the written file");
+  assert(result.hashed.hash === result.read.hash && result.hashed.size === 2, "sandboxHashFile should hash the file without decoding or mutating it");
   assert(result.watch.watching === true, "sandboxWatch should accept the selected project root");
   assert(result.watch.watchId === "bridge-smoke-watch-1", "sandboxWatch should return a clone-safe watch id");
   assert(result.copy.copied === true, "sandboxCopyFile should report success");

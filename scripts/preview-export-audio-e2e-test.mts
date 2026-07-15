@@ -304,10 +304,10 @@ function baseInput() {
   assert(projection.exportWorker.manifest.mvpPackage.receiptCount >= 1, "export worker must include receipts");
   assert(projection.exportWorker.manifest.mvpPackage.reportIncluded === true, "export worker must include report.md");
   const action = await runExportAction({ worker: projection.exportWorker });
-  assert(action.status === "ready", `export action should produce a testable manifest, got ${action.status}`);
-  assert(action.writes?.some((write) => write.path.endsWith("/Project.vibe")), "export action should write Project.vibe");
-  assert(action.writes?.some((write) => write.path.endsWith("/preview_media.json")), "export action should write preview media manifest");
-  console.log("PASS 9: shared local Preview/Export projection drives export action artifacts");
+  assert(action.status === "blocked", "image-only preview must remain outside formal delivery execution");
+  assert(action.executedCount === 0 && action.writes?.length === 0, "blocked formal delivery must not write its planned manifests");
+  assert(action.errors?.some((error) => error.includes("delivery_")), "blocked formal delivery should expose a structured Delivery Gate reason");
+  console.log("PASS 9: shared local Preview/Export projection remains behind the formal Delivery Gate");
 }
 
 console.log("\nPreview-Export-Audio E2E tests passed: 9/9.");

@@ -129,22 +129,25 @@ try {
     generatedAt,
     profileSelection: ["rough_cut", "asset_package", "storyboard_table"],
     executionMode: "adapter_execution",
-    confirmation: true,
+    delivery: {
+      identity: {
+        projectId: openResult.project.manifest.projectId,
+        projectRoot,
+        projectFactHash: saveResult.factHash,
+      },
+    },
   });
-  assert(worker.canExecute, `export worker should be executable: ${worker.blockers.join("; ")}`);
+  assert(!worker.canExecute, "image-only MVP fixture must remain outside formal export execution");
+  assert(worker.blockers.some((blocker) => blocker.includes("delivery_media_missing")), "missing-video Delivery Gate blocker should be explicit");
 
   const result = await executeExportWorkerPlan(worker, new DiskExportAdapter(projectRoot));
-  assert(result.ok, `export worker execution failed: ${result.errors.join("; ")}`);
-  assert(
-    result.executed.every((entry) => entry.path === "exports" || entry.path.startsWith("exports/mvp-demo")),
-    "executed writes must stay inside export root",
-  );
-
-  const manifest = JSON.parse(await readFile(path.join(projectRoot, "exports/mvp-demo/export_manifest.json"), "utf8"));
-  assert(manifest.mvpPackage.projectVibeIncluded === true, "MVP export must include Project.vibe");
-  assert(manifest.mvpPackage.lockedAssetCount === 3, "MVP export must include locked asset count");
-  assert((await readFile(path.join(projectRoot, "exports/mvp-demo/report.md"), "utf8")).includes("MVP Export Report"), "report should be written");
-  console.log(`mvp-demo-export-test: ok (${result.executed.length} writes under ${projectRoot})`);
+  assert(!result.ok && result.executed.length === 0, "blocked formal export must perform zero disk writes");
+  await access(path.join(projectRoot, "exports/mvp-demo/export_manifest.json"))
+    .then(() => { throw new Error("FAIL: blocked formal export wrote a manifest"); })
+    .catch((error) => {
+      if (error instanceof Error && error.message.startsWith("FAIL:")) throw error;
+    });
+  console.log(`mvp-demo-export-test: ok (Delivery Gate blocked image-only fixture under ${projectRoot})`);
 } finally {
   await rm(projectRoot, { recursive: true, force: true });
 }

@@ -249,22 +249,22 @@ try {
     profileSelection: ["rough_cut", "asset_package", "storyboard_table", "developer_archive"],
     generatedAt,
     executionMode: "adapter_execution",
-    confirmation: true,
+    delivery: {
+      identity: {
+        projectId: confirmed.nextProject.manifest.projectId,
+        projectRoot,
+        projectFactHash: hashProjectVibeFacts(confirmed.nextProject),
+      },
+    },
   });
-  assert(exportState.canExecute, `export package contract should be executable: ${exportState.blockers.join("; ")}`);
+  assert(!exportState.canExecute, "image-only local smoke must remain outside formal export execution");
+  assert(exportState.blockers.some((blocker) => blocker.includes("delivery_media_missing")), "missing-video Delivery Gate blocker should be explicit");
   assert(exportState.hardLocks.noProviderSubmit === true, "export worker must forbid provider submit");
   const exportResult = await executeExportWorkerPlan(exportState, new DiskExportAdapter(projectRoot));
-  assert(exportResult.ok, `export worker execution failed: ${exportResult.errors.join("; ")}`);
+  assert(!exportResult.ok && exportResult.executed.length === 0, "blocked formal export must perform zero disk writes");
 
   const manifestPath = path.join(projectRoot, "exports/mvp-full-chain-local-smoke/export_manifest.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  assert(manifest.readiness === "ready", "export manifest should be ready");
-  assert(manifest.mvpPackage.projectVibeIncluded === true, "export manifest should include Project.vibe");
-  assert(manifest.mvpPackage.previewMediaCount === 3, "export manifest should include three preview media entries");
-  assert(manifest.mvpPackage.videoResultCount === 3, "export manifest should track three video slots");
-  assert(manifest.mvpPackage.videoMissingCount === 3, "local smoke must keep video slots missing rather than approving mock placeholders");
-  assert(manifest.mvpPackage.videoApprovedCount === 0, "local smoke must not approve mock video placeholders");
-  assert(manifest.mvpPackage.receiptCount >= 1, "export manifest should include project receipt evidence");
+  assert(!existsSync(manifestPath), "blocked formal export must not write an export manifest");
 
   const report = {
     ok: true,
@@ -285,20 +285,20 @@ try {
     },
     export: {
       root: "exports/mvp-full-chain-local-smoke",
-      manifestPath: path.relative(projectRoot, manifestPath).replace(/\\/g, "/"),
+      manifestPath: null,
       executedWrites: exportResult.executed.length,
-      readiness: manifest.readiness,
-      profiles: manifest.profileSelection,
+      readiness: "blocked",
+      blockers: exportState.blockers,
     },
     notes: [
       "This smoke uses local/mock artifacts only.",
-      "It proves Project.vibe staged confirmation, local project facts, preview/export contracts, and package writes.",
+      "It proves Project.vibe staged confirmation, local project facts, preview contracts, and fail-closed Delivery Gate behavior.",
       "It does not prove Image2, Jimeng/Seedance, cloud TTS, real render quality, or provider queue behavior.",
     ],
   };
   await writeText(projectRoot, "reports/mvp-full-chain-local-smoke.json", `${JSON.stringify(report, null, 2)}\n`);
 
-  console.log(`mvp-full-chain-local-smoke: ok projectRoot=${projectRoot} export=${report.export.manifestPath}`);
+  console.log(`mvp-full-chain-local-smoke: ok projectRoot=${projectRoot} export=${report.export.readiness}`);
 } finally {
   if (!keep) {
     await rm(projectRoot, { recursive: true, force: true });

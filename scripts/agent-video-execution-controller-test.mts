@@ -9,6 +9,7 @@ import {
   createAgentVideoGenerationJobLedger,
   type AgentVideoGenerationJobLedger,
 } from "../src/core/agentVideoProductionContract.ts";
+import { EXPORT_DELIVERY_RECEIPT_SCHEMA_VERSION } from "../src/core/exportDeliveryGate.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -151,17 +152,60 @@ const exportPlan = buildAgentVideoPipelinePlan({
   videoSubmitted: true,
 });
 const exportFixture = controllerFixture();
+const exportManifestPath = "exports/p6-a/export_manifest.json";
+let exportPerformCalls = 0;
 const exportResult = await exportFixture.controller.runFooterExecution({
   plan: exportPlan,
   action: "export",
   actionId: "p6-a-live-export",
   confirmationReceiptId: "p6-a-live-export-confirmation",
   timeoutMs: 5_000,
-  perform: () => ({ status: "completed", manifestPath: "/tmp/p6-a-export-manifest.json" }),
+  perform: () => {
+    exportPerformCalls += 1;
+    return {
+      status: "completed",
+      manifestPath: exportManifestPath,
+      outputAssets: [exportManifestPath],
+      deliveryReceipt: {
+        schemaVersion: EXPORT_DELIVERY_RECEIPT_SCHEMA_VERSION,
+        receiptId: "export_delivery_p6_a_live_export",
+        status: "succeeded",
+        ...identity,
+        actionId: "p6-a-live-export",
+        confirmationId: "p6-a-live-export-confirmation",
+        reviewBindings: [{
+          reviewReceiptId: "review_p6_a_s01",
+          reviewedAt: generatedAt,
+          shotId: "S01",
+          outputPath: "video/S01.mp4",
+          sourceReceiptId: "provider_receipt_p6_a_s01",
+          outputHash: `sha256:${"6".repeat(64)}`,
+          humanReviewed: true,
+          promotionAuthorized: false,
+        }],
+        executionMode: "live",
+        outputs: [{ operation: "write_file", path: exportManifestPath }],
+        createdAt: generatedAt,
+      },
+    };
+  },
 });
 assert(exportResult.status === "completed" && exportResult.providerCalled === false, "local export must complete without claiming a provider call");
-assert(exportResult.receipt.outputAssets[0] === "/tmp/p6-a-export-manifest.json", "local export must retain the returned manifest path");
+assert(exportResult.receipt.outputAssets[0] === exportManifestPath, "local export must retain the returned manifest path");
+assert(exportResult.receipt.deliveryReceipt?.receiptId === "export_delivery_p6_a_live_export", "controller must persist the structured delivery receipt");
 assert(exportFixture.statuses.at(-1) === "动作已完成。", "footer execution must publish its final creator status");
+const duplicateExportResult = await exportFixture.controller.runFooterExecution({
+  plan: exportPlan,
+  action: "export",
+  actionId: "p6-a-live-export",
+  confirmationReceiptId: "p6-a-live-export-confirmation",
+  timeoutMs: 5_000,
+  perform: () => {
+    exportPerformCalls += 1;
+    return { status: "completed" };
+  },
+});
+assert(duplicateExportResult.status === "blocked" && exportPerformCalls === 1, "terminal export action must not execute again after restoration from the durable ledger");
 
 const noPersistenceFixture = controllerFixture({ persistence: false });
 let unpersistedPerformCalls = 0;

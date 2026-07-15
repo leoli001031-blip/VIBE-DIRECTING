@@ -393,10 +393,9 @@ assert.ok(exportProjection.exportWorker.entries.some((entry) => entry.kind === "
 assert.ok(exportProjection.exportWorker.entries.some((entry) => entry.kind === "storyboard_table"), "export projection should include a storyboard projection");
 
 const exportAction = await runExportAction({ worker: exportProjection.exportWorker });
-assert.equal(exportAction.status, "ready", `export action should build a reviewable projection package: ${exportAction.errors?.join("; ")}`);
-assert.ok(exportAction.writes?.some((write) => write.path.endsWith("/Project.vibe")), "export package should write Project.vibe");
-assert.ok(exportAction.writes?.some((write) => write.path.endsWith("/asset_package_manifest.json")), "export package should write asset package manifest");
-assert.ok(exportAction.writes?.some((write) => write.path.endsWith("/preview_media.json")), "export package should write preview media manifest");
+assert.equal(exportAction.status, "blocked", "image-only and missing-video project state must not enter formal export execution");
+assert.equal(exportAction.executedCount, 0, "blocked formal export must perform zero operations");
+assert.ok(exportAction.errors?.some((error) => error.includes("delivery_")), "blocked formal export should expose a structured Delivery Gate blocker");
 const tracedExportAction = await runExportAction({
   worker: exportProjection.exportWorker,
   agentToolTrace: {
@@ -410,10 +409,8 @@ const tracedExportAction = await runExportAction({
   },
 });
 assert.equal(tracedExportAction.agentToolTrace?.id, "agent_tool_task_export_golden_path_001", "export action should preserve Agent tool trace");
-assert.ok(
-  tracedExportAction.writes?.some((write) => write.path.endsWith("/export_manifest.json") && write.content.includes("agent_tool_task_export_golden_path_001")),
-  "export manifest should preserve Agent tool trace when export is Agent-triggered",
-);
+assert.equal(tracedExportAction.status, "blocked", "Agent tool trace must not bypass missing review and delivery confirmation gates");
+assert.equal(tracedExportAction.writes?.length, 0, "blocked Agent export must not write an export manifest");
 
 const bridgeExportWrites: Array<{ path: string; data: string }> = [];
 const bridgeExportCopies: Array<{ sourcePath: string; path: string }> = [];
@@ -432,22 +429,10 @@ const bridgeExportAction = await runExportAction({
     },
   } satisfies ExportActionBridge,
 });
-assert.equal(bridgeExportAction.status, "ready", "desktop bridge export action should finish");
-assert.equal(bridgeExportAction.label, "导出包已生成", "desktop bridge export action should use real package copy");
-assert.equal(bridgeExportAction.detail, "已写入当前项目的 exports 文件夹。", "desktop bridge export action should explain local folder output");
+assert.equal(bridgeExportAction.status, "blocked", "desktop bridge must enforce the same Delivery Gate as Agent export");
 assert.ok(!bridgeExportAction.writes?.length, "desktop bridge export action should not fall back to browser memory writes");
-assert.ok(
-  bridgeExportWrites.some((write) => write.path === `${bridgeProjectRoot}/exports/new-video-golden-path/Project.vibe`),
-  "desktop bridge export action should write Project.vibe into the project export folder",
-);
-assert.ok(
-  bridgeExportWrites.some((write) => write.path === `${bridgeProjectRoot}/exports/new-video-golden-path/export_manifest.json`),
-  "desktop bridge export action should write export_manifest.json into the project export folder",
-);
-assert.ok(
-  bridgeExportCopies.every((copy) => copy.sourcePath.startsWith(`${bridgeProjectRoot}/`) && copy.path.startsWith(`${bridgeProjectRoot}/exports/new-video-golden-path/`)),
-  "desktop bridge export copies must stay inside the project root and export folder",
-);
+assert.equal(bridgeExportWrites.length, 0, "blocked desktop export must perform zero file writes");
+assert.equal(bridgeExportCopies.length, 0, "blocked desktop export must perform zero file copies");
 
 console.log(
   JSON.stringify(

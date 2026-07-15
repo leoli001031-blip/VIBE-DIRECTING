@@ -17,6 +17,13 @@ import {
   JIMENG_CLI_DEFAULT_RESUME_INTERVAL_SECONDS,
   JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES,
 } from "./jimengVideoCli";
+import {
+  buildExportDeliveryGate,
+  resolveExportDeliveryMediaReview,
+  type ExportDeliveryConfirmation,
+  type ExportDeliveryGateState,
+  type ExportDeliveryProjectIdentity,
+} from "./exportDeliveryGate";
 
 export const exportWorkerSchemaVersion = "0.1.0";
 export const exportWorkerPhase = "phase_27_export_worker_mvp";
@@ -143,6 +150,12 @@ export interface BuildExportWorkerStateInput {
   profileSelection?: ExportProfileKind[] | "all";
   generatedAt?: string;
   executionMode?: ExportWorkerExecutionMode;
+  delivery?: {
+    identity: ExportDeliveryProjectIdentity;
+    confirmation?: ExportDeliveryConfirmation;
+    completedReceipts?: unknown[];
+  };
+  /** @deprecated A boolean cannot authorize export execution. */
   confirmation?: boolean;
   requestedOperations?: string[];
   providerSubmitRequested?: boolean;
@@ -166,6 +179,7 @@ export interface ExportWorkerState {
   confirmed: boolean;
   readiness: ExportWorkerReadiness;
   canExecute: boolean;
+  deliveryGate: ExportDeliveryGateState;
   entries: ExportWorkerEntry[];
   manifest: ExportWorkerManifest;
   blockers: string[];
@@ -1227,24 +1241,23 @@ function resumeCommandFor(result: DemoPackageVideoResult, request?: ReturnType<t
 
 function applyReviewReceipts(input: BuildExportWorkerStateInput, result: DemoPackageVideoResult): DemoPackageVideoResult {
   const receipts = input.projectVibe?.receipts?.reviewReceipts || [];
-  const matching = receipts.find((receipt) => (
-    receipt.status === "approved" &&
-    Boolean(result.videoPath && receipt.outputPath === result.videoPath)
-  ));
-  const reviewStatus = !result.videoPath
-    ? "missing"
-    : matching || result.reviewStatus === "approved"
-      ? "approved"
-      : "needs_review";
+  const resolution = resolveExportDeliveryMediaReview({
+    id: result.id,
+    shotId: result.shotId,
+    outputPath: result.videoPath,
+    sourceReceiptId: result.sourceReceiptId,
+    outputHash: result.outputHash,
+    reviewReceiptId: result.reviewReceiptId,
+  }, receipts);
+  const reviewStatus = resolution.reviewStatus;
   return {
     ...result,
     reviewStatus,
-    sourceTaskId: result.sourceTaskId || matching?.sourceRunId,
-    outputHash: result.outputHash || matching?.outputHash,
+    reviewReceiptId: resolution.binding?.reviewReceiptId,
     autoPromoted: false,
     notes: uniqueSorted([
       ...result.notes,
-      reviewStatus === "approved" ? "Approved only because an explicit review receipt was present." : "",
+      reviewStatus === "approved" ? "Approved only because an exact human review receipt was present." : "",
       reviewStatus === "needs_review" ? "Video remains a review candidate and is not promoted automatically." : "",
     ]),
   };
@@ -1266,12 +1279,15 @@ function deriveVideoResultsFromSource(input: BuildExportWorkerStateInput): DemoP
       id: `video_result_${safeRefValue(row.shotId)}`,
       shotId: row.shotId,
       sourceTaskId: event?.sourceTaskId || request?.jobId || request?.taskId,
+      sourceReceiptId: event?.sourceReceiptId,
+      reviewReceiptId: event?.reviewReceiptId,
       taskId: request?.taskId,
       submitId: request?.submitId,
       providerTaskId: request?.providerTaskId,
       reviewStatus: videoPath ? "needs_review" : "missing",
       videoPath,
       firstFrameProtectedVideoPath: firstFrameProtectedPath(outputPaths, videoPath),
+      outputHash: event?.outputHash,
       receiptPaths: uniqueSorted(request?.receiptPaths || []),
       queueLogPaths: uniqueSorted(request?.queueLogPaths || []),
       resumeCommand: request?.resumeCommand,
@@ -1295,12 +1311,15 @@ function deriveVideoResultsFromSource(input: BuildExportWorkerStateInput): DemoP
         id: `video_result_${safeRefValue(event.id)}`,
         shotId: event.shotId,
         sourceTaskId: event.sourceTaskId || request?.jobId || request?.taskId,
+        sourceReceiptId: event.sourceReceiptId,
+        reviewReceiptId: event.reviewReceiptId,
         taskId: request?.taskId,
         submitId: request?.submitId,
         providerTaskId: request?.providerTaskId,
         reviewStatus: "needs_review",
         videoPath: event.mediaPath,
         firstFrameProtectedVideoPath: firstFrameProtectedPath(outputPaths, event.mediaPath),
+        outputHash: event.outputHash,
         receiptPaths: uniqueSorted(request?.receiptPaths || []),
         queueLogPaths: uniqueSorted(request?.queueLogPaths || []),
         resumeCommand: request?.resumeCommand,
@@ -1397,7 +1416,34 @@ function collectReferencePathErrors(source: ProjectPreviewExportState): string[]
   return uniqueSorted(errors);
 }
 
-function inputBlockers(input: BuildExportWorkerStateInput, exportRoot: string, selectedKinds: ExportProfileKind[]): string[] {
+function deliveryGateForInput(input: BuildExportWorkerStateInput): ExportDeliveryGateState {
+  const identity = input.delivery?.identity || {
+    projectId: input.projectVibe?.manifest.projectId || "",
+    projectRoot: undefined,
+    projectFactHash: "",
+  };
+  return buildExportDeliveryGate({
+    identity,
+    media: videoResults(input).map((result) => ({
+      id: result.id,
+      shotId: result.shotId,
+      outputPath: result.videoPath,
+      sourceReceiptId: result.sourceReceiptId,
+      outputHash: result.outputHash,
+      reviewReceiptId: result.reviewReceiptId,
+    })),
+    reviewReceipts: input.projectVibe?.receipts?.reviewReceipts,
+    confirmation: input.delivery?.confirmation,
+    completedReceipts: input.delivery?.completedReceipts,
+  });
+}
+
+function inputBlockers(
+  input: BuildExportWorkerStateInput,
+  exportRoot: string,
+  selectedKinds: ExportProfileKind[],
+  deliveryGate: ExportDeliveryGateState,
+): string[] {
   const blockers: string[] = [];
   const normalizedRoot = normalizePath(exportRoot);
   const source = input.source;
@@ -1441,6 +1487,10 @@ function inputBlockers(input: BuildExportWorkerStateInput, exportRoot: string, s
   }
   blockers.push(...collectCredentialKeyErrors(input.source, "source"));
   blockers.push(...collectReferencePathErrors(input.source));
+  const deliveryBlockers = deliveryGate.blockers.filter((item) => (
+    input.executionMode === "adapter_execution" || item.code !== "delivery_confirmation_required"
+  ));
+  blockers.push(...deliveryBlockers.map((item) => `[${item.code}] ${item.message}`));
   return uniqueSorted(blockers);
 }
 
@@ -1611,6 +1661,17 @@ function validateStateEnvelope(state: ExportWorkerState): string[] {
   if (!Array.isArray(state.blockers)) errors.push("Export worker blockers must be an array.");
   if (!Array.isArray(state.warnings)) errors.push("Export worker warnings must be an array.");
   if (!Array.isArray(state.notes)) errors.push("Export worker notes must be an array.");
+  if (!isRecord(state.deliveryGate)) {
+    errors.push("Export worker deliveryGate must be an object.");
+  } else {
+    if (state.deliveryGate.schemaVersion !== "export_delivery_gate/0.1.0") errors.push("Export worker deliveryGate schemaVersion is invalid.");
+    if (!Array.isArray(state.deliveryGate.media) || !Array.isArray(state.deliveryGate.reviewBindings) || !Array.isArray(state.deliveryGate.blockers)) {
+      errors.push("Export worker deliveryGate arrays are invalid.");
+    }
+    if (state.deliveryGate.canExecute && state.deliveryGate.status !== "authorized") {
+      errors.push("Export worker deliveryGate canExecute requires authorized status.");
+    }
+  }
 
   if (!isRecord(state.hardLocks)) {
     errors.push("Export worker hardLocks must be an object.");
@@ -1738,6 +1799,12 @@ function validateStateEnvelope(state: ExportWorkerState): string[] {
   if (state.canExecute && (state.executionMode !== "adapter_execution" || state.confirmed !== true)) {
     errors.push("Export worker canExecute requires adapter_execution mode and explicit confirmation.");
   }
+  if (state.canExecute && (!state.deliveryGate?.canExecute || state.deliveryGate.status !== "authorized")) {
+    errors.push("Export worker canExecute requires an authorized Delivery Gate.");
+  }
+  if (state.confirmed !== Boolean(state.deliveryGate?.authorization)) {
+    errors.push("Export worker confirmed state must match its structured Delivery Gate authorization.");
+  }
   if (state.canExecute && Array.isArray(state.blockers) && state.blockers.length > 0) {
     errors.push("Export worker canExecute cannot be true while blockers are present.");
   }
@@ -1749,9 +1816,10 @@ export function buildExportWorkerState(input: BuildExportWorkerStateInput): Expo
   const generatedAt = input.generatedAt || nowIso();
   const exportRoot = normalizePath(input.exportRoot);
   const executionMode = input.executionMode || "plan_only";
-  const confirmed = input.confirmation === true;
   const selectedKinds = selectedProfileKinds(input.source, input.profileSelection);
-  const blockers = inputBlockers(input, input.exportRoot, selectedKinds);
+  const deliveryGate = deliveryGateForInput(input);
+  const confirmed = deliveryGate.status === "authorized" && deliveryGate.canExecute;
+  const blockers = inputBlockers(input, input.exportRoot, selectedKinds, deliveryGate);
   const blockedProfileKinds = selectedKinds.filter((kind) => profileByKind(input.source).get(kind)?.readiness === "blocked");
   const readiness: ExportWorkerReadiness = blockers.length ? "blocked" : executionMode === "adapter_execution" && confirmed ? "ready" : "planned";
   const canExecute = readiness === "ready";
@@ -1811,6 +1879,7 @@ export function buildExportWorkerState(input: BuildExportWorkerStateInput): Expo
     confirmed,
     readiness,
     canExecute,
+    deliveryGate,
     entries,
     manifest: parsedManifest,
     blockers,

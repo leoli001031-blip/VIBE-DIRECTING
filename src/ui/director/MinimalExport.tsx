@@ -181,7 +181,7 @@ export function MinimalExport({
   exportAction?: ExportActionState;
   localProjectReady?: boolean;
   pendingConfirmationLabel?: string;
-  onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
+  onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace" | "signal" | "exportExecutionReceipt">) => unknown | Promise<unknown>;
 }) {
   const profiles = previewExport.exportProfiles;
 	  const gate = previewExport.formalPreviewGate;

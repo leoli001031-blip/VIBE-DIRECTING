@@ -1,6 +1,7 @@
 import { buildExportBuilderState } from "../src/core/exportBuilder.ts";
 import { buildExportWorkerState, executeExportWorkerPlan } from "../src/core/exportWorker.ts";
 import { buildLocalPreviewExportProjection } from "../src/core/localPreviewExportProjection.ts";
+import { hashProjectVibeFacts } from "../src/project/index.ts";
 import { projectVibeModelVersion, type ProjectVibeDocument } from "../src/project/types.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -146,34 +147,16 @@ const worker = buildExportWorkerState({
   confirmation: true,
 });
 
-assert(worker.canExecute, `worker should be executable: ${worker.blockers.join("; ")}`);
+assert(!worker.canExecute, "needs_review video must not be executable even with the legacy boolean confirmation");
 assert(worker.manifest.mvpPackage.videoResultCount === 1, "manifest must count one video result");
 assert(worker.manifest.mvpPackage.videoNeedsReviewCount === 1, "video result must remain needs_review");
 assert(worker.manifest.mvpPackage.videoApprovedCount === 0, "video result must not auto-approve");
 
 const adapter = new MemoryExportAdapter();
 const result = await executeExportWorkerPlan(worker, adapter);
-assert(result.ok, `worker execution should pass: ${result.errors.join("; ")}`);
-
-const videoManifest = JSON.parse(adapter.files.get("exports/jimeng-video-review/videos/video_manifest.json") || "{}");
-assert(videoManifest.videos[0].rawVideoPath === rawVideoPath, "video manifest must include raw video path");
-assert(videoManifest.videos[0].firstFrameProtectedVideoPath === protectedVideoPath, "video manifest must include first-frame protected path");
-assert(videoManifest.videos[0].reviewLabel === "待复核", "video manifest must use user-readable review label");
-assert(videoManifest.videos[0].autoPromoted === false, "video manifest must not auto-promote");
-
-const videoReceipts = JSON.parse(adapter.files.get("exports/jimeng-video-review/receipts/video/video_receipts.json") || "{}");
-assert(videoReceipts.queuePolicy.defaultConcurrentSubmissions === 1, "video receipts must document single concurrency");
-assert(videoReceipts.queuePolicy.expectedQueueWaitMinutes === 50, "video receipts must document expected Jimeng long wait");
-assert(videoReceipts.queuePolicy.recommendedResumeIntervalSeconds === 10 * 60, "video receipts must document resume interval");
-assert(videoReceipts.items[0].submitId === "e2ebfcfa3c6c77d4", "video receipts must include submit_id");
-assert(videoReceipts.items[0].queueLogPaths.includes(queryLogPath), "video receipts must include query attempt log");
-assert(/query_result --submit_id=e2ebfcfa3c6c77d4/.test(videoReceipts.items[0].resumeCommand), "video receipts must include resume command");
-
-const videoReport = adapter.files.get("exports/jimeng-video-review/video-report/summary.md") || "";
-assert(videoReport.includes("待复核: 1"), "video report must show needs_review count");
-assert(videoReport.includes("已通过: 0"), "video report must show approved count");
-assert(videoReport.includes("缺失: 0"), "video report must show missing count");
-assert(videoReport.includes("e2ebfcfa3c6c77d4"), "video report must include submit_id for review");
+assert(!result.ok, "needs_review export execution must fail closed");
+assert(result.executed.length === 0, "blocked export must report zero executed writes");
+assert(adapter.files.size === 0 && adapter.directories.size === 0 && adapter.copies.size === 0, "blocked export must create no output");
 
 const approvedProjectVibe: ProjectVibeDocument = {
   kind: "project_vibe_document",
@@ -265,11 +248,15 @@ const localApprovedProjection = buildLocalPreviewExportProjection({
   ],
   projectVibe: approvedProjectVibe,
   projectRoot: ".",
+  projectFactHash: hashProjectVibeFacts(approvedProjectVibe),
   selectedShotId: "MS01",
   generatedAt,
   exportRoot: "exports/local-approved-video",
 });
-assert(localApprovedProjection.exportWorker.manifest.mvpPackage.videoNeedsReviewCount === 0, "local export projection must not keep approved preview videos in review");
-assert(localApprovedProjection.exportWorker.manifest.mvpPackage.videoApprovedCount === 1, "local export projection must preserve approved preview video receipts");
+assert(!localApprovedProjection.exportWorker.canExecute, "display-only approved status must not synthesize formal review permission");
+assert(
+  localApprovedProjection.exportWorker.deliveryGate.status === "blocked",
+  "missing formal review receipt must keep Delivery Gate blocked",
+);
 
-console.log(`video-export-package-test: ok (${result.executed.length} writes, ${worker.manifest.mvpPackage.videoNeedsReviewCount} needs_review)`);
+console.log(`video-export-package-test: ok (${result.executed.length} writes, Delivery Gate blocked)`);

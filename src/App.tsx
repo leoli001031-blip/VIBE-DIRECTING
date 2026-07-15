@@ -135,6 +135,8 @@ import {
   type ProjectVibeDocument,
 } from "./project";
 import type { AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
+import type { AgentVideoExecutionReceipt } from "./core/agentVideoExecutionAdapter";
+import { EXPORT_DELIVERY_CONFIRMATION_SCHEMA_VERSION } from "./core/exportDeliveryGate";
 import { buildProviderReviewPromotionTransaction } from "./core/providerReviewPromotion";
 import {
   browserProjectVibeDraftStorageKeyPrefix as browserProjectDraftStorageKeyPrefix,
@@ -3710,6 +3712,7 @@ function App() {
     projectVibe: prototypeProjectVibe,
     projectLocalKnowledgePacks,
     projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
+    projectFactHash: hashProjectVibeFacts(prototypeProjectVibe),
     selectedShotId: workbenchSelectedShotId,
     generatedAt: workbenchRuntimeState.generatedAt,
   }), [
@@ -4144,7 +4147,11 @@ function App() {
     return true;
   }
 
-  async function runLocalExportAction(input?: { agentToolTrace?: ExportActionState["agentToolTrace"]; signal?: AbortSignal }) {
+  async function runLocalExportAction(input?: {
+    agentToolTrace?: ExportActionState["agentToolTrace"];
+    signal?: AbortSignal;
+    exportExecutionReceipt?: AgentVideoExecutionReceipt;
+  }) {
     let projection = localPreviewExportProjection;
     if (!projection) {
       const { buildLocalPreviewExportProjection } = await import("./core/localPreviewExportProjection");
@@ -4160,12 +4167,28 @@ function App() {
     const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
     try {
       const { runExportAction } = await import("./core/exportAction");
+      const executionReceipt = input?.exportExecutionReceipt;
+      const exportConfirmationReceipt = executionReceipt?.action === "export"
+        && executionReceipt.operation === "execute"
+        && executionReceipt.executionMode === "live"
+        && executionReceipt.status === "running"
+        ? executionReceipt
+        : undefined;
       const nextState = await runExportAction({
         worker: projection.exportWorker,
         projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
         bridge,
         signal: input?.signal,
         agentToolTrace: input?.agentToolTrace,
+        deliveryConfirmation: exportConfirmationReceipt ? {
+          schemaVersion: EXPORT_DELIVERY_CONFIRMATION_SCHEMA_VERSION,
+          confirmationId: exportConfirmationReceipt.confirmationReceiptId,
+          actionId: exportConfirmationReceipt.actionId,
+          projectId: exportConfirmationReceipt.projectId,
+          projectRoot: exportConfirmationReceipt.projectRoot,
+          projectFactHash: exportConfirmationReceipt.projectFactHash,
+          confirmedAt: exportConfirmationReceipt.updatedAt,
+        } : undefined,
       });
       setExportActionState(nextState);
       return nextState;

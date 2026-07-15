@@ -10,6 +10,9 @@ export interface PreviewQueueItem {
   durationSeconds: number;
   mediaPath?: string;
   label: string;
+  sourceReceiptId?: string;
+  outputHash?: string;
+  reviewReceiptId?: string;
 }
 
 export interface BuildMissingPreviewQueueFromShotsOptions {
@@ -79,6 +82,9 @@ export function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState
         durationSeconds: safeDurationSeconds(event.durationSeconds),
         mediaPath: kind === "missing_placeholder" ? undefined : event.mediaPath,
         label: previewQueueLabel(event, kind),
+        sourceReceiptId: event.sourceReceiptId,
+        outputHash: event.outputHash,
+        reviewReceiptId: event.reviewReceiptId,
       };
     });
 }

@@ -913,15 +913,11 @@ const closureWorkerState = exportWorker.buildExportWorkerState({
   executionMode: "adapter_execution",
   confirmation: true,
 });
-assert(closureWorkerState.readiness === "ready", `demo closure export worker should be ready: ${closureWorkerState.blockers.join("; ")}`);
+assert(closureWorkerState.readiness === "blocked", "dry-run preview evidence must not authorize formal delivery");
 const closureAdapter = new MemoryExportAdapter();
 const closureWrite = await exportWorker.executeExportWorkerPlan(closureWorkerState, closureAdapter);
-assert(closureWrite.ok, `demo closure export worker should execute against memory adapter: ${closureWrite.errors.join("; ")}`);
-assert(closureAdapter.files.size === 5, "demo closure export package should plan five text outputs");
-const closureDeveloperArchive = JSON.parse(closureAdapter.files.get("reports/exports/demo-closure/developer_archive.json"));
-assert(closureDeveloperArchive.projectFactsSnapshot.selectedShotId === "S02", "developer archive must include project facts snapshot");
-assert(closureDeveloperArchive.promptRequestPreviews[0].providerSubmissionForbidden === true, "request preview must forbid provider submission");
-assert(closureDeveloperArchive.oneShotResultSummary.outputPath === imageTaskPlan.expectedOutputPath, "developer archive must include one-shot result summary");
+assert(!closureWrite.ok && closureWrite.executed.length === 0, "blocked dry-run delivery must execute zero writes");
+assert(closureAdapter.files.size === 0, "blocked dry-run delivery must not claim package outputs");
 
 for (const state of [orchestratorState, exportState, closureExportState]) {
   assert(state.providerSubmissionForbidden === true, "provider submission must be forbidden end-to-end");

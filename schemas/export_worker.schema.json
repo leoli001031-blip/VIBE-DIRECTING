@@ -17,6 +17,7 @@
     "confirmed",
     "readiness",
     "canExecute",
+    "deliveryGate",
     "entries",
     "manifest",
     "blockers",
@@ -36,6 +37,7 @@
     "confirmed": { "type": "boolean" },
     "readiness": { "$ref": "#/$defs/readiness" },
     "canExecute": { "type": "boolean" },
+    "deliveryGate": { "$ref": "#/$defs/deliveryGate" },
     "entries": {
       "type": "array",
       "items": { "$ref": "#/$defs/entry" }
@@ -58,6 +60,23 @@
     "operation": {
       "type": "string",
       "enum": ["create_directory", "write_file", "copy_file"]
+    },
+    "deliveryGate": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schemaVersion", "status", "identity", "media", "reviewBindings", "canPrepare", "canExecute", "blockers"],
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "export_delivery_gate/0.1.0" },
+        "status": { "type": "string", "enum": ["blocked", "ready_for_confirmation", "authorized", "already_completed"] },
+        "identity": { "type": "object" },
+        "media": { "type": "array" },
+        "reviewBindings": { "type": "array" },
+        "authorization": { "type": "object" },
+        "completedReceiptId": { "type": "string" },
+        "canPrepare": { "type": "boolean" },
+        "canExecute": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "object" } }
+      }
     },
     "entryKind": {
       "type": "string",

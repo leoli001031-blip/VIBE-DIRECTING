@@ -63,6 +63,7 @@ for (const channel of [
   "sandbox:unwatch",
   "sandbox:fileExists",
   "sandbox:readFile",
+  "sandbox:hashFile",
   "sandbox:writeFile",
   "sandbox:copyFile",
   "sandbox:spawn",

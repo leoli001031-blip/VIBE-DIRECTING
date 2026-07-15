@@ -564,6 +564,18 @@ function registerIpcHandlers() {
     return { content, hash, path: resolved };
   });
 
+  handleTrustedIpc("sandbox:hashFile", async (_event, filePath: string) => {
+    if (!filePath || typeof filePath !== "string") {
+      throw new Error("sandbox:hashFile requires a filePath");
+    }
+    const resolved = projectRootScope.resolveOpenedProjectPath(filePath, "sandbox:hashFile");
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`file not found: ${resolved}`);
+    }
+    const { hash, size } = await sha256File(resolved);
+    return { path: resolved, hash, size };
+  });
+
   handleTrustedIpc("sandbox:writeFile", async (_event, filePath: string, data: string) => {
     if (!filePath || typeof filePath !== "string") {
       throw new Error("sandbox:writeFile requires a filePath");
