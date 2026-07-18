@@ -174,6 +174,10 @@ import {
 } from "./project/projectRootDialog";
 import { buildCurrentProjectPreviewProjection } from "./core/currentProjectPreviewProjection";
 import {
+  agentDirectorDeliveryHandoffPreviewQueue,
+  buildAgentDirectorDeliveryHandoff,
+} from "./core/agentDirectorDeliveryHandoff";
+import {
   loadProjectRealChainStatus,
   type ProjectRealChainUiState,
   type ProjectWorkbenchStoryShotFact,
@@ -2868,6 +2872,15 @@ function App() {
   );
   const projectRealChainRelayQueue = projectRealChainState.summary?.relayQueue
     || (projectRealChainState as ProjectRealChainUiState & { relayQueue?: VideoRelayQueueState }).relayQueue;
+  const promotedDeliveryHandoff = useMemo(() => buildAgentDirectorDeliveryHandoff({
+    project: prototypeProjectVibe,
+    projectRoot: effectiveRuntimeProjectIdentity?.projectRoot,
+    projectFactHash: hashProjectVibeFacts(prototypeProjectVibe),
+  }), [effectiveRuntimeProjectIdentity?.projectRoot, prototypeProjectVibe]);
+  const promotedDeliveryPreviewQueue = useMemo(
+    () => agentDirectorDeliveryHandoffPreviewQueue(promotedDeliveryHandoff, prototypeProjectVibe),
+    [promotedDeliveryHandoff, prototypeProjectVibe],
+  );
   const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
     summary: projectRealChainState.summary,
     previewItems: projectRealChainState.summary?.previewItems,
@@ -2893,9 +2906,14 @@ function App() {
     prototypeProjectVibe.receipts?.reviewReceipts,
     workbenchRuntimeState.storyFlow.shots,
   ]);
-  const returnedVideoPreviewCount = currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.returned).length;
-  const pendingVideoReviewCount = currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.reviewRequired).length;
+  const returnedVideoPreviewCount = promotedDeliveryHandoff.status === "ready"
+    ? promotedDeliveryHandoff.media.length
+    : currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.returned).length;
+  const pendingVideoReviewCount = promotedDeliveryHandoff.status === "ready"
+    ? 0
+    : currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.reviewRequired).length;
   const pendingVideoReviewFocusIdentity = useMemo(() => {
+    if (promotedDeliveryHandoff.status === "ready") return "";
     const returnedReviewItems = currentProjectPreviewProjection.items
       .filter((item) => item.kind === "video_clip" && item.returned && item.reviewRequired)
       .map((item) => [
@@ -2912,7 +2930,7 @@ function App() {
       currentProjectPreviewProjection.projectRoot || "",
       ...returnedReviewItems,
     ].join("|");
-  }, [currentProjectPreviewProjection]);
+  }, [currentProjectPreviewProjection, promotedDeliveryHandoff.status]);
   useEffect(() => {
     if (!pendingVideoReviewFocusIdentity) {
       pendingVideoReviewFocusIdentityRef.current = "";
@@ -2924,7 +2942,9 @@ function App() {
   }, [directorView, pendingVideoReviewFocusIdentity]);
   const currentProjectPreviewQueue = useMemo(() => {
     const base = effectiveRuntimeProjectBinding.status === "bound"
-      ? currentProjectPreviewProjection.queue
+      ? promotedDeliveryHandoff.status === "ready"
+        ? promotedDeliveryPreviewQueue
+        : currentProjectPreviewProjection.queue
       : [];
     const withGate = (() => {
       if (!realImage2Gate || !realImage2Gate.promoted || !realImage2Gate.latestOutputFile) return base;
@@ -2952,6 +2972,8 @@ function App() {
   }, [
     currentProjectPreviewProjection.queue,
     effectiveRuntimeProjectBinding.status,
+    promotedDeliveryHandoff.status,
+    promotedDeliveryPreviewQueue,
     realImage2Gate?.promoted,
     realImage2Gate?.latestOutputFile,
     realImage2Gate?.shotId,

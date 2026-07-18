@@ -11,7 +11,7 @@ import type {
 } from "./types";
 import type { ExportBuilderState } from "./exportBuilder";
 import type { KnowledgePack } from "./knowledgeTypes";
-import type { ProjectVibeDocument } from "../project/types";
+import type { ProjectVibeDocument, ProjectVibeReviewReceipt } from "../project/types";
 import { buildFinalVideoCompositionPlan } from "./finalVideoPlan";
 import {
   JIMENG_CLI_DEFAULT_RESUME_INTERVAL_SECONDS,
@@ -154,6 +154,7 @@ export interface BuildExportWorkerStateInput {
     identity: ExportDeliveryProjectIdentity;
     confirmation?: ExportDeliveryConfirmation;
     completedReceipts?: unknown[];
+    reviewReceipts?: ProjectVibeReviewReceipt[];
   };
   /** @deprecated A boolean cannot authorize export execution. */
   confirmation?: boolean;
@@ -1239,8 +1240,12 @@ function resumeCommandFor(result: DemoPackageVideoResult, request?: ReturnType<t
   return `dreamina query_result --submit_id=${submitId} --download_dir=${videoDir}`;
 }
 
+function deliveryReviewReceipts(input: BuildExportWorkerStateInput) {
+  return input.delivery?.reviewReceipts || input.projectVibe?.receipts?.reviewReceipts || [];
+}
+
 function applyReviewReceipts(input: BuildExportWorkerStateInput, result: DemoPackageVideoResult): DemoPackageVideoResult {
-  const receipts = input.projectVibe?.receipts?.reviewReceipts || [];
+  const receipts = deliveryReviewReceipts(input);
   const resolution = resolveExportDeliveryMediaReview({
     id: result.id,
     shotId: result.shotId,
@@ -1432,7 +1437,7 @@ function deliveryGateForInput(input: BuildExportWorkerStateInput): ExportDeliver
       outputHash: result.outputHash,
       reviewReceiptId: result.reviewReceiptId,
     })),
-    reviewReceipts: input.projectVibe?.receipts?.reviewReceipts,
+    reviewReceipts: deliveryReviewReceipts(input),
     confirmation: input.delivery?.confirmation,
     completedReceipts: input.delivery?.completedReceipts,
   });

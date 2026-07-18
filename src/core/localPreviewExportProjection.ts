@@ -5,6 +5,11 @@ import type { KnowledgePack } from "./knowledgeTypes";
 import type { ProjectRuntimeState } from "./projectState";
 import type { ExportProfileKind, PreviewEvent, ProjectPreviewExportState, ShotRecord } from "./types";
 import type { ProjectVibeDocument } from "../project/types";
+import {
+  agentDirectorDeliveryHandoffPreviewQueue,
+  buildAgentDirectorDeliveryHandoff,
+  type AgentDirectorDeliveryHandoffProjection,
+} from "./agentDirectorDeliveryHandoff";
 
 export const localPreviewExportProjectionSchemaVersion = "0.1.0";
 
@@ -19,6 +24,7 @@ export interface LocalPreviewExportProjection {
   packageStatus: ProjectPreviewExportState["exportPackagePlan"]["status"];
   missingCount: number;
   needsReviewCount: number;
+  deliveryHandoff?: AgentDirectorDeliveryHandoffProjection;
 }
 
 export interface BuildLocalPreviewExportProjectionInput {
@@ -89,13 +95,29 @@ function readyExportProfileSelection(previewExport: ProjectPreviewExportState): 
 export function buildLocalPreviewExportProjection(input: BuildLocalPreviewExportProjectionInput): LocalPreviewExportProjection {
   const generatedAt = input.generatedAt || input.runtimeState.generatedAt;
   const projectRoot = input.projectRoot || input.runtimeState.project.root;
+  const deliveryHandoff = input.projectVibe
+    ? buildAgentDirectorDeliveryHandoff({
+      project: input.projectVibe,
+      projectRoot,
+      projectFactHash: input.projectFactHash,
+    })
+    : undefined;
+  const effectivePreviewQueue = deliveryHandoff?.status === "ready"
+    ? agentDirectorDeliveryHandoffPreviewQueue(deliveryHandoff, input.projectVibe!)
+    : deliveryHandoff?.promotionReceiptCount
+      ? []
+      : input.previewQueue;
+  const exportPreviewQueue = effectivePreviewQueue.map((item) => ({
+    ...item,
+    mediaPath: projectRelativeLocalReference(item.mediaPath, projectRoot),
+  }));
   const exportShots = input.shots.map((shot) => ({
     ...shot,
     startFrame: projectRelativeLocalReference(shot.startFrame, projectRoot),
     endFrame: projectRelativeLocalReference(shot.endFrame, projectRoot),
     videoPath: projectRelativeLocalReference(shot.videoPath, projectRoot),
   }));
-  const previewEvents = queueToPreviewEvents(input.previewQueue);
+  const previewEvents = queueToPreviewEvents(exportPreviewQueue);
   const taskViews = input.runtimeState.taskRuns.taskViews.map((task) => ({
     job: task.job,
     shotId: task.shotId,
@@ -133,6 +155,11 @@ export function buildLocalPreviewExportProjection(input: BuildLocalPreviewExport
         projectRoot,
         projectFactHash: input.projectFactHash || "",
       },
+      reviewReceipts: deliveryHandoff?.status === "ready"
+        ? deliveryHandoff.reviewReceipts
+        : deliveryHandoff?.promotionReceiptCount
+          ? []
+          : undefined,
     },
   });
 
@@ -140,12 +167,13 @@ export function buildLocalPreviewExportProjection(input: BuildLocalPreviewExport
     schemaVersion: localPreviewExportProjectionSchemaVersion,
     generatedAt,
     projectRoot,
-    previewQueue: input.previewQueue,
+    previewQueue: effectivePreviewQueue,
     previewExport,
     exportWorker,
     exportRoot,
     packageStatus: previewExport.exportPackagePlan.status,
-    missingCount: input.previewQueue.filter((item) => item.kind === "missing_placeholder").length,
-    needsReviewCount: input.previewQueue.filter(reviewRequired).length,
+    missingCount: effectivePreviewQueue.filter((item) => item.kind === "missing_placeholder").length,
+    needsReviewCount: effectivePreviewQueue.filter(reviewRequired).length,
+    deliveryHandoff,
   };
 }
