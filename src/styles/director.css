@@ -12111,47 +12111,6 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   cursor: not-allowed;
 }
 
-.minimal-agent-review-selection-boundary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border-left: 3px solid var(--signal-running);
-  background: var(--signal-running-soft);
-  padding: 9px 10px;
-}
-
-.minimal-agent-review-selection-boundary div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.minimal-agent-review-selection-boundary span,
-.minimal-agent-review-selection-boundary small {
-  color: var(--signal-muted);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.minimal-agent-review-selection-boundary strong {
-  color: var(--signal-ink);
-  font-size: 13px;
-}
-
-.minimal-agent-review-selection-boundary button {
-  flex: 0 0 auto;
-  min-height: 32px;
-  border: 1px solid var(--signal-line-strong);
-  border-radius: 4px;
-  background: var(--signal-surface);
-  color: var(--signal-ink);
-  padding: 0 9px;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .minimal-agent-review-promotion {
   justify-content: flex-start;
   min-width: 0;

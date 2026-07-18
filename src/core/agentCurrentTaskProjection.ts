@@ -18,6 +18,8 @@ export type AgentCurrentTaskStep =
   | "prepare_references"
   | "submit_video"
   | "compare_versions"
+  | "confirm_version_selection"
+  | "confirm_project_fact_promotion"
   | "export"
   | "idle";
 
@@ -28,11 +30,13 @@ export type AgentCurrentTaskSource =
   | "staged_plan"
   | "pipeline_job"
   | "pipeline_plan"
+  | "review_selection_confirmation"
+  | "review_promotion_confirmation"
   | "project_observation"
   | "project_status";
 
 export type AgentCurrentTaskEffect = "none" | "state_only" | "generation_job" | "local_export";
-export type AgentCurrentTaskConfirmationKind = "pipeline_action" | "project_edit";
+export type AgentCurrentTaskConfirmationKind = "pipeline_action" | "project_edit" | "review_selection" | "project_fact_promotion";
 
 export interface AgentCurrentTaskFact {
   label: string;
@@ -136,6 +140,14 @@ export interface AgentCurrentTaskProjectionInput {
     activeJobId: string;
     activeActionId: string;
   };
+  reviewSelection?: {
+    status: "compare" | "selection_confirmation" | "selected" | "promotion_confirmation" | "blocked";
+    winnerVersion?: "A" | "B";
+    selectionReceiptId?: string;
+    selectionConfirmation?: { confirmationId: string; actionId: string };
+    promotionConfirmation?: { confirmationId: string; actionId: string };
+    blockers?: string[];
+  };
   facts?: AgentCurrentTaskFact[];
 }
 
@@ -196,6 +208,8 @@ function labelForStep(step: AgentCurrentTaskStep) {
   if (step === "prepare_references") return "补参考";
   if (step === "submit_video") return "发送视频";
   if (step === "compare_versions") return "比较两个视频版本";
+  if (step === "confirm_version_selection") return "确认获胜版本";
+  if (step === "confirm_project_fact_promotion") return "确认晋级项目事实";
   if (step === "export") return "导出交付包";
   return "继续描述想法";
 }
@@ -206,6 +220,7 @@ function confirmationRequiredForStep(step: AgentCurrentTaskStep) {
 
 function effectForStep(step: AgentCurrentTaskStep): AgentCurrentTaskEffect {
   if (step === "choose_save_location") return "state_only";
+  if (step === "confirm_version_selection" || step === "confirm_project_fact_promotion") return "state_only";
   if (step === "prepare_references" || step === "submit_video") return "generation_job";
   if (step === "export") return "local_export";
   return "none";
@@ -495,6 +510,56 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
       actionId: input.restoredStagedPlan.actionId,
       blockers: input.restoredStagedPlan.blockers || [],
       facts: factsForInput(input, input.restoredStagedPlan.facts || []),
+    });
+  }
+
+  if (input.reviewVersionPair && input.reviewSelection?.status === "selection_confirmation" && input.reviewSelection.selectionConfirmation) {
+    return buildProjection({
+      source: "review_selection_confirmation",
+      step: "confirm_version_selection",
+      label: `确认选择版本 ${input.reviewSelection.winnerVersion || input.reviewVersionPair.activeVersion}`,
+      requiresConfirmation: true,
+      effect: "state_only",
+      confirmationKind: "review_selection",
+      confirmationId: input.reviewSelection.selectionConfirmation.confirmationId,
+      actionId: input.reviewSelection.selectionConfirmation.actionId,
+      blockers: input.reviewSelection.blockers || [],
+      facts: factsForInput(input, [
+        { label: "版本", value: input.reviewSelection.winnerVersion || input.reviewVersionPair.activeVersion },
+        { label: "镜头", value: input.reviewVersionPair.shotId },
+        { label: "结果", value: "只写选择回执" },
+      ]),
+    });
+  }
+
+  if (input.reviewVersionPair && input.reviewSelection?.status === "promotion_confirmation" && input.reviewSelection.promotionConfirmation) {
+    return buildProjection({
+      source: "review_promotion_confirmation",
+      step: "confirm_project_fact_promotion",
+      label: `确认版本 ${input.reviewSelection.winnerVersion || input.reviewVersionPair.activeVersion} 晋级`,
+      requiresConfirmation: true,
+      effect: "state_only",
+      confirmationKind: "project_fact_promotion",
+      confirmationId: input.reviewSelection.promotionConfirmation.confirmationId,
+      actionId: input.reviewSelection.promotionConfirmation.actionId,
+      blockers: input.reviewSelection.blockers || [],
+      facts: factsForInput(input, [
+        { label: "获胜版本", value: input.reviewSelection.winnerVersion || input.reviewVersionPair.activeVersion },
+        { label: "镜头", value: input.reviewVersionPair.shotId },
+        input.reviewSelection.selectionReceiptId ? { label: "选择回执", value: input.reviewSelection.selectionReceiptId } : undefined,
+      ].filter((fact): fact is AgentCurrentTaskFact => Boolean(fact))),
+    });
+  }
+
+  if (input.reviewVersionPair && input.reviewSelection?.status === "blocked") {
+    return buildProjection({
+      source: "project_observation",
+      step: "compare_versions",
+      label: `比较 ${input.reviewVersionPair.shotId} 两个版本`,
+      requiresConfirmation: false,
+      effect: "none",
+      blockers: input.reviewSelection.blockers || ["review_selection_blocked"],
+      facts: factsForInput(input, [{ label: "版本", value: "A / B" }]),
     });
   }
 

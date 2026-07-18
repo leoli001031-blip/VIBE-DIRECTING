@@ -196,4 +196,25 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 - Evidence:
   `docs/evidence/p10-d-version-pair-20260719/packaged-observation.json`.
 
+## P10-D8 packaged update
+
+- Candidate selection now persists as its own confirmation and receipt; cold
+  start restores that exact boundary without reviving the passive Review card.
+- Selection confirmation and project-fact promotion use different confirmation
+  and action identities. Selection does not alter Project.vibe, Visual Memory,
+  either candidate, or Delivery.
+- The promotion turn exposes one explicit `确认晋级项目事实` action and no
+  export action. Its cold restore retains the exact selection receipt binding.
+- Explicit local promotion of B changed the project fact hash from
+  `pv_de13842f` to `pv_988bc5d5` and appended one identity-complete
+  `agent_video_promotion` receipt.
+- After promotion, the old A/B pair, selection card, promotion card, and old
+  generation ledger remain historical and cannot reclaim the current task.
+- Version A and B retained byte-identical SHA-256 values; the losing candidate
+  was not removed.
+- Provider calls, external task submissions, fees, Delivery actions, and exports
+  remained zero.
+- Evidence:
+  `docs/evidence/p10-d-review-selection-20260719/packaged-observation.json`.
+
 final result: passed

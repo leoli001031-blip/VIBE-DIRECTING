@@ -3,6 +3,13 @@ import type { AgentVideoGenerationJob } from "../src/core/agentVideoProductionCo
 import { buildAgentDirectorTurnProjection } from "../src/ui/director/agentDirectorTurnProjection.ts";
 import { buildAgentDirectorReviewRevisionIntent } from "../src/ui/director/agentDirectorReviewRevision.ts";
 import { buildAgentDirectorReviewVersionPair } from "../src/core/agentDirectorReviewVersionPair.ts";
+import {
+  buildAgentDirectorReviewSelectionProjection,
+  confirmAgentDirectorReviewSelection,
+  createAgentDirectorReviewSelectionLedger,
+  stageAgentDirectorReviewPromotion,
+  stageAgentDirectorReviewSelection,
+} from "../src/core/agentDirectorReviewSelection.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -266,6 +273,101 @@ const mismatchedPairReview = buildAgentDirectorTurnProjection({
 });
 assert(mismatchedPairReview.mode === "blocked", "a target for B must not be selectable while A is active");
 assert(mismatchedPairReview.actions.find((action) => action.id === "select_candidate")?.enabled === false, "mismatched active candidate identity must fail closed");
+
+const selectionLedger = createAgentDirectorReviewSelectionLedger({
+  projectId: versionPair.projectId,
+  projectRoot: versionPair.projectRoot,
+  projectFactHash: versionPair.projectFactHash,
+  createdAt: "2026-07-17T01:06:00.000Z",
+});
+const stagedSelection = stageAgentDirectorReviewSelection({
+  ledger: selectionLedger,
+  pair: versionPair,
+  winnerVersion: "B",
+  generatedAt: "2026-07-17T01:06:01.000Z",
+});
+assert(stagedSelection.ok && stagedSelection.confirmation, "version B should stage an independent selection confirmation");
+const selectionProjection = buildAgentDirectorReviewSelectionProjection({ ledger: stagedSelection.ledger, pair: versionPair });
+const selectionTurn = buildAgentDirectorTurnProjection({
+  task: task({
+    source: "review_selection_confirmation",
+    step: "confirm_version_selection",
+    label: "确认选择版本 B",
+    requiresConfirmation: true,
+    effect: "state_only",
+    confirmationKind: "review_selection",
+    confirmationId: stagedSelection.confirmation.confirmationId,
+    actionId: stagedSelection.confirmation.actionId,
+  }),
+  currentProjectFactHash: "p10-d-fact-hash",
+  reviewVersionPair: versionPair,
+  activeReviewVersion: "B",
+  reviewSelection: selectionProjection,
+  reviewJob: returnedReviewJobB,
+  reviewTarget: pairReview.reviewTarget,
+});
+assert(selectionTurn.mode === "confirmation" && selectionTurn.phase === "selection", "an exact selection confirmation should own the right-rail turn");
+assert(selectionTurn.confirmationIdentityReady, "selection confirmation must bind its exact confirmation and action ids");
+assert(selectionTurn.actions.find((action) => action.id === "confirm_review_selection")?.effect === "review_selection", "selection confirmation must only write the independent selection record");
+assert(selectionTurn.actions.find((action) => action.id === "confirm_review_selection")?.boundary.includes("不会修改项目事实"), "selection confirmation must stop before project-fact promotion");
+assert(!selectionTurn.actions.some((action) => action.id === "confirm_project_fact_promotion"), "selection confirmation must not collapse into promotion");
+
+const selectedVersion = confirmAgentDirectorReviewSelection({
+  ledger: stagedSelection.ledger,
+  pair: versionPair,
+  confirmationId: stagedSelection.confirmation.confirmationId,
+  reviewerId: "local_user",
+  generatedAt: "2026-07-17T01:06:02.000Z",
+});
+assert(selectedVersion.ok && selectedVersion.receipt, "confirmed selection should write an identity-complete selection record");
+const stagedPromotion = stageAgentDirectorReviewPromotion({
+  ledger: selectedVersion.ledger,
+  pair: versionPair,
+  selectionReceiptId: selectedVersion.receipt.receiptId,
+  generatedAt: "2026-07-17T01:06:03.000Z",
+});
+assert(stagedPromotion.ok && stagedPromotion.promotionConfirmation, "selected winner should stage a separate promotion confirmation");
+const promotionProjection = buildAgentDirectorReviewSelectionProjection({ ledger: stagedPromotion.ledger, pair: versionPair });
+const promotionTurn = buildAgentDirectorTurnProjection({
+  task: task({
+    source: "review_promotion_confirmation",
+    step: "confirm_project_fact_promotion",
+    label: "确认版本 B 晋级",
+    requiresConfirmation: true,
+    effect: "state_only",
+    confirmationKind: "project_fact_promotion",
+    confirmationId: stagedPromotion.promotionConfirmation.confirmationId,
+    actionId: stagedPromotion.promotionConfirmation.actionId,
+  }),
+  currentProjectFactHash: "p10-d-fact-hash",
+  reviewVersionPair: versionPair,
+  activeReviewVersion: "B",
+  reviewSelection: promotionProjection,
+  reviewJob: returnedReviewJobB,
+  reviewTarget: pairReview.reviewTarget,
+});
+assert(promotionTurn.mode === "confirmation" && promotionTurn.phase === "selection", "an exact promotion confirmation should own a separate right-rail turn");
+assert(promotionTurn.actions.find((action) => action.id === "confirm_project_fact_promotion")?.effect === "project_fact_promotion", "promotion action must be distinct from candidate selection");
+assert(promotionTurn.actions.find((action) => action.id === "confirm_project_fact_promotion")?.boundary.includes("不会导出"), "promotion must stop before Delivery");
+assert(!promotionTurn.actions.some((action) => action.id === "confirm_review_selection"), "promotion confirmation must not repeat the selection action");
+
+const stalePromotionTurn = buildAgentDirectorTurnProjection({
+  ...{
+    task: promotionTurn.task,
+    currentProjectFactHash: "p10-d-fact-hash",
+    reviewVersionPair: versionPair,
+    activeReviewVersion: "B" as const,
+    reviewSelection: promotionProjection,
+    reviewJob: returnedReviewJobB,
+    reviewTarget: pairReview.reviewTarget,
+  },
+  task: task({
+    ...promotionTurn.task,
+    confirmationId: "stale-promotion-confirmation",
+  }),
+});
+assert(stalePromotionTurn.mode === "blocked", "a stale promotion confirmation must fail closed");
+assert(stalePromotionTurn.actions.find((action) => action.id === "confirm_project_fact_promotion")?.enabled === false, "stale promotion identity must disable fact mutation");
 
 const reviewRevisionIntent = buildAgentDirectorReviewRevisionIntent({
   identity: returnedReviewJob.reviewResult!,

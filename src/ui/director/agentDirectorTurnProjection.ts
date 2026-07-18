@@ -14,6 +14,7 @@ import {
   type AgentDirectorReviewVersion,
   type AgentDirectorReviewVersionPair,
 } from "../../core/agentDirectorReviewVersionPair";
+import type { AgentDirectorReviewSelectionProjection } from "../../core/agentDirectorReviewSelection";
 import type { CreatorReviewTrayItem } from "./creatorDeskTypes";
 import type { AgentDirectorReviewRevisionIntent } from "./agentDirectorReviewRevision";
 import type { AgentDirectorReviewRegenerationProposal } from "./agentDirectorReviewRegeneration";
@@ -27,6 +28,7 @@ export type AgentDirectorTurnPhase =
   | "confirmation"
   | "running"
   | "review"
+  | "selection"
   | "blocked"
   | "idle";
 
@@ -40,6 +42,9 @@ export type AgentDirectorTurnActionId =
   | "view_version_a"
   | "view_version_b"
   | "select_candidate"
+  | "confirm_review_selection"
+  | "cancel_review_selection"
+  | "confirm_project_fact_promotion"
   | "promote_project_fact";
 
 export type AgentDirectorTurnActionEffect =
@@ -142,6 +147,7 @@ export interface AgentDirectorTurnProjection {
   reviewTarget?: CreatorReviewTrayItem;
   reviewVersionPair?: AgentDirectorReviewVersionPair;
   activeReviewVersion?: AgentDirectorReviewVersion;
+  reviewSelection?: AgentDirectorReviewSelectionProjection;
   reviewRevisionIntent?: AgentDirectorReviewRevisionIntent;
   reviewRegenerationProposal?: AgentDirectorReviewRegenerationProposal;
   clarification?: AgentDirectorClarificationProjection;
@@ -261,6 +267,7 @@ export function buildAgentDirectorTurnProjection(input: {
   reviewTarget?: CreatorReviewTrayItem;
   reviewVersionPair?: AgentDirectorReviewVersionPair;
   activeReviewVersion?: AgentDirectorReviewVersion;
+  reviewSelection?: AgentDirectorReviewSelectionProjection;
   reviewRevisionIntent?: AgentDirectorReviewRevisionIntent;
   reviewRegenerationProposal?: AgentDirectorReviewRegenerationProposal;
   clarification?: Omit<AgentDirectorClarificationProjection, "options"> & {
@@ -277,6 +284,7 @@ export function buildAgentDirectorTurnProjection(input: {
     reviewTarget,
     reviewVersionPair,
     activeReviewVersion = "B",
+    reviewSelection,
     reviewRevisionIntent,
     reviewRegenerationProposal,
     clarification,
@@ -316,6 +324,7 @@ export function buildAgentDirectorTurnProjection(input: {
       && reviewTarget.outputHash?.toLowerCase() === activePairCandidate.identity.outputHash.toLowerCase()
       && normalizeMediaPath(reviewTarget.mediaPath) === normalizeMediaPath(activePairCandidate.identity.outputPath),
   );
+  const reviewSelectionTask = task.step === "confirm_version_selection" || task.step === "confirm_project_fact_promotion";
   const paidConfirmationTask = task.requiresConfirmation
     && task.effect === "generation_job"
     && task.source !== "pipeline_job";
@@ -456,6 +465,63 @@ export function buildAgentDirectorTurnProjection(input: {
         requiresConfirmation: false,
         boundary: visibleReviewRevisionIntent.boundary,
       }],
+    };
+  }
+
+  if (reviewSelectionTask) {
+    const pairReady = Boolean(reviewVersionPair && reviewVersionPairReady);
+    const selectionConfirmation = reviewSelection?.selectionConfirmation;
+    const promotionConfirmation = reviewSelection?.promotionConfirmation;
+    const selectionIdentityReady = task.step === "confirm_version_selection"
+      ? Boolean(
+        reviewSelection?.status === "selection_confirmation"
+          && selectionConfirmation
+          && task.confirmationId === selectionConfirmation.confirmationId
+          && task.actionId === selectionConfirmation.actionId,
+      )
+      : Boolean(
+        reviewSelection?.status === "promotion_confirmation"
+          && reviewSelection.selectionReceipt
+          && promotionConfirmation
+          && promotionConfirmation.selectionReceiptId === reviewSelection.selectionReceipt.receiptId
+          && task.confirmationId === promotionConfirmation.confirmationId
+          && task.actionId === promotionConfirmation.actionId,
+      );
+    if (!pairReady) blockers.push("当前版本对已失效，不能继续选择或晋级。");
+    if (!selectionIdentityReady) blockers.push("当前选择回执或确认身份不一致，不能继续。");
+    const promotion = task.step === "confirm_project_fact_promotion";
+    return {
+      mode: blockers.length ? "blocked" : "confirmation",
+      phase: "selection",
+      task,
+      reviewTarget,
+      reviewVersionPair,
+      activeReviewVersion: reviewSelection?.winnerVersion || activeReviewVersion,
+      reviewSelection,
+      confirmationIdentityReady: selectionIdentityReady,
+      runningIdentityReady,
+      reviewIdentityReady,
+      blockers,
+      actions: [
+        {
+          id: promotion ? "confirm_project_fact_promotion" : "confirm_review_selection",
+          label: promotion ? "确认晋级项目事实" : `确认选择版本 ${reviewSelection?.winnerVersion || activeReviewVersion}`,
+          effect: promotion ? "project_fact_promotion" : "review_selection",
+          enabled: pairReady && selectionIdentityReady && !blockers.length,
+          requiresConfirmation: true,
+          boundary: promotion
+            ? "只把已选择且已人工复核的获胜版本晋级为项目事实；不会导出。"
+            : "只写入独立选择回执；不会修改项目事实、Visual Memory 或 Delivery。",
+        },
+        {
+          id: "cancel_review_selection",
+          label: "返回比较",
+          effect: "job_observation",
+          enabled: true,
+          requiresConfirmation: false,
+          boundary: "保留两个候选和历史回执，返回 A/B 比较。",
+        },
+      ],
     };
   }
 

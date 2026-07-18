@@ -697,7 +697,7 @@ export function validateProjectVibe(project: ProjectVibeDocument): ProjectVibeVa
 
   for (const receipt of receipts.reviewReceipts) {
     if (receipt.providerSelfReportIgnored !== true) errors.push(`review receipt ${receipt.id} providerSelfReportIgnored must be true.`);
-    if (receipt.decisionScope === "agent_video_preview") {
+    if (receipt.decisionScope === "agent_video_preview" || receipt.decisionScope === "agent_video_promotion") {
       if (receipt.projectId !== project.manifest.projectId) errors.push(`review receipt ${receipt.id} must bind the current projectId.`);
       if (!receipt.projectRoot) errors.push(`review receipt ${receipt.id} must carry projectRoot.`);
       if (!receipt.projectFactHash) errors.push(`review receipt ${receipt.id} must carry projectFactHash.`);
@@ -707,7 +707,15 @@ export function validateProjectVibe(project: ProjectVibeDocument): ProjectVibeVa
       if (!receipt.sourceReceiptId) errors.push(`review receipt ${receipt.id} must carry sourceReceiptId.`);
       if (!receipt.outputPath || !isPortableProjectPath(receipt.outputPath)) errors.push(`review receipt ${receipt.id} must carry a project-relative outputPath.`);
       if (!/^sha256:[a-f0-9]{64}$/i.test(receipt.outputHash || "")) errors.push(`review receipt ${receipt.id} must carry a SHA-256 outputHash.`);
-      if (receipt.promotionAuthorized) errors.push(`review receipt ${receipt.id} cannot promote project facts during preview approval.`);
+      if (receipt.decisionScope === "agent_video_preview" && receipt.promotionAuthorized) errors.push(`review receipt ${receipt.id} cannot promote project facts during preview approval.`);
+      if (receipt.decisionScope === "agent_video_promotion") {
+        if (!receipt.selectionReceiptId) errors.push(`review receipt ${receipt.id} must carry selectionReceiptId.`);
+        if (!receipt.versionPairId) errors.push(`review receipt ${receipt.id} must carry versionPairId.`);
+        if (receipt.winnerVersion !== "A" && receipt.winnerVersion !== "B") errors.push(`review receipt ${receipt.id} must carry winnerVersion.`);
+        if (!receipt.promotionActionId) errors.push(`review receipt ${receipt.id} must carry promotionActionId.`);
+        if (!receipt.promotionConfirmationId) errors.push(`review receipt ${receipt.id} must carry promotionConfirmationId.`);
+        if (!receipt.promotionAuthorized) errors.push(`review receipt ${receipt.id} must authorize the explicit project-fact promotion.`);
+      }
     }
     if (receipt.status === "approved") {
       if (!receipt.humanReviewed) errors.push(`approved review receipt ${receipt.id} must be humanReviewed.`);

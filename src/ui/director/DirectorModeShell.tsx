@@ -11,6 +11,7 @@ import {
   buildAgentDirectorReviewVersionPair,
   type AgentDirectorReviewVersion,
 } from "../../core/agentDirectorReviewVersionPair";
+import type { AgentDirectorReviewSelectionLedger } from "../../core/agentDirectorReviewSelection";
 import { agentNewVideoProjectTargetMode } from "../../core/agentNewVideoProjectTarget";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft, ProjectVibeReviewReceipt } from "../../project";
 import {
@@ -171,6 +172,8 @@ function currentTaskObjectLabel(step: AgentCurrentTaskProjection["step"] | undef
   if (step === "prepare_references") return "参考素材";
   if (step === "submit_video") return "视频任务";
   if (step === "compare_versions") return "版本复核";
+  if (step === "confirm_version_selection") return "版本选择";
+  if (step === "confirm_project_fact_promotion") return "事实晋级";
   if (step === "export") return "交付资料";
   return "当前项目";
 }
@@ -601,6 +604,7 @@ export function DirectorMode({
   restoredAgentActionLog,
   restoredAgentTimelineEntries,
   restoredAgentGenerationJobLedger,
+  restoredAgentReviewSelectionLedger,
   reviewReceipts,
   onNewVideoStatusChange,
   onStagePrototypeAgentPlan,
@@ -609,6 +613,8 @@ export function DirectorMode({
   onRememberAgentActionLogItem,
   onRememberAgentTimelineEntries,
   onRememberAgentGenerationJobLedger,
+  onRememberAgentReviewSelectionLedger,
+  onPromoteAgentReviewSelection,
   onPreviewPrototypeAgentDemo,
 }: {
   audit: ProjectAudit;
@@ -694,6 +700,7 @@ export function DirectorMode({
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
   restoredAgentGenerationJobLedger?: AgentVideoGenerationJobLedger;
+  restoredAgentReviewSelectionLedger?: AgentDirectorReviewSelectionLedger;
   reviewReceipts?: ProjectVibeReviewReceipt[];
   onNewVideoStatusChange?: (status?: NewVideoStartStatus) => void;
   onStagePrototypeAgentPlan?: (input: StagePrototypeAgentPlanInput) => StagePrototypeAgentPlanResult | void | Promise<StagePrototypeAgentPlanResult | void>;
@@ -702,6 +709,12 @@ export function DirectorMode({
   onRememberAgentActionLogItem?: (item: ProjectAgentActionLogItem) => void | Promise<void>;
   onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
   onRememberAgentGenerationJobLedger?: (ledger: AgentVideoGenerationJobLedger) => void | Promise<void>;
+  onRememberAgentReviewSelectionLedger?: (ledger: AgentDirectorReviewSelectionLedger) => void | Promise<void>;
+  onPromoteAgentReviewSelection?: (input: {
+    pair: NonNullable<ReturnType<typeof buildAgentDirectorReviewVersionPair>["pair"]>;
+    ledger: AgentDirectorReviewSelectionLedger;
+    promotionConfirmationId: string;
+  }) => unknown | Promise<unknown>;
   onPreviewPrototypeAgentDemo?: (input: PreviewPrototypeAgentDemoInput) => PreviewPrototypeAgentDemoResult | void | Promise<PreviewPrototypeAgentDemoResult | void>;
 }) {
   const folderReady = Boolean(localProjectReady);
@@ -1360,6 +1373,7 @@ export function DirectorMode({
             restoredAgentActionLog={showNewVideoStart ? [] : restoredAgentActionLog}
             restoredAgentTimelineEntries={surfaceAgentTimelineEntries}
             restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+            restoredAgentReviewSelectionLedger={restoredAgentReviewSelectionLedger}
             reviewReceipts={reviewReceipts}
             onStagePrototypeAgentPlan={showNewVideoStart ? undefined : onStagePrototypeAgentPlan}
             onClearPrototypeAgentPlan={onClearPrototypeAgentPlan}
@@ -1367,6 +1381,8 @@ export function DirectorMode({
             onRememberAgentActionLogItem={onRememberAgentActionLogItem}
             onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
             onRememberAgentGenerationJobLedger={onRememberAgentGenerationJobLedger}
+            onRememberAgentReviewSelectionLedger={onRememberAgentReviewSelectionLedger}
+            onPromoteAgentReviewSelection={onPromoteAgentReviewSelection}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
             agentCommand={surfaceAgentCommand}
             projectObservation={projectNavReady ? creatorDesk?.projectObservation : undefined}

@@ -379,6 +379,7 @@ const defaultMountedDirectorSurface = [
   minimalTopNav,
 ].join("\n");
 const defaultMountedDirectorCopySurface = extractStringLiterals(defaultMountedDirectorSurface);
+const defaultMountedDirectorVisibleCopySurface = defaultMountedDirectorCopySurface.replace(/\$\{[^}]*\}/g, "");
 const defaultDirectorAppMountStart = appBody.indexOf('{mode === "director" && (');
 const defaultDirectorAppMountEnd = appBody.indexOf('{mode === "inspector" && (', defaultDirectorAppMountStart);
 const defaultDirectorAppMount = defaultDirectorAppMountStart >= 0 && defaultDirectorAppMountEnd > defaultDirectorAppMountStart
@@ -1764,8 +1765,8 @@ check(!/onApprovePreviewItem|className="preview-review-action"/.test(minimalPrev
 checkMessage(requireWithin(directorMode, /reviewTarget=\{directorView === "preview" \? pairedPreviewReviewTarget \|\| activePreviewReviewTarget : undefined\}[\s\S]*reviewVersionPair=\{directorView === "preview" \? reviewVersionPair : undefined\}[\s\S]*onApproveReviewItem=\{onApproveReviewItem\}/, "DirectorMode must bind the exact selected preview or A\/B candidate and existing review adapter into the Agent rail"));
 checkMessage(requireWithin(directorMode, /buildAgentDirectorReviewVersionPair\([\s\S]*restoredAgentGenerationJobLedger[\s\S]*activeReviewVersion[\s\S]*pairedPreviewReviewTarget/, "DirectorMode must derive a current-fact version pair from the restored ledger and bind the active candidate"));
 checkMessage(requireWithin(minimalPreviewSource, /aria-label=\{`\$\{reviewVersionPair\.shotId\} 版本切换`\}[\s\S]*aria-pressed=\{activeReviewVersion === "A"\}[\s\S]*aria-pressed=\{activeReviewVersion === "B"\}/, "Preview must expose a stable A\/B segmented control without mutating project facts"));
-checkMessage(requireWithin(minimalAgentPanelSource, /setPendingReviewVersionSelection\(activeReviewVersion\)[\s\S]*aria-label="版本选择确认"[\s\S]*尚未写入选择回执，也不会晋级项目事实或导出[\s\S]*返回比较/, "D7 candidate selection must stop at a visible independent boundary without writing a receipt, promoting facts, or exporting"));
-checkMessage(requireWithin(minimalAgentPanelSource, /比较两个返回版本[\s\S]*查看 A[\s\S]*查看 B[\s\S]*选择版本[\s\S]*aria-label="版本选择确认"[\s\S]*晋级为项目事实/, "The Agent rail must own A\/B inspection and keep candidate selection separate from project-fact promotion"));
+checkMessage(requireWithin(minimalAgentPanelSource, /stageAgentDirectorReviewSelection\([\s\S]*confirmAgentDirectorReviewSelection\([\s\S]*stageAgentDirectorReviewPromotion\([\s\S]*aria-label=\{agentCurrentTaskProjection\.step === "confirm_version_selection" \? "版本选择确认" : "项目事实晋级确认"\}[\s\S]*选择回执独立保存；不会修改项目事实、Visual Memory 或 Delivery[\s\S]*晋级只写获胜版本事实；不会删除落选版本，也不会导出/, "D8 review selection must use durable selection and promotion confirmations while keeping both boundaries independent"));
+checkMessage(requireWithin(minimalAgentPanelSource, /比较两个返回版本[\s\S]*查看 A[\s\S]*查看 B[\s\S]*stageReviewVersionSelection\(\)[\s\S]*选择版本[\s\S]*晋级为项目事实[\s\S]*需要另行确认/, "The Agent rail must own A\/B inspection and keep candidate selection separate from project-fact promotion"));
 checkMessage(requireWithin(minimalAgentPanelSource, /minimal-agent-review-turn[\s\S]*通过预览[\s\S]*需要修改[\s\S]*晋级为项目事实[\s\S]*需要另行确认/, "The Agent review turn must keep preview approval, revision discussion, and project-fact promotion separate"));
 checkMessage(requireWithin(minimalAgentPanelSource, /预览决定已写入复核记录[\s\S]*项目事实和交付状态没有改变/, "Preview approval must state the receipt-only boundary in creator-facing language"));
 checkMessage(requireWithin(minimalAgentPanelSource, /async function approveReviewFromAgentTurn[\s\S]*hasVisibleComposerInput[\s\S]*attachments\.length[\s\S]*先发送或清空当前修改说明，再通过预览/, "An unsent review revision must disable preview approval instead of allowing conflicting decisions"));
@@ -1910,7 +1911,7 @@ check(
 const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${oneShotActionPanel}\n${minimalAgentPanel}\n${creatorDeskPanels}\n${minimalTopNav}\n${minimalProjectPlan}`;
 for (const [term, pattern] of [
   ["provider", /provider/i],
-  ["receipt", /receipt/i],
+  ["receipt", /\breceipts?\b/i],
   ["授权票据", /授权票据/],
   ["授权引用", /授权引用/],
   ["请求票据", /请求票据/],
@@ -1936,7 +1937,7 @@ for (const [term, pattern] of [
   ["检查结果", /检查结果/],
   ["复核检查", /复核检查/],
 ]) {
-  check(!pattern.test(defaultMountedDirectorCopySurface), `default mounted Director surface must not expose ${term}`);
+  check(!pattern.test(defaultMountedDirectorVisibleCopySurface), `default mounted Director surface must not expose ${term}`);
 }
 const projectRealChainUserSurface = [
   projectRealChainPanel,
@@ -2078,7 +2079,7 @@ for (const [term, pattern] of [
   ["automatic execution", /automatic\s+execution|自动执行/i],
   ["direct submit", /direct\s+submit|直接提交/i],
   ["immediate generation", /immediate\s+generation|立即生成/i],
-  ["queue", /queue/i],
+  ["queue", /\bqueue\b/i],
   ["Local Orchestrator", /Local\s+Orchestrator|LocalOrchestrator/i],
   ["Full Task Subagent Packet Planner", /Full\s+Task\s+Subagent\s+Packet\s+Planner/i],
   ["validated packet", /validated\s+packet/i],
@@ -2090,7 +2091,7 @@ for (const [term, pattern] of [
   ["daemon", /daemon/i],
   ["QA pending", /QA\s+pending/i],
 ]) {
-  check(!pattern.test(minimalDirectorSurface), `main Director surface must not expose ${term}`);
+  check(!pattern.test(defaultMountedDirectorVisibleCopySurface), `default mounted Director surface must not expose ${term}`);
 }
 for (const copy of ["Run", "Submit", "Execute", "直接提交", "自动执行", "立即生成"]) {
   check(

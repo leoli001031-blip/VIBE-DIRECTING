@@ -1,0 +1,143 @@
+{
+  "schemaVersion": "p10_d8_packaged_acceptance/1.0.0",
+  "status": "pass",
+  "acceptedAt": "2026-07-18T17:50:36.565Z",
+  "fixture": {
+    "root": "/tmp/vibe-director-p10-d8-20260719-5vGkej",
+    "profileRoot": "/tmp/vibe-director-p10-d8-20260719-5vGkej/profile",
+    "projectsRoot": "/tmp/vibe-director-p10-d8-20260719-5vGkej/projects",
+    "runtimeRoot": "/tmp/vibe-director-p10-d8-20260719-5vGkej/runtime",
+    "projectRoot": "/tmp/vibe-director-p10-d8-20260719-5vGkej/projects/p10-d8-review-selection",
+    "projectId": "p10_d8_packaged_project",
+    "projectFactHash": "pv_de13842f",
+    "promotedProjectFactHash": "pv_988bc5d5",
+    "shotId": "P10D8S01",
+    "appPath": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app"
+  },
+  "candidates": [
+    {
+      "version": "A",
+      "jobId": "agent_video_job_p10_d8_pair_plan_submit_video_001",
+      "actionId": "p10d8_action_a",
+      "sourceConfirmationId": "p10d8_confirmation_a",
+      "sourceReceiptId": "p10d8_local_receipt_a",
+      "outputPath": "/tmp/vibe-director-p10-d8-20260719-5vGkej/projects/p10-d8-review-selection/video/P10D8S01-version-a.mp4",
+      "outputHash": "sha256:44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f",
+      "status": "needs_review",
+      "executionMode": "dry_run",
+      "providerCalled": false
+    },
+    {
+      "version": "B",
+      "jobId": "agent_video_job_p10_d8_pair_plan_submit_video_002",
+      "actionId": "p10d8_action_b",
+      "sourceConfirmationId": "p10d8_confirmation_b",
+      "sourceReceiptId": "p10d8_local_receipt_b",
+      "outputPath": "/tmp/vibe-director-p10-d8-20260719-5vGkej/projects/p10-d8-review-selection/video/P10D8S01-version-b.mp4",
+      "outputHash": "sha256:0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+      "status": "needs_review",
+      "executionMode": "dry_run",
+      "providerCalled": false
+    }
+  ],
+  "observations": {
+    "initial": {
+      "currentTaskStep": "compare_versions",
+      "currentTaskCount": 1,
+      "reviewTurnCount": 1,
+      "versionSwitchCount": 1,
+      "activeVersion": "B",
+      "videoSrc": "file:///tmp/vibe-director-p10-d8-20260719-5vGkej/projects/p10-d8-review-selection/video/P10D8S01-version-b.mp4",
+      "selectionLabel": "选择版本 B",
+      "requestChangesEnabled": true,
+      "promotionDisabled": true,
+      "exportButtonCount": 0
+    },
+    "selectionAndPromotionColdStart": {
+      "restoredSelection": {
+        "currentTaskStep": "confirm_version_selection",
+        "currentTaskCount": 1,
+        "selectionTurnCount": 1,
+        "reviewTurnCount": 0,
+        "confirmationId": "review_selection_confirmation_review_pair_P10D8S01_84338c66_b_001",
+        "confirmButtons": 1,
+        "promotionButtons": 0,
+        "bodyText": "本轮 · Selection确认选择版本 Bwaiting确认后只把版本 B 记为获胜候选。镜头P10D8S01获胜版本B版本对S01_84338c66选择回执确认后生成确认选择版本 B返回比较选择回执独立保存；不会修改项目事实、Visual Memory 或 Delivery。"
+      },
+      "stagedPromotion": {
+        "currentTaskStep": "confirm_project_fact_promotion",
+        "currentTaskCount": 1,
+        "promotionTurnCount": 1,
+        "selectionTurnCount": 0,
+        "reviewTurnCount": 0,
+        "confirmationId": "review_promotion_confirmation_review_selection_receipt_review_selection_confirmation_review_pair_P10D8S01_84338c66_b_001",
+        "confirmButtons": 1,
+        "exportButtons": 0,
+        "bodyText": "本轮 · Promotion确认版本 B 晋级waiting版本 B 已有人工选择回执；确认后才会写入项目事实。镜头P10D8S01获胜版本B版本对S01_84338c66选择回执338c66_b_001确认晋级项目事实返回比较晋级只写获胜版本事实；不会删除落选版本，也不会导出。"
+      }
+    },
+    "promotion": {
+      "currentTaskStep": "confirm_project_fact_promotion",
+      "currentTaskCount": 1,
+      "promotionTurnCount": 1,
+      "confirmationId": "review_promotion_confirmation_review_selection_receipt_review_selection_confirmation_review_pair_P10D8S01_84338c66_b_001",
+      "confirmButtons": 1
+    },
+    "promotedColdStart": {
+      "currentTaskStep": "prepare_references",
+      "currentTaskCount": 1,
+      "versionSwitchCount": 0,
+      "reviewTurnCount": 0,
+      "selectionTurnCount": 0,
+      "promotionTurnCount": 0
+    },
+    "corruptedLedger": {
+      "currentTaskStep": "prepare_references",
+      "versionSwitchCount": 0,
+      "reviewTurnCount": 0,
+      "bodyText": "Vibe Director / 导演台\nP10-D8 Review Selection Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-D8 Review Selection Acceptance\n参考待看，也有待生成 · 先复核，再补缺口\n故事\n1 镜头\n参考\n缺 1 张\n视频\n未生成\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n参考素材\n状态来自当前项目事实\n镜头\n1 个\n参考\n待看，也有待生成 · 0/1 张可看 · 1 张缺少\n视频\nP10D8S01\n1 段\n5s\n1 个视频任务待生成\n等待素材\n画面或视频结果还没出来。\n雨夜递出\n0s / 5s\n\n1 个画面缺参考 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n当前故事\n当前故事\n\n故事已保存；需要参考时说“开始补参考”。\n\n范围\n当前故事\n参考\n参考不完整\n保护\n不生成参考、不提交视频\n当前任务\n复核参考\n检查生成结果并决定是否采用\n等待复核\n导演经验\n故事板叙事\n点开查看 Skills\n工作方式\n先整理\n和 AI 导演的对话\n项目状态\n故事流已准备\n已完成\n\n当前项目已有 1 个镜头。你可以点选镜头后直接说“这个”哪里不对，也可以让 Agent 继续安排下一步。\n\n镜头\n1 个\n直接说要改哪里，或让 Agent 继续安排参考和视频。\n回复\nAI 导演：参考待看，也有待生成\n\n1 张待看，1 张待补。现在等你：先复核，再补缺口\n\n项目\n已连接\n镜头\n1 个\n参考\n待看，也有待生成 · 0/1 张可看 · 1 张缺少\n生成参考\n添加文件\n脚本、图片、声音或视频会先进入素材收件箱，AI 导演先分类；采用前等你确认。\n等待输入：先写一句，或拖入文件。\n发送\n已恢复本地项目"
+    }
+  },
+  "selection": {
+    "selectionConfirmationId": "review_selection_confirmation_review_pair_P10D8S01_84338c66_b_001",
+    "selectionReceiptId": "review_selection_receipt_review_selection_confirmation_review_pair_P10D8S01_84338c66_b_001",
+    "promotionConfirmationId": "review_promotion_confirmation_review_selection_receipt_review_selection_confirmation_review_pair_P10D8S01_84338c66_b_001",
+    "winnerVersion": "B"
+  },
+  "invariants": {
+    "providerCalls": 0,
+    "projectFactsChangedOnlyAfterPromotion": true,
+    "generationLedgerChanged": false,
+    "candidateMediaChanged": false,
+    "selectionReceiptWritten": true,
+    "selectionAndPromotionAreIndependent": true,
+    "promoted": true,
+    "loserPreserved": true,
+    "exported": false
+  },
+  "baseline": {
+    "projectHash": "7bca59a826eaebee9f2600a19d71ca6b46bf4407d7161071fd06b691f3c3c766",
+    "ledgerHash": "6ab90dd942c4442ceb3fe84593384edda2c4ccf4224c32f71d3e5d506da7688f",
+    "outputHashA": "44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f",
+    "outputHashB": "0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+    "files": [
+      ".vibe-runtime/agent-generation-job-ledger.json",
+      "project.vibe",
+      "video/P10D8S01-version-a.mp4",
+      "video/P10D8S01-version-b.mp4"
+    ]
+  },
+  "finalState": {
+    "projectHash": "9bf9da58fd8898a7c924406197de07baeea90080dd5a8e322804db0f2e2029e0",
+    "ledgerHash": "6ab90dd942c4442ceb3fe84593384edda2c4ccf4224c32f71d3e5d506da7688f",
+    "outputHashA": "44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f",
+    "outputHashB": "0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+    "files": [
+      ".vibe-runtime/agent-generation-job-ledger.json",
+      ".vibe-runtime/agent-review-selection-ledger.json",
+      "project.vibe",
+      "video/P10D8S01-version-a.mp4",
+      "video/P10D8S01-version-b.mp4"
+    ]
+  }
+}

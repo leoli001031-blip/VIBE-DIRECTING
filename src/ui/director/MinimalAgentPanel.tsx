@@ -74,6 +74,17 @@ import {
   type AgentDirectorReviewVersionPair,
 } from "../../core/agentDirectorReviewVersionPair";
 import {
+  buildAgentDirectorReviewSelectionProjection,
+  cancelAgentDirectorReviewPromotionConfirmation,
+  cancelAgentDirectorReviewSelectionConfirmation,
+  confirmAgentDirectorReviewSelection,
+  createAgentDirectorReviewSelectionLedger,
+  stageAgentDirectorReviewPromotion,
+  stageAgentDirectorReviewSelection,
+  agentDirectorReviewSelectionLedgerMatchesProject,
+  type AgentDirectorReviewSelectionLedger,
+} from "../../core/agentDirectorReviewSelection";
+import {
   buildProjectInboxProjection,
   buildProjectObservation,
   isContinueIntent,
@@ -4692,6 +4703,8 @@ function agentCurrentTaskConfirmationMessage(
 function agentCurrentTaskEffectLabel(projection: AgentCurrentTaskProjection) {
   if (projection.step === "draft_story") return "整理创作意图，不启动生成";
   if (projection.step === "confirm_story") return "保存当前故事并推进项目状态";
+  if (projection.step === "confirm_version_selection") return "只写独立选择回执，不改项目事实";
+  if (projection.step === "confirm_project_fact_promotion") return "只晋级已选择的获胜版本，不导出";
   if (projection.step === "prepare_references" && !projection.requiresConfirmation && projection.effect === "none") return "检查生成结果并决定是否采用";
   if (projection.effect === "state_only") return "只更新项目位置与绑定状态";
   if (projection.effect === "generation_job") return "建立这一步的受控任务与回执";
@@ -4705,6 +4718,8 @@ function agentCurrentTaskBoundaryLabel(projection: AgentCurrentTaskProjection) {
   }
   if (projection.step === "prepare_references") return "不会提交视频或导出。";
   if (projection.step === "submit_video") return "不会绕过参考前提，也不会重复提交已有任务。";
+  if (projection.step === "confirm_version_selection") return "不会修改项目事实、Visual Memory 或 Delivery。";
+  if (projection.step === "confirm_project_fact_promotion") return "不会删除落选版本，也不会自动导出。";
   if (projection.step === "export") return "不会调用图片或视频 Provider。";
   return "不会在没有明确确认时执行。";
 }
@@ -4733,6 +4748,8 @@ function AgentCurrentTaskIcon({ step }: { step: AgentCurrentTaskStep }) {
   if (step === "choose_save_location") return <FolderOpen size={18} aria-hidden="true" />;
   if (step === "prepare_references") return <Images size={18} aria-hidden="true" />;
   if (step === "submit_video") return <Video size={18} aria-hidden="true" />;
+  if (step === "confirm_version_selection") return <CheckCircle2 size={18} aria-hidden="true" />;
+  if (step === "confirm_project_fact_promotion") return <LockKeyhole size={18} aria-hidden="true" />;
   if (step === "export") return <PackageCheck size={18} aria-hidden="true" />;
   return <CircleDashed size={18} aria-hidden="true" />;
 }
@@ -4898,6 +4915,7 @@ export function MinimalAgentPanel({
   restoredAgentActionLog,
   restoredAgentTimelineEntries,
   restoredAgentGenerationJobLedger,
+  restoredAgentReviewSelectionLedger,
   reviewReceipts,
   onStagePrototypeAgentPlan,
   onClearPrototypeAgentPlan,
@@ -4905,6 +4923,8 @@ export function MinimalAgentPanel({
   onRememberAgentActionLogItem,
   onRememberAgentTimelineEntries,
   onRememberAgentGenerationJobLedger,
+  onRememberAgentReviewSelectionLedger,
+  onPromoteAgentReviewSelection,
   onSaveResearchAsReference,
   onCreateP6RealSample,
   onCreateImage2EndFrame,
@@ -4994,9 +5014,16 @@ export function MinimalAgentPanel({
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
   restoredAgentGenerationJobLedger?: AgentVideoGenerationJobLedger;
+  restoredAgentReviewSelectionLedger?: AgentDirectorReviewSelectionLedger;
   reviewReceipts?: ProjectVibeReviewReceipt[];
   onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
   onRememberAgentGenerationJobLedger?: (ledger: AgentVideoGenerationJobLedger) => void | Promise<void>;
+  onRememberAgentReviewSelectionLedger?: (ledger: AgentDirectorReviewSelectionLedger) => void | Promise<void>;
+  onPromoteAgentReviewSelection?: (input: {
+    pair: AgentDirectorReviewVersionPair;
+    ledger: AgentDirectorReviewSelectionLedger;
+    promotionConfirmationId: string;
+  }) => unknown | Promise<unknown>;
   onSaveResearchAsReference?: (input: {
     result: AgentWebSearchResult;
     userIntent: string;
@@ -5076,7 +5103,6 @@ export function MinimalAgentPanel({
   const [generationDetailsOpen, setGenerationDetailsOpen] = useState(false);
   const [referenceStatus, setReferenceStatus] = useState<"idle" | "saving" | "saved" | "blocked">("idle");
   const [reviewDecisionStatus, setReviewDecisionStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [pendingReviewVersionSelection, setPendingReviewVersionSelection] = useState<AgentDirectorReviewVersion>();
   const [reviewHistoryOpen, setReviewHistoryOpen] = useState(false);
   const [clarificationResolvingId, setClarificationResolvingId] = useState("");
   const [isPreparingPlan, setIsPreparingPlan] = useState(false);
@@ -5100,6 +5126,11 @@ export function MinimalAgentPanel({
       : undefined,
     projectFactHash,
   };
+  const reviewSelectionProjectIdentity = {
+    projectId: agentGenerationProjectIdentity.projectId,
+    projectRoot: agentGenerationProjectIdentity.projectRoot || "",
+    projectFactHash: agentGenerationProjectIdentity.projectFactHash || "",
+  };
   const agentGenerationProjectIdentityRef = useRef(agentGenerationProjectIdentity);
   agentGenerationProjectIdentityRef.current = agentGenerationProjectIdentity;
   const [agentVideoDryRunLedger, setAgentVideoDryRunLedger] = useState<AgentVideoGenerationJobLedger>(() => createAgentVideoGenerationJobLedger({
@@ -5107,6 +5138,15 @@ export function MinimalAgentPanel({
     ...agentGenerationProjectIdentity,
     createdAt: "1970-01-01T00:00:00.000Z",
   }));
+  const [agentReviewSelectionLedger, setAgentReviewSelectionLedger] = useState<AgentDirectorReviewSelectionLedger>(() => (
+    restoredAgentReviewSelectionLedger
+    && agentDirectorReviewSelectionLedgerMatchesProject(restoredAgentReviewSelectionLedger, reviewSelectionProjectIdentity)
+      ? restoredAgentReviewSelectionLedger
+      : createAgentDirectorReviewSelectionLedger({
+          ...reviewSelectionProjectIdentity,
+          createdAt: "1970-01-01T00:00:00.000Z",
+        })
+  ));
   const agentVideoExecutionLedgerRef = useRef(agentVideoDryRunLedger);
   const agentVideoExecutionRuntimeRef = useRef({
     onRememberAgentGenerationJobLedger,
@@ -5167,12 +5207,32 @@ export function MinimalAgentPanel({
     restoredAgentGenerationJobLedger,
   ]);
 
+  useEffect(() => {
+    setAgentReviewSelectionLedger((current) => {
+      if (
+        restoredAgentReviewSelectionLedger
+        && agentDirectorReviewSelectionLedgerMatchesProject(restoredAgentReviewSelectionLedger, reviewSelectionProjectIdentity)
+      ) return restoredAgentReviewSelectionLedger;
+      if (agentDirectorReviewSelectionLedgerMatchesProject(current, reviewSelectionProjectIdentity)) return current;
+      return createAgentDirectorReviewSelectionLedger({
+        ...reviewSelectionProjectIdentity,
+        createdAt: new Date().toISOString(),
+      });
+    });
+  }, [
+    restoredAgentReviewSelectionLedger,
+    reviewSelectionProjectIdentity.projectFactHash,
+    reviewSelectionProjectIdentity.projectId,
+    reviewSelectionProjectIdentity.projectRoot,
+  ]);
+
   const activeReviewVersionCandidate = reviewVersionPair
     ? agentDirectorReviewVersionPairCandidate(reviewVersionPair, activeReviewVersion)
     : undefined;
-  useEffect(() => {
-    setPendingReviewVersionSelection(undefined);
-  }, [activeReviewVersion, reviewVersionPair?.pairId]);
+  const reviewSelectionProjection = useMemo(() => buildAgentDirectorReviewSelectionProjection({
+    ledger: agentReviewSelectionLedger,
+    pair: reviewVersionPair,
+  }), [agentReviewSelectionLedger, reviewVersionPair]);
   const recoveredVideoReviewJob = useMemo(
     () => activeReviewVersionCandidate
       ? agentVideoDryRunLedger.jobs.find((job) => job.jobId === activeReviewVersionCandidate.identity.jobId)
@@ -9301,8 +9361,26 @@ export function MinimalAgentPanel({
             activeVersion: activeReviewVersion,
             activeJobId: activeReviewVersionCandidate.identity.jobId,
             activeActionId: activeReviewVersionCandidate.identity.actionId,
-          }
+        }
         : undefined,
+      reviewSelection: {
+        status: reviewSelectionProjection.status,
+        winnerVersion: reviewSelectionProjection.winnerVersion,
+        selectionReceiptId: reviewSelectionProjection.selectionReceipt?.receiptId,
+        selectionConfirmation: reviewSelectionProjection.selectionConfirmation
+          ? {
+              confirmationId: reviewSelectionProjection.selectionConfirmation.confirmationId,
+              actionId: reviewSelectionProjection.selectionConfirmation.actionId,
+            }
+          : undefined,
+        promotionConfirmation: reviewSelectionProjection.promotionConfirmation
+          ? {
+              confirmationId: reviewSelectionProjection.promotionConfirmation.confirmationId,
+              actionId: reviewSelectionProjection.promotionConfirmation.actionId,
+            }
+          : undefined,
+        blockers: reviewSelectionProjection.blockers,
+      },
       facts: projectStatusView?.facts,
     }),
     [
@@ -9327,6 +9405,7 @@ export function MinimalAgentPanel({
       reviewVersionPair,
       activeReviewVersion,
       activeReviewVersionCandidate,
+      reviewSelectionProjection,
       videoReviewCountForAgent,
       runtimeState.project.root,
       runtimeState.sourceIndex.projectId,
@@ -10920,6 +10999,7 @@ export function MinimalAgentPanel({
     reviewTarget: effectiveReviewTarget,
     reviewVersionPair,
     activeReviewVersion,
+    reviewSelection: reviewSelectionProjection,
     reviewRevisionIntent: activeDirectorReviewRevisionIntent,
     reviewRegenerationProposal: activeDirectorReviewRegenerationProposal,
     clarification: activeDirectorClarificationTurn,
@@ -11168,6 +11248,9 @@ export function MinimalAgentPanel({
     && agentDirectorTurnProjection.phase === "review"
     && (agentCurrentTaskProjection.step === "submit_video" || agentCurrentTaskProjection.step === "compare_versions")
     && (agentDirectorTurnProjection.mode === "review" || agentDirectorTurnProjection.mode === "blocked");
+  const reviewSelectionTurnVisible = currentView === "preview"
+    && agentDirectorTurnProjection.phase === "selection"
+    && (agentCurrentTaskProjection.step === "confirm_version_selection" || agentCurrentTaskProjection.step === "confirm_project_fact_promotion");
   const reviewRevisionTurnVisible = agentDirectorTurnProjection.phase === "conversation"
     && Boolean(agentDirectorTurnProjection.reviewRevisionIntent);
   const focusedTurnVisible = clarificationTurnVisible
@@ -11175,6 +11258,7 @@ export function MinimalAgentPanel({
     || paidConfirmationTurnVisible
     || runningTurnVisible
     || reviewRevisionTurnVisible
+    || reviewSelectionTurnVisible
     || reviewTurnVisible;
   const clarificationProjection = agentDirectorTurnProjection.clarification;
   const proposalProjection = agentDirectorTurnProjection.proposal;
@@ -11201,6 +11285,9 @@ export function MinimalAgentPanel({
   const reviewViewBAction = agentDirectorTurnProjection.actions.find((action) => action.id === "view_version_b");
   const reviewSelectionAction = agentDirectorTurnProjection.actions.find((action) => action.id === "select_candidate");
   const reviewPromotionAction = agentDirectorTurnProjection.actions.find((action) => action.id === "promote_project_fact");
+  const reviewSelectionConfirmAction = agentDirectorTurnProjection.actions.find((action) => action.id === "confirm_review_selection");
+  const reviewPromotionConfirmAction = agentDirectorTurnProjection.actions.find((action) => action.id === "confirm_project_fact_promotion");
+  const reviewSelectionCancelAction = agentDirectorTurnProjection.actions.find((action) => action.id === "cancel_review_selection");
   const paidConfirmationAction = paidConfirmationTurnVisible
     ? agentDirectorTurnProjection.actions.find((action) => action.id === "confirm_current_task")
     : undefined;
@@ -11242,6 +11329,7 @@ export function MinimalAgentPanel({
   const focusedTaskOwnsVisibleContext = clarificationTurnVisible
     || proposalTurnVisible
     || reviewRevisionTurnVisible
+    || reviewSelectionTurnVisible
     || reviewRegenerationConfirmationTurnVisible;
   const focusedCompactScopeLabel = focusedTaskOwnsVisibleContext
     ? displayedCurrentTaskLabel
@@ -11272,9 +11360,132 @@ export function MinimalAgentPanel({
             { label: "原结果", value: "保留" },
             { label: "新任务", value: "未创建" },
           ]
+        : reviewSelectionTurnVisible
+          ? [
+              { label: "镜头", value: reviewVersionPair?.shotId || "当前视频" },
+              { label: "获胜版本", value: reviewSelectionProjection.winnerVersion || activeReviewVersion },
+              { label: "边界", value: agentCurrentTaskProjection.step === "confirm_version_selection" ? "只写选择回执" : "只晋级项目事实" },
+            ]
         : reviewRegenerationConfirmationTurnVisible
           ? paidConfirmationProjection?.facts.slice(0, 3) || []
           : displayedSelectionChips;
+
+  async function persistReviewSelectionLedger(nextLedger: AgentDirectorReviewSelectionLedger) {
+    if (!onRememberAgentReviewSelectionLedger) throw new Error("review_selection_persistence_unavailable");
+    await onRememberAgentReviewSelectionLedger(nextLedger);
+    setAgentReviewSelectionLedger(nextLedger);
+  }
+
+  async function stageReviewVersionSelection() {
+    if (!reviewVersionPair || !reviewSelectionAction?.enabled || !onRememberAgentReviewSelectionLedger) return;
+    const staged = stageAgentDirectorReviewSelection({
+      ledger: agentReviewSelectionLedger,
+      pair: reviewVersionPair,
+      winnerVersion: activeReviewVersion,
+    });
+    if (!staged.ok) {
+      setStatus("当前版本身份已变化，不能进入选择确认。");
+      return;
+    }
+    try {
+      if (staged.receipt && !staged.confirmation) {
+        const promotion = stageAgentDirectorReviewPromotion({
+          ledger: staged.ledger,
+          pair: reviewVersionPair,
+          selectionReceiptId: staged.receipt.receiptId,
+        });
+        if (!promotion.ok) throw new Error(promotion.blockers[0] || "review_promotion_confirmation_blocked");
+        await persistReviewSelectionLedger(promotion.ledger);
+        setStatus(`版本 ${staged.receipt.winnerVersion} 已有选择回执；等待晋级确认。`);
+        return;
+      }
+      await persistReviewSelectionLedger(staged.ledger);
+      setStatus(`版本 ${activeReviewVersion} 等待独立选择确认。`);
+    } catch {
+      setStatus("版本选择确认保存失败；两个候选保持不变。");
+    }
+  }
+
+  async function confirmReviewVersionSelection() {
+    const confirmation = reviewSelectionProjection.selectionConfirmation;
+    if (
+      !reviewVersionPair
+      || !confirmation
+      || !reviewSelectionConfirmAction?.enabled
+      || !onRememberAgentReviewSelectionLedger
+    ) return;
+    const selected = confirmAgentDirectorReviewSelection({
+      ledger: agentReviewSelectionLedger,
+      pair: reviewVersionPair,
+      confirmationId: confirmation.confirmationId,
+      reviewerId: "local_user",
+    });
+    if (!selected.ok || !selected.receipt) {
+      setStatus("版本选择身份校验失败；没有写入选择回执。");
+      return;
+    }
+    const promotion = stageAgentDirectorReviewPromotion({
+      ledger: selected.ledger,
+      pair: reviewVersionPair,
+      selectionReceiptId: selected.receipt.receiptId,
+    });
+    if (!promotion.ok) {
+      setStatus("选择回执已形成，但晋级确认无法建立。");
+      await persistReviewSelectionLedger(selected.ledger).catch(() => undefined);
+      return;
+    }
+    try {
+      await persistReviewSelectionLedger(promotion.ledger);
+      onActiveReviewVersionChange?.(selected.receipt.winnerVersion);
+      setStatus(`版本 ${selected.receipt.winnerVersion} 已选择；等待独立项目事实晋级确认。`);
+    } catch {
+      setStatus("选择回执保存失败；项目事实没有改变。");
+    }
+  }
+
+  async function cancelReviewSelectionBoundary() {
+    if (!reviewSelectionCancelAction?.enabled || !onRememberAgentReviewSelectionLedger) return;
+    const selectionConfirmation = reviewSelectionProjection.selectionConfirmation;
+    const promotionConfirmation = reviewSelectionProjection.promotionConfirmation;
+    const cancelled = selectionConfirmation
+      ? cancelAgentDirectorReviewSelectionConfirmation({
+          ledger: agentReviewSelectionLedger,
+          confirmationId: selectionConfirmation.confirmationId,
+        })
+      : promotionConfirmation
+        ? cancelAgentDirectorReviewPromotionConfirmation({
+            ledger: agentReviewSelectionLedger,
+            confirmationId: promotionConfirmation.confirmationId,
+          })
+        : undefined;
+    if (!cancelled?.ok) return;
+    try {
+      await persistReviewSelectionLedger(cancelled.ledger);
+      setStatus("已返回 A/B 比较；候选和历史回执保持不变。");
+    } catch {
+      setStatus("返回比较状态保存失败；没有修改项目事实。");
+    }
+  }
+
+  async function confirmReviewProjectFactPromotion() {
+    const confirmation = reviewSelectionProjection.promotionConfirmation;
+    if (
+      !reviewVersionPair
+      || !confirmation
+      || !reviewPromotionConfirmAction?.enabled
+      || !onPromoteAgentReviewSelection
+    ) return;
+    try {
+      await onPromoteAgentReviewSelection({
+        pair: reviewVersionPair,
+        ledger: agentReviewSelectionLedger,
+        promotionConfirmationId: confirmation.confirmationId,
+      });
+      setStatus(`版本 ${reviewSelectionProjection.winnerVersion || activeReviewVersion} 已晋级项目事实；导出仍需单独确认。`);
+    } catch {
+      setStatus("项目事实晋级失败；选择回执和两个候选仍保留。");
+    }
+  }
 
   async function approveReviewFromAgentTurn() {
     if (
@@ -12086,6 +12297,82 @@ export function MinimalAgentPanel({
           </small>
         </section>
       )}
+      {reviewSelectionTurnVisible && reviewVersionPair && (
+        <section
+          className={`minimal-agent-focused-turn minimal-agent-review-turn ${agentDirectorTurnProjection.mode}`}
+          aria-label={agentCurrentTaskProjection.step === "confirm_version_selection" ? "版本选择确认" : "项目事实晋级确认"}
+          aria-live="polite"
+          data-confirmation-id={agentCurrentTaskProjection.confirmationId}
+        >
+          <div className="minimal-agent-review-turn-head">
+            <div>
+              <span>{agentCurrentTaskProjection.step === "confirm_version_selection" ? "本轮 · Selection" : "本轮 · Promotion"}</span>
+              <strong>{agentCurrentTaskProjection.label}</strong>
+            </div>
+            <em>waiting</em>
+          </div>
+          <p>
+            {agentCurrentTaskProjection.step === "confirm_version_selection"
+              ? `确认后只把版本 ${reviewSelectionProjection.winnerVersion || activeReviewVersion} 记为获胜候选。`
+              : `版本 ${reviewSelectionProjection.winnerVersion || activeReviewVersion} 已有人工选择回执；确认后才会写入项目事实。`}
+          </p>
+          <div className="minimal-agent-review-facts" aria-label="版本决策身份">
+            <small>
+              <span>镜头</span>
+              <strong>{reviewVersionPair.shotId}</strong>
+            </small>
+            <small>
+              <span>获胜版本</span>
+              <strong>{reviewSelectionProjection.winnerVersion || activeReviewVersion}</strong>
+            </small>
+            <small>
+              <span>版本对</span>
+              <strong>{reviewVersionPair.pairId.slice(-12)}</strong>
+            </small>
+            <small>
+              <span>选择回执</span>
+              <strong>{reviewSelectionProjection.selectionReceipt?.receiptId.slice(-12) || "确认后生成"}</strong>
+            </small>
+          </div>
+          {agentDirectorTurnProjection.blockers.length > 0 && (
+            <div className="minimal-agent-review-blocker" role="status">
+              <AlertTriangle size={15} aria-hidden="true" />
+              <span>{agentDirectorTurnProjection.blockers[0]}</span>
+            </div>
+          )}
+          <div className="minimal-agent-review-actions">
+            <button
+              type="button"
+              onClick={() => agentCurrentTaskProjection.step === "confirm_version_selection"
+                ? void confirmReviewVersionSelection()
+                : void confirmReviewProjectFactPromotion()}
+              disabled={agentCurrentTaskProjection.step === "confirm_version_selection"
+                ? !reviewSelectionConfirmAction?.enabled || !onRememberAgentReviewSelectionLedger
+                : !reviewPromotionConfirmAction?.enabled || !onPromoteAgentReviewSelection}
+              title={(reviewSelectionConfirmAction || reviewPromotionConfirmAction)?.boundary}
+            >
+              <CheckCircle2 size={15} aria-hidden="true" />
+              {agentCurrentTaskProjection.step === "confirm_version_selection"
+                ? reviewSelectionConfirmAction?.label || `确认选择版本 ${reviewSelectionProjection.winnerVersion || activeReviewVersion}`
+                : reviewPromotionConfirmAction?.label || "确认晋级项目事实"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void cancelReviewSelectionBoundary()}
+              disabled={!reviewSelectionCancelAction?.enabled || !onRememberAgentReviewSelectionLedger}
+              title={reviewSelectionCancelAction?.boundary}
+            >
+              {reviewSelectionCancelAction?.label || "返回比较"}
+            </button>
+          </div>
+          <small className="minimal-agent-review-boundary">
+            {agentCurrentTaskProjection.step === "confirm_version_selection"
+              ? "选择回执独立保存；不会修改项目事实、Visual Memory 或 Delivery。"
+              : "晋级只写获胜版本事实；不会删除落选版本，也不会导出。"}
+          </small>
+        </section>
+      )}
       {reviewTurnVisible && (
         <section
           className={`minimal-agent-focused-turn minimal-agent-review-turn ${agentDirectorTurnProjection.mode}`}
@@ -12169,11 +12456,8 @@ export function MinimalAgentPanel({
             {reviewVersionPair ? (
               <button
                 type="button"
-                onClick={() => {
-                  setPendingReviewVersionSelection(activeReviewVersion);
-                  setStatus(`${reviewSelectionAction?.label || `选择版本 ${activeReviewVersion}`} 等待独立确认。`);
-                }}
-                disabled={!reviewSelectionAction?.enabled || hasVisibleComposerInput || Boolean(attachments.length)}
+                onClick={() => void stageReviewVersionSelection()}
+                disabled={!reviewSelectionAction?.enabled || !onRememberAgentReviewSelectionLedger || hasVisibleComposerInput || Boolean(attachments.length)}
                 title={reviewSelectionAction?.boundary}
               >
                 <CheckCircle2 size={15} aria-hidden="true" />
@@ -12205,25 +12489,6 @@ export function MinimalAgentPanel({
               {reviewRevisionAction?.label || "需要修改"}
             </button>
           </div>
-          {reviewVersionPair && pendingReviewVersionSelection && (
-            <div className="minimal-agent-review-selection-boundary" aria-label="版本选择确认" role="status">
-              <div>
-                <span>选择待确认</span>
-                <strong>版本 {pendingReviewVersionSelection}</strong>
-                <small>尚未写入选择回执，也不会晋级项目事实或导出。</small>
-              </div>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setPendingReviewVersionSelection(undefined);
-                  setStatus("继续比较两个版本。");
-                }}
-              >
-                返回比较
-              </button>
-            </div>
-          )}
           <small className="minimal-agent-review-boundary">
             {reviewVersionPair
               ? reviewSelectionAction?.boundary || "选择仍需独立确认，不会晋级项目事实或导出。"

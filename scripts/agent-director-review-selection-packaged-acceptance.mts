@@ -286,8 +286,8 @@ function addLocalReviewCandidate(input: {
   outputHash: string;
   createdAt: string;
 }): AgentVideoGenerationJobLedger {
-  const actionId = `p10d7_action_${input.version}`;
-  const confirmationId = `p10d7_confirmation_${input.version}`;
+  const actionId = `p10d8_action_${input.version}`;
+  const confirmationId = `p10d8_confirmation_${input.version}`;
   const staged = planAgentVideoProductionAction({
     plan: input.plan,
     ledger: input.ledger,
@@ -325,7 +325,7 @@ function addLocalReviewCandidate(input: {
       jobId: staged.job.jobId,
       actionId,
       shotId: input.shotId,
-      sourceReceiptId: `p10d7_local_receipt_${input.version}`,
+      sourceReceiptId: `p10d8_local_receipt_${input.version}`,
       outputPath: input.outputPath,
       outputHash: `sha256:${input.outputHash}`,
       receivedAt: new Date(Date.parse(input.createdAt) + 3000).toISOString(),
@@ -337,22 +337,22 @@ function addLocalReviewCandidate(input: {
 
 const appPath = resolve(process.argv[2] || "release/mac-arm64/Vibe Director Studio.app");
 const executablePath = join(appPath, "Contents", "MacOS", "Vibe Director Studio");
-const evidencePath = resolve(process.argv[3] || "docs/evidence/p10-d-version-pair-20260719/packaged-observation.json");
+const evidencePath = resolve(process.argv[3] || "docs/evidence/p10-d-review-selection-20260719/packaged-observation.json");
 const sourceMediaA = resolve("showcase-package/vibe-director-4shot-seedance-showcase-2026-06-18T13-00/04-generated-videos/shot_1_rainy_ticket.mp4");
 const sourceMediaB = resolve("showcase-package/vibe-director-4shot-seedance-showcase-2026-06-18T13-00/04-generated-videos/shot_2_follow_blue_light.mp4");
 assert(await exists(executablePath), `packaged App executable is missing: ${executablePath}`);
 assert(await exists(sourceMediaA) && await exists(sourceMediaB), "local deterministic media fixtures are missing");
 
-const root = await mkdtemp("/tmp/vibe-director-p10-d7-20260719-");
+const root = await mkdtemp("/tmp/vibe-director-p10-d8-20260719-");
 const profileRoot = join(root, "profile");
 const projectsRoot = join(root, "projects");
 const runtimeRoot = join(root, "runtime");
-const projectRoot = join(projectsRoot, "p10-d7-version-pair");
+const projectRoot = join(projectsRoot, "p10-d8-review-selection");
 const projectPath = join(projectRoot, "project.vibe");
 const bindingPath = join(profileRoot, "current-project.local.json");
 const videoRoot = join(projectRoot, "video");
-const outputA = join(videoRoot, "P10D7S01-version-a.mp4");
-const outputB = join(videoRoot, "P10D7S01-version-b.mp4");
+const outputA = join(videoRoot, "P10D8S01-version-a.mp4");
+const outputB = join(videoRoot, "P10D8S01-version-b.mp4");
 await mkdir(videoRoot, { recursive: true });
 await Promise.all([
   mkdir(profileRoot, { recursive: true }),
@@ -361,22 +361,22 @@ await Promise.all([
   copyFile(sourceMediaB, outputB),
 ]);
 
-const projectId = "p10_d7_packaged_project";
-const shotId = "P10D7S01";
+const projectId = "p10_d8_packaged_project";
+const shotId = "P10D8S01";
 const createdAt = "2026-07-19T01:00:00.000Z";
 const project = createProjectVibe({
   projectId,
-  title: "P10-D7 Version Pair Acceptance",
+  title: "P10-D8 Review Selection Acceptance",
   version: "1.0.0",
   createdAt,
   updatedAt: createdAt,
   storyFlow: {
-    id: "p10_d7_story",
+    id: "p10_d8_story",
     sections: [{ id: "section_1", title: "雨夜递出", summary: "女孩把纸飞机递给机器人保安。", sequenceIndex: 0, shotIds: [shotId] }],
     shotOrder: [shotId],
   },
   visualMemory: {
-    id: "p10_d7_visual_memory",
+    id: "p10_d8_visual_memory",
     entries: [{
       id: "vm_scene",
       assetId: "scene_store",
@@ -386,7 +386,7 @@ const project = createProjectVibe({
       textConstraints: ["雨夜", "便利店灯箱"],
       usedByShotIds: [shotId],
       canUseAsFutureReference: false,
-      sourceRefs: ["p10-d7-fixture"],
+      sourceRefs: ["p10-d8-fixture"],
     }],
   },
   shots: [{
@@ -399,7 +399,7 @@ const project = createProjectVibe({
     propAssetIds: [],
     durationSeconds: 5,
     status: "planned",
-    sourceRefs: ["p10-d7-fixture:shot"],
+    sourceRefs: ["p10-d8-fixture:shot"],
     referenceStrategy: "storyboard_narrative",
     executionMode: "relationship_wide",
     primaryAction: "女孩递出纸飞机",
@@ -414,7 +414,7 @@ const project = createProjectVibe({
     status: "candidate",
     textConstraints: ["雨夜", "便利店灯箱"],
     usedByShotIds: [shotId],
-    sourceRefs: ["p10-d7-fixture"],
+    sourceRefs: ["p10-d8-fixture"],
   }],
   runs: [],
 });
@@ -435,7 +435,7 @@ const outputHashA = await sha256(outputA);
 const outputHashB = await sha256(outputB);
 assert(outputHashA !== outputHashB, "version pair media fixtures must have distinct SHA-256 values");
 const plan = buildAgentVideoPipelinePlan({
-  planId: "p10_d7_pair_plan",
+  planId: "p10_d8_pair_plan",
   generatedAt: createdAt,
   storyDraftPresent: true,
   storyConfirmed: true,
@@ -444,7 +444,7 @@ const plan = buildAgentVideoPipelinePlan({
   videoSubmitted: false,
 });
 let ledger = createAgentVideoGenerationJobLedger({
-  ledgerId: "p10_d7_pair_ledger",
+  ledgerId: "p10_d8_pair_ledger",
   projectId,
   projectRoot,
   projectFactHash,
@@ -488,11 +488,16 @@ const baseline = {
 };
 let firstLaunch: RunningPackagedApp | undefined;
 let coldLaunch: RunningPackagedApp | undefined;
+let promotionLaunch: RunningPackagedApp | undefined;
+let promotedColdLaunch: RunningPackagedApp | undefined;
 let corruptLaunch: RunningPackagedApp | undefined;
 let firstObservation: Record<string, unknown> = {};
 let coldObservation: Record<string, unknown> = {};
-let revisionObservation: Record<string, unknown> = {};
+let promotionObservation: Record<string, unknown> = {};
+let promotedColdObservation: Record<string, unknown> = {};
 let corruptObservation: Record<string, unknown> = {};
+let promotedProjectFactHash = "";
+let promotedProjectFileHash = "";
 
 try {
   firstLaunch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
@@ -522,7 +527,7 @@ try {
   assert(firstObservation.currentTaskCount === 1 && firstObservation.reviewTurnCount === 1, "A/B Review must expose one Agent current task and one focused turn");
   assert(firstObservation.versionSwitchCount === 1 && firstObservation.activeVersion === "B", "newer candidate B must be the default preview");
   assert(firstObservation.requestChangesEnabled === true, "A/B Review must keep needs-change available");
-  assert(firstObservation.promotionDisabled === true && firstObservation.exportButtonCount === 0, "D7 must not promote or export");
+  assert(firstObservation.promotionDisabled === true && firstObservation.exportButtonCount === 0, "D8 must not promote or export");
 
   await firstLaunch.client.evaluate(`document.querySelector('[aria-label="${shotId} 版本切换"] button:first-child')?.click(); true`);
   const versionAObservation = await waitFor(async () => {
@@ -556,64 +561,153 @@ try {
     return visible ? true : undefined;
   }, "candidate selection did not stop at the independent confirmation boundary");
   const firstBoundary = await runtimeBoundary(firstLaunch.client);
-  assert(firstBoundary.tokenRequired && !firstBoundary.providerCalled && !firstBoundary.liveSubmitAllowed, "D7 packaged runtime boundary must remain local and non-live");
+  assert(firstBoundary.tokenRequired && !firstBoundary.providerCalled && !firstBoundary.liveSubmitAllowed, "D8 packaged runtime boundary must remain local and non-live");
   await closePackagedApp(firstLaunch);
   firstLaunch = undefined;
+
+  const stagedSelectionLedger = JSON.parse(await readFile(selectionLedgerPath, "utf8"));
+  assert(stagedSelectionLedger.selectionConfirmations?.length === 1, "selection staging must persist exactly one confirmation");
+  assert(stagedSelectionLedger.selectionConfirmations[0]?.status === "waiting", "staged selection must remain waiting before explicit confirmation");
+  assert(stagedSelectionLedger.selectionConfirmations[0]?.winnerVersion === "B", "staged selection must bind candidate B");
+  assert(stagedSelectionLedger.selectionReceipts?.length === 0, "selection staging must not write a selection receipt");
+  assert(stagedSelectionLedger.promotionConfirmations?.length === 0, "selection staging must not create a promotion confirmation");
+  assert(await sha256(projectPath) === baseline.projectHash, "selection staging must not change Project.vibe");
 
   coldLaunch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
   await openVideoView(coldLaunch.client);
   await waitFor(async () => {
     const step = await coldLaunch!.client.evaluate<string | null>(`document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step") || null`);
     return step === "confirm_version_selection" ? step : undefined;
-  }, "cold start did not restore the staged version-selection boundary");
-  coldObservation = await coldLaunch.client.evaluate(`(() => ({
+  }, "cold start did not restore the exact version-selection confirmation");
+  const restoredSelectionObservation = await coldLaunch.client.evaluate(`(() => ({
     currentTaskStep: document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step"),
     currentTaskCount: document.querySelectorAll('[aria-label="AI 导演当前任务"]').length,
-    reviewTurnCount: document.querySelectorAll('[aria-label="当前视频复核"]').length,
     selectionTurnCount: document.querySelectorAll('[aria-label="版本选择确认"]').length,
-    versionSwitchCount: document.querySelectorAll('[aria-label="${shotId} 版本切换"]').length,
-    activeVersion: [...document.querySelectorAll('[aria-label="${shotId} 版本切换"] button')].find((item) => item.getAttribute("aria-pressed") === "true")?.textContent?.trim(),
-    activeSelectionConfirmations: [...document.querySelectorAll("button")].filter((item) => item.textContent?.includes("确认选择") && !item.disabled).length,
-    activePromotions: [...document.querySelectorAll("button")].filter((item) => item.textContent?.includes("晋级为项目事实") && !item.disabled).length
+    reviewTurnCount: document.querySelectorAll('[aria-label="当前视频复核"]').length,
+    confirmationId: document.querySelector('[aria-label="版本选择确认"]')?.getAttribute("data-confirmation-id"),
+    confirmButtons: [...document.querySelectorAll('[aria-label="版本选择确认"] button')].filter((item) => item.textContent?.includes("确认选择版本 B") && !item.disabled).length,
+    promotionButtons: [...document.querySelectorAll('[aria-label="版本选择确认"] button')].filter((item) => item.textContent?.includes("晋级项目事实")).length,
+    bodyText: document.querySelector('[aria-label="版本选择确认"]')?.textContent || ""
   }))()`);
-  assert(coldObservation.currentTaskCount === 1 && coldObservation.selectionTurnCount === 1 && coldObservation.reviewTurnCount === 0, "cold restore must expose only the staged selection boundary");
-  assert(coldObservation.versionSwitchCount === 1 && coldObservation.activeVersion === "B", "cold restore must deterministically return to version B");
-  assert(coldObservation.activeSelectionConfirmations === 1 && coldObservation.activePromotions === 0, "D7 cold restore must retain selection without inventing promotion state");
+  assert(restoredSelectionObservation.currentTaskCount === 1 && restoredSelectionObservation.selectionTurnCount === 1, "cold restore must expose one selection task and one focused confirmation turn");
+  assert(restoredSelectionObservation.reviewTurnCount === 0, "the old passive A/B Review card must not compete with selection confirmation");
+  assert(restoredSelectionObservation.confirmationId === stagedSelectionLedger.selectionConfirmations[0].confirmationId, "cold restore must retain the exact selection confirmation id");
+  assert(restoredSelectionObservation.confirmButtons === 1 && restoredSelectionObservation.promotionButtons === 0, "selection confirmation must expose only the selection mutation");
+  assert(String(restoredSelectionObservation.bodyText).includes("不会修改项目事实"), "selection confirmation must show its project-fact boundary");
 
   await coldLaunch.client.evaluate(`(() => {
-    const button = [...document.querySelectorAll('[aria-label="版本选择确认"] button')].find((item) => item.textContent?.trim() === "返回比较");
+    const button = [...document.querySelectorAll('[aria-label="版本选择确认"] button')].find((item) => item.textContent?.includes("确认选择版本 B"));
     button?.click();
     return Boolean(button);
   })()`);
   await waitFor(async () => {
-    const step = await coldLaunch!.client.evaluate<string | null>(`document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step") || null`);
-    return step === "compare_versions" ? step : undefined;
-  }, "return-to-compare did not restore A/B Review");
-  await coldLaunch.client.evaluate(`(() => {
-    const button = [...document.querySelectorAll('[aria-label="当前视频复核"] button')].find((item) => item.textContent?.trim() === "需要修改");
-    button?.click();
-    return Boolean(button);
-  })()`);
-  await waitFor(async () => {
-    const visible = await coldLaunch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="当前视频修改意图"]'))`);
+    const visible = await coldLaunch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="项目事实晋级确认"]'))`);
     return visible ? true : undefined;
-  }, "needs-change did not enter the structured revision turn");
-  revisionObservation = await coldLaunch.client.evaluate(`(() => ({
-    revisionTurnCount: document.querySelectorAll('[aria-label="当前视频修改意图"]').length,
+  }, "selection confirmation did not stop at the independent promotion boundary");
+  const stagedPromotionObservation = await coldLaunch.client.evaluate(`(() => ({
+    currentTaskStep: document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step"),
+    currentTaskCount: document.querySelectorAll('[aria-label="AI 导演当前任务"]').length,
+    promotionTurnCount: document.querySelectorAll('[aria-label="项目事实晋级确认"]').length,
+    selectionTurnCount: document.querySelectorAll('[aria-label="版本选择确认"]').length,
     reviewTurnCount: document.querySelectorAll('[aria-label="当前视频复核"]').length,
-    currentTaskLabel: document.querySelector('[aria-label="AI 导演当前任务"] strong')?.textContent?.trim(),
-    boundaryText: document.querySelector('[aria-label="修改意图边界"]')?.textContent || "",
-    composerValue: document.querySelector('textarea[aria-label="和 AI 导演说"]')?.value || ""
+    confirmationId: document.querySelector('[aria-label="项目事实晋级确认"]')?.getAttribute("data-confirmation-id"),
+    confirmButtons: [...document.querySelectorAll('[aria-label="项目事实晋级确认"] button')].filter((item) => item.textContent?.includes("确认晋级项目事实") && !item.disabled).length,
+    exportButtons: [...document.querySelectorAll('[aria-label="项目事实晋级确认"] button')].filter((item) => item.textContent?.includes("导出")).length,
+    bodyText: document.querySelector('[aria-label="项目事实晋级确认"]')?.textContent || ""
   }))()`);
-  assert(revisionObservation.revisionTurnCount === 1 && revisionObservation.reviewTurnCount === 0, "needs-change must replace passive Review with one focused revision turn");
-  assert(revisionObservation.currentTaskLabel === "说明修改方向", "revision turn must own the Agent current-task label");
-  assert(String(revisionObservation.boundaryText).includes("保持不变") && String(revisionObservation.boundaryText).includes("尚未创建"), "revision turn must preserve both original candidates and avoid a new task");
+  assert(stagedPromotionObservation.currentTaskStep === "confirm_project_fact_promotion", "selection receipt must advance to project-fact promotion, not Delivery");
+  assert(stagedPromotionObservation.currentTaskCount === 1 && stagedPromotionObservation.promotionTurnCount === 1, "promotion confirmation must be the only focused Agent task");
+  assert(stagedPromotionObservation.selectionTurnCount === 0 && stagedPromotionObservation.reviewTurnCount === 0, "old selection and Review cards must not remain active");
+  assert(stagedPromotionObservation.confirmButtons === 1 && stagedPromotionObservation.exportButtons === 0, "promotion confirmation must remain independent from export");
+  assert(String(stagedPromotionObservation.bodyText).includes("不会导出"), "promotion confirmation must show its Delivery boundary");
+  coldObservation = {
+    restoredSelection: restoredSelectionObservation,
+    stagedPromotion: stagedPromotionObservation,
+  };
   await closePackagedApp(coldLaunch);
   coldLaunch = undefined;
 
+  const selectedLedger = JSON.parse(await readFile(selectionLedgerPath, "utf8"));
+  assert(selectedLedger.selectionConfirmations?.length === 1 && selectedLedger.selectionConfirmations[0]?.status === "resolved", "selection confirmation must resolve exactly once");
+  assert(selectedLedger.selectionReceipts?.length === 1, "selection confirmation must write exactly one selection receipt");
+  assert(selectedLedger.selectionReceipts[0]?.winnerVersion === "B" && selectedLedger.selectionReceipts[0]?.humanReviewed === true, "selection receipt must bind the human-reviewed winner B");
+  assert(selectedLedger.selectionReceipts[0]?.promotionAuthorized === false, "selection receipt must not authorize project-fact promotion");
+  assert(selectedLedger.promotionConfirmations?.length === 1 && selectedLedger.promotionConfirmations[0]?.status === "waiting", "selection must stage one separate waiting promotion confirmation");
+  assert(selectedLedger.promotionConfirmations[0]?.selectionReceiptId === selectedLedger.selectionReceipts[0]?.receiptId, "promotion confirmation must bind the exact selection receipt");
+  assert(await sha256(projectPath) === baseline.projectHash, "winner selection must not change Project.vibe");
+  assert(await sha256(ledgerPath) === baseline.ledgerHash, "winner selection must not change the generation ledger");
+
+  promotionLaunch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+  await openVideoView(promotionLaunch.client);
+  await waitFor(async () => {
+    const step = await promotionLaunch!.client.evaluate<string | null>(`document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step") || null`);
+    return step === "confirm_project_fact_promotion" ? step : undefined;
+  }, "second cold start did not restore the exact promotion confirmation");
+  promotionObservation = await promotionLaunch.client.evaluate(`(() => ({
+    currentTaskStep: document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step"),
+    currentTaskCount: document.querySelectorAll('[aria-label="AI 导演当前任务"]').length,
+    promotionTurnCount: document.querySelectorAll('[aria-label="项目事实晋级确认"]').length,
+    confirmationId: document.querySelector('[aria-label="项目事实晋级确认"]')?.getAttribute("data-confirmation-id"),
+    confirmButtons: [...document.querySelectorAll('[aria-label="项目事实晋级确认"] button')].filter((item) => item.textContent?.includes("确认晋级项目事实") && !item.disabled).length
+  }))()`);
+  assert(promotionObservation.currentTaskCount === 1 && promotionObservation.promotionTurnCount === 1, "promotion cold restore must keep one current task");
+  assert(promotionObservation.confirmationId === selectedLedger.promotionConfirmations[0].confirmationId, "promotion cold restore must retain the exact confirmation id");
+  assert(promotionObservation.confirmButtons === 1, "exact promotion confirmation must be actionable once");
+  await promotionLaunch.client.evaluate(`(() => {
+    const button = [...document.querySelectorAll('[aria-label="项目事实晋级确认"] button')].find((item) => item.textContent?.includes("确认晋级项目事实"));
+    button?.click();
+    return Boolean(button);
+  })()`);
+  await waitFor(async () => {
+    const state = await promotionLaunch!.client.evaluate<{ promotionTurnCount: number; currentTaskStep?: string }>(`(() => ({
+      promotionTurnCount: document.querySelectorAll('[aria-label="项目事实晋级确认"]').length,
+      currentTaskStep: document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step") || undefined
+    }))()`);
+    return state.promotionTurnCount === 0 && state.currentTaskStep !== "confirm_project_fact_promotion" ? state : undefined;
+  }, "project-fact promotion did not invalidate the old confirmation task");
+  const promotionBoundary = await runtimeBoundary(promotionLaunch.client);
+  assert(promotionBoundary.tokenRequired && !promotionBoundary.providerCalled && !promotionBoundary.liveSubmitAllowed, "promotion must remain local and non-live");
+  await closePackagedApp(promotionLaunch);
+  promotionLaunch = undefined;
+
+  const promotedOpen = parseProjectVibeText(await readFile(projectPath, "utf8"));
+  assert(promotedOpen.ok && promotedOpen.project, `promoted Project.vibe must parse: ${promotedOpen.errors.join("; ")}`);
+  promotedProjectFactHash = hashProjectVibeFacts(promotedOpen.project);
+  promotedProjectFileHash = await sha256(projectPath);
+  assert(promotedProjectFactHash !== projectFactHash, "explicit promotion must generate a new project fact hash");
+  const promotionReceipts = promotedOpen.project.receipts.reviewReceipts.filter((receipt) => receipt.decisionScope === "agent_video_promotion");
+  assert(promotionReceipts.length === 1, "promotion must append exactly one Project.vibe promotion receipt");
+  const promotionReceipt = promotionReceipts[0]!;
+  assert(promotionReceipt.status === "approved" && promotionReceipt.humanReviewed === true && promotionReceipt.promotionAuthorized === true, "promotion receipt must record explicit human authorization");
+  assert(promotionReceipt.selectionReceiptId === selectedLedger.selectionReceipts[0].receiptId, "promotion receipt must bind the exact selection receipt");
+  assert(promotionReceipt.versionPairId === selectedLedger.selectionReceipts[0].pairId && promotionReceipt.winnerVersion === "B", "promotion receipt must bind the exact pair and winner");
+  assert(promotionReceipt.jobId === selectedLedger.selectionReceipts[0].winner.jobId && promotionReceipt.actionId === selectedLedger.selectionReceipts[0].winner.actionId, "promotion receipt must bind the winning job and action");
+  assert(promotionReceipt.outputPath === relative(projectRoot, outputB).replace(/\\/g, "/"), "promotion receipt must store a portable project-relative output path");
+  assert(promotionReceipt.outputHash === `sha256:${outputHashB}`, "promotion receipt must bind candidate B SHA-256");
+  assert(await sha256(ledgerPath) === baseline.ledgerHash, "promotion must preserve the historical generation ledger");
+  assert(await sha256(outputA) === baseline.outputHashA && await sha256(outputB) === baseline.outputHashB, "promotion must preserve winner and loser media byte-for-byte");
+
+  promotedColdLaunch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+  await openVideoView(promotedColdLaunch.client);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+  promotedColdObservation = await promotedColdLaunch.client.evaluate(`(() => ({
+    currentTaskStep: document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step"),
+    currentTaskCount: document.querySelectorAll('[aria-label="AI 导演当前任务"]').length,
+    versionSwitchCount: document.querySelectorAll('[aria-label="${shotId} 版本切换"]').length,
+    reviewTurnCount: document.querySelectorAll('[aria-label="当前视频复核"]').length,
+    selectionTurnCount: document.querySelectorAll('[aria-label="版本选择确认"]').length,
+    promotionTurnCount: document.querySelectorAll('[aria-label="项目事实晋级确认"]').length
+  }))()`);
+  assert(promotedColdObservation.currentTaskCount === 1, "promoted cold start must still expose one Agent current task");
+  assert(promotedColdObservation.currentTaskStep !== "compare_versions" && promotedColdObservation.currentTaskStep !== "confirm_version_selection" && promotedColdObservation.currentTaskStep !== "confirm_project_fact_promotion", "old fact-bound pair and confirmations must stay invalid after promotion");
+  assert(promotedColdObservation.versionSwitchCount === 0 && promotedColdObservation.reviewTurnCount === 0, "old A/B Review must not revive after the fact hash changes");
+  assert(promotedColdObservation.selectionTurnCount === 0 && promotedColdObservation.promotionTurnCount === 0, "old confirmation cards must not revive after promotion");
+  await closePackagedApp(promotedColdLaunch);
+  promotedColdLaunch = undefined;
+
   const corruptProfileRoot = join(root, "corrupt-profile");
   const corruptRuntimeRoot = join(root, "corrupt-runtime");
-  const corruptProjectRoot = join(projectsRoot, "p10-d7-corrupt-ledger");
+  const corruptProjectRoot = join(projectsRoot, "p10-d8-corrupt-ledger");
   const corruptBindingPath = join(corruptProfileRoot, "current-project.local.json");
   await Promise.all([
     mkdir(join(corruptProjectRoot, ".vibe-runtime"), { recursive: true }),
@@ -623,8 +717,8 @@ try {
   ]);
   await Promise.all([
     copyFile(projectPath, join(corruptProjectRoot, "project.vibe")),
-    copyFile(outputA, join(corruptProjectRoot, "video", "P10D7S01-version-a.mp4")),
-    copyFile(outputB, join(corruptProjectRoot, "video", "P10D7S01-version-b.mp4")),
+    copyFile(outputA, join(corruptProjectRoot, "video", "P10D8S01-version-a.mp4")),
+    copyFile(outputB, join(corruptProjectRoot, "video", "P10D8S01-version-b.mp4")),
     writeFile(join(corruptProjectRoot, projectAgentGenerationJobLedgerPath), "{ invalid ledger\n", "utf8"),
     writeFile(corruptBindingPath, `${JSON.stringify({
       projectRoot: corruptProjectRoot,
@@ -657,6 +751,8 @@ try {
 } finally {
   if (firstLaunch) await closePackagedApp(firstLaunch);
   if (coldLaunch) await closePackagedApp(coldLaunch);
+  if (promotionLaunch) await closePackagedApp(promotionLaunch);
+  if (promotedColdLaunch) await closePackagedApp(promotedColdLaunch);
   if (corruptLaunch) await closePackagedApp(corruptLaunch);
 }
 
@@ -667,15 +763,13 @@ const finalState = {
   outputHashB: await sha256(outputB),
   files: await listFiles(projectRoot),
 };
-assert(finalState.projectHash === baseline.projectHash, "D7 packaged Review must not change project facts");
-assert(finalState.ledgerHash === baseline.ledgerHash, "D7 packaged Review must not change either generation candidate");
-assert(finalState.outputHashA === baseline.outputHashA && finalState.outputHashB === baseline.outputHashB, "D7 packaged Review must preserve both media files byte-for-byte");
+assert(finalState.projectHash === promotedProjectFileHash && finalState.projectHash !== baseline.projectHash, "D8 must change Project.vibe exactly once at explicit promotion");
+assert(finalState.ledgerHash === baseline.ledgerHash, "D8 must not change either generation candidate");
+assert(finalState.outputHashA === baseline.outputHashA && finalState.outputHashB === baseline.outputHashB, "D8 must preserve both media files byte-for-byte");
 const finalSelectionLedger = JSON.parse(await readFile(selectionLedgerPath, "utf8"));
-assert(finalSelectionLedger.selectionReceipts?.length === 0, "D7 must not write a winner-selection receipt");
-assert(finalSelectionLedger.promotionConfirmations?.length === 0, "D7 must not stage project-fact promotion");
 
 const evidence = {
-  schemaVersion: "p10_d7_packaged_acceptance/1.0.0",
+  schemaVersion: "p10_d8_packaged_acceptance/1.0.0",
   status: "pass",
   acceptedAt: new Date().toISOString(),
   fixture: {
@@ -686,6 +780,7 @@ const evidence = {
     projectRoot,
     projectId,
     projectFactHash,
+    promotedProjectFactHash,
     shotId,
     appPath,
   },
@@ -703,17 +798,26 @@ const evidence = {
   })),
   observations: {
     initial: firstObservation,
-    coldStart: coldObservation,
-    needsChange: revisionObservation,
+    selectionAndPromotionColdStart: coldObservation,
+    promotion: promotionObservation,
+    promotedColdStart: promotedColdObservation,
     corruptedLedger: corruptObservation,
+  },
+  selection: {
+    selectionConfirmationId: finalSelectionLedger.selectionConfirmations?.[0]?.confirmationId,
+    selectionReceiptId: finalSelectionLedger.selectionReceipts?.[0]?.receiptId,
+    promotionConfirmationId: finalSelectionLedger.promotionConfirmations?.[0]?.confirmationId,
+    winnerVersion: finalSelectionLedger.selectionReceipts?.[0]?.winnerVersion,
   },
   invariants: {
     providerCalls: 0,
-    projectFactsChanged: false,
+    projectFactsChangedOnlyAfterPromotion: true,
     generationLedgerChanged: false,
     candidateMediaChanged: false,
-    selectionReceiptWritten: false,
-    promoted: false,
+    selectionReceiptWritten: true,
+    selectionAndPromotionAreIndependent: true,
+    promoted: true,
+    loserPreserved: true,
     exported: false,
   },
   baseline,
@@ -726,6 +830,7 @@ console.log(JSON.stringify({
   root,
   evidencePath,
   projectFactHash,
+  promotedProjectFactHash,
   outputHashA,
   outputHashB,
 }, null, 2));

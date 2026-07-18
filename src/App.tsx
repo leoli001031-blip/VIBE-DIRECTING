@@ -118,6 +118,7 @@ import {
   migrateProjectAgentStagedPlanDraftToProjectRoot,
   migrateProjectAgentTimelineEntriesToProjectRoot,
   openProjectAgentGenerationJobLedger,
+  openProjectAgentReviewSelectionLedger,
   openProjectAgentActionLog,
   openProjectAgentTimeline,
   openProjectAgentStagedPlanDraft,
@@ -125,6 +126,7 @@ import {
   refreshProjectVibeSourceIndex,
   saveProjectAgentStagedPlanDraft,
   saveProjectAgentGenerationJobLedger,
+  saveProjectAgentReviewSelectionLedger,
   saveProjectAgentTimeline,
   rememberProjectAgentActionLogItem,
   type ProjectAgentActionLogItem,
@@ -136,6 +138,12 @@ import {
   type ProjectVibeDocument,
 } from "./project";
 import type { AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
+import {
+  agentDirectorReviewSelectionLedgerMatchesProject,
+  buildAgentDirectorReviewPromotionTransaction,
+  type AgentDirectorReviewSelectionLedger,
+} from "./core/agentDirectorReviewSelection";
+import type { AgentDirectorReviewVersionPair } from "./core/agentDirectorReviewVersionPair";
 import {
   agentDirectorReviewReceiptId,
   validateAgentDirectorReviewIdentity,
@@ -614,6 +622,14 @@ function agentGenerationLedgerMatchesIdentity(
   return ledger.projectId === identity.projectId
     && normalizeProjectRootForUiCompare(ledger.projectRoot) === normalizeProjectRootForUiCompare(identity.projectRoot)
     && ledger.projectFactHash === identity.projectFactHash;
+}
+
+function projectAgentReviewSelectionIdentity(project: ProjectVibeDocument, projectRoot?: string) {
+  return {
+    projectId: project.manifest.projectId,
+    projectRoot: projectRoot || "",
+    projectFactHash: hashProjectVibeFacts(project),
+  };
 }
 
 function projectVibeWithNewVideoTitle(
@@ -2304,8 +2320,10 @@ function App() {
   const [restoredAgentActionLog, setRestoredAgentActionLog] = useState<ProjectAgentActionLogItem[]>([]);
   const [restoredAgentTimelineEntries, setRestoredAgentTimelineEntries] = useState<VibeAgentTimelineEntry[]>([]);
   const [restoredAgentGenerationJobLedger, setRestoredAgentGenerationJobLedger] = useState<AgentVideoGenerationJobLedger | undefined>();
+  const [restoredAgentReviewSelectionLedger, setRestoredAgentReviewSelectionLedger] = useState<AgentDirectorReviewSelectionLedger | undefined>();
   const agentTimelineWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const agentGenerationLedgerWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const agentReviewSelectionLedgerWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const agentTimelineWriteEpochRef = useRef(0);
   const [agentWebSearchSettings, setAgentWebSearchSettings] = useState<AgentWebSearchSettings>(() => loadAgentWebSearchSettings());
   const [projectLocalKnowledgePacks, setProjectLocalKnowledgePacks] = useState<KnowledgePack[]>(() =>
@@ -2458,6 +2476,7 @@ function App() {
     setRestoredAgentActionLog([]);
     setRestoredAgentTimelineEntries([]);
     setRestoredAgentGenerationJobLedger(undefined);
+    setRestoredAgentReviewSelectionLedger(undefined);
     const firstShotId = nextState.storyFlow.shots[0]?.id;
     setSelectedShotId(firstShotId || "");
     setSelectedShotIds(firstShotId ? [firstShotId] : []);
@@ -3260,6 +3279,11 @@ function App() {
           projectAgentGenerationLedgerIdentity(browserDraftProject, undefined),
         );
         if (cancelled) return;
+        const reviewSelectionLedgerOpen = await openProjectAgentReviewSelectionLedger(
+          prototypeProjectDraftTarget,
+          projectAgentReviewSelectionIdentity(browserDraftProject, undefined),
+        );
+        if (cancelled) return;
         const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
         if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
@@ -3272,6 +3296,7 @@ function App() {
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
+        setRestoredAgentReviewSelectionLedger(reviewSelectionLedgerOpen.ok ? reviewSelectionLedgerOpen.ledger : undefined);
       }
       void restoreBrowserDraftStateAndAgentSidecars();
       return () => {
@@ -3321,6 +3346,11 @@ function App() {
           projectAgentGenerationLedgerIdentity(result.project, prototypeProjectDraftTarget.projectRoot),
         );
         if (cancelled) return;
+        const reviewSelectionLedgerOpen = await openProjectAgentReviewSelectionLedger(
+          prototypeProjectDraftTarget,
+          projectAgentReviewSelectionIdentity(result.project, prototypeProjectDraftTarget.projectRoot),
+        );
+        if (cancelled) return;
         const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
         if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
@@ -3334,6 +3364,7 @@ function App() {
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
+        setRestoredAgentReviewSelectionLedger(reviewSelectionLedgerOpen.ok ? reviewSelectionLedgerOpen.ledger : undefined);
         applyProjectVibeProjectState(result.project, prototypeProjectDraftTarget, {
           projectLocalKnowledgePacks: knowledgeOpen.packs,
         });
@@ -3513,6 +3544,11 @@ function App() {
           projectAgentGenerationLedgerIdentity(projectForRestore, runtimeProjectBinding.projectRoot),
         );
         if (cancelled) return;
+        const reviewSelectionLedgerOpen = await openProjectAgentReviewSelectionLedger(
+          runtimeDraftTarget,
+          projectAgentReviewSelectionIdentity(projectForRestore, runtimeProjectBinding.projectRoot),
+        );
+        if (cancelled) return;
         const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
         if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(runtimeDraftTarget, {
@@ -3527,6 +3563,7 @@ function App() {
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.ok ? timelineOpen.timeline.entries : []);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
+        setRestoredAgentReviewSelectionLedger(reviewSelectionLedgerOpen.ok ? reviewSelectionLedgerOpen.ledger : undefined);
       } catch (error) {
         console.warn("Failed to restore runtime Agent timeline", error);
       }
@@ -5044,6 +5081,98 @@ function App() {
     await nextWrite;
   }
 
+  async function rememberAgentReviewSelectionLedger(ledger: AgentDirectorReviewSelectionLedger) {
+    const writeEpoch = agentTimelineWriteEpochRef.current;
+    const currentIdentity = projectAgentReviewSelectionIdentity(
+      prototypeProjectVibeRef.current,
+      prototypeProjectDraftTarget.projectRoot,
+    );
+    if (!agentDirectorReviewSelectionLedgerMatchesProject(ledger, currentIdentity)) {
+      throw new Error("Agent review selection ledger no longer matches the active project.");
+    }
+    const write = async () => {
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) {
+        throw new Error("Agent review selection ledger write was superseded before persistence.");
+      }
+      const latestIdentity = projectAgentReviewSelectionIdentity(
+        prototypeProjectVibeRef.current,
+        prototypeProjectDraftTarget.projectRoot,
+      );
+      if (!agentDirectorReviewSelectionLedgerMatchesProject(ledger, latestIdentity)) {
+        throw new Error("Agent review selection project changed before persistence.");
+      }
+      const saveResult = await saveProjectAgentReviewSelectionLedger(prototypeProjectDraftTarget, ledger);
+      if (!saveResult.ok) throw new Error(saveResult.errors[0] || "Failed to save Agent review selection ledger.");
+      setRestoredAgentReviewSelectionLedger(ledger);
+    };
+    const nextWrite = agentReviewSelectionLedgerWriteQueueRef.current.then(write, write);
+    agentReviewSelectionLedgerWriteQueueRef.current = nextWrite.catch(() => undefined);
+    await nextWrite;
+  }
+
+  async function promoteAgentReviewSelection(input: {
+    pair: AgentDirectorReviewVersionPair;
+    ledger: AgentDirectorReviewSelectionLedger;
+    promotionConfirmationId: string;
+  }) {
+    const projectRoot = prototypeProjectDraftTarget.projectRoot || "";
+    const promotion = buildAgentDirectorReviewPromotionTransaction({
+      project: prototypeProjectVibeRef.current,
+      projectRoot,
+      pair: input.pair,
+      ledger: input.ledger,
+      promotionConfirmationId: input.promotionConfirmationId,
+      reviewerId: "local_user",
+      generatedAt: new Date().toISOString(),
+    });
+    if (promotion.status === "already_promoted" && promotion.promotionReceipt) {
+      return {
+        status: "already_promoted" as const,
+        receiptId: promotion.promotionReceipt.id,
+        projectFactHash: hashProjectVibeFacts(prototypeProjectVibeRef.current),
+      };
+    }
+    if (promotion.status !== "staged" || !promotion.transaction || !promotion.promotionReceipt) {
+      throw new Error(promotion.blockers[0] || "Agent review promotion is blocked.");
+    }
+    const applied = applyProjectVibeTransaction(prototypeProjectVibeRef.current, promotion.transaction);
+    if (applied.receipt.status !== "applied" || !applied.receipt.afterFactHash) {
+      throw new Error(applied.receipt.errors[0] || "Agent review promotion transaction was rejected.");
+    }
+    const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, applied.project);
+    if (!saveResult.ok || saveResult.factHash !== applied.receipt.afterFactHash) {
+      throw new Error(saveResult.errors[0] || "Promoted Project.vibe could not be persisted.");
+    }
+    applyProjectVibeProjectState(applied.project, prototypeProjectDraftTarget, {
+      generatedAt: promotion.transaction.createdAt,
+    });
+    setRestoredAgentGenerationJobLedger(undefined);
+    setRestoredAgentReviewSelectionLedger(undefined);
+    prototypeProjectDraftStatusRef.current = {
+      status: "saved",
+      label: "获胜版本已晋级项目事实",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+    };
+    setLatestPrototypeAgentDemo({
+      status: "preview_ready",
+      result: {
+        label: "获胜版本已晋级项目事实",
+        projectVibeAdded: true,
+        projectSaved: true,
+        storageLabel: "已保存到项目",
+        waitingReview: false,
+        previewReady: true,
+        status: "complete",
+      },
+    });
+    return {
+      status: "promoted" as const,
+      receiptId: promotion.promotionReceipt.id,
+      projectFactHash: saveResult.factHash,
+    };
+  }
+
   function agentTimelineEntriesAreContextOnly(entries: VibeAgentTimelineEntry[]) {
     return entries.every((entry) =>
       entry.id.startsWith("selection_context_")
@@ -5703,6 +5832,7 @@ function App() {
 
     // Generation jobs are never rebound across roots; browser drafts cannot stage them.
     setRestoredAgentGenerationJobLedger(undefined);
+    setRestoredAgentReviewSelectionLedger(undefined);
 
     try {
       await connectCurrentProject({
@@ -5996,6 +6126,7 @@ function App() {
     setRestoredAgentActionLog([]);
     setRestoredAgentTimelineEntries([]);
     setRestoredAgentGenerationJobLedger(undefined);
+    setRestoredAgentReviewSelectionLedger(undefined);
     setPrototypePreviewItems([]);
     setLatestPrototypeAgentDemo(undefined);
     setDirectorNewVideoStatus(undefined);
@@ -6354,6 +6485,7 @@ function App() {
           restoredAgentActionLog={restoredAgentActionLog}
           restoredAgentTimelineEntries={restoredAgentTimelineEntries}
           restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+          restoredAgentReviewSelectionLedger={restoredAgentReviewSelectionLedger}
           reviewReceipts={prototypeProjectVibe.receipts?.reviewReceipts}
 	          onStagePrototypeAgentPlan={stagePrototypeAgentPlan}
 	          onClearPrototypeAgentPlan={clearPrototypeAgentPlan}
@@ -6361,6 +6493,8 @@ function App() {
 	          onRememberAgentActionLogItem={rememberConfirmedProjectAgentAction}
           onRememberAgentTimelineEntries={rememberVibeAgentTimelineEntries}
           onRememberAgentGenerationJobLedger={rememberAgentGenerationJobLedger}
+          onRememberAgentReviewSelectionLedger={rememberAgentReviewSelectionLedger}
+          onPromoteAgentReviewSelection={promoteAgentReviewSelection}
           onPreviewPrototypeAgentDemo={preparePrototypeAgentDemo}
           onNewVideoStatusChange={setDirectorNewVideoStatus}
         />

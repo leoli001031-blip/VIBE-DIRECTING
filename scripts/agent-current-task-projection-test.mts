@@ -105,6 +105,65 @@ assert(!versionPairProjection.requiresConfirmation && versionPairProjection.effe
 assert(versionPairProjection.jobId === "job-b" && versionPairProjection.actionId === "action-b", "the current task should bind the actively viewed candidate");
 assert(factValue(versionPairProjection.facts, "当前查看") === "版本 B", "the current-task facts should expose the active version structurally");
 
+const versionSelectionProjection = buildAgentCurrentTaskProjection({
+  reviewVersionPair: {
+    pairId: "review_pair_P6S01",
+    shotId: "P6S01",
+    activeVersion: "B",
+    activeJobId: "job-b",
+    activeActionId: "action-b",
+  },
+  reviewSelection: {
+    status: "selection_confirmation",
+    winnerVersion: "B",
+    selectionConfirmation: {
+      confirmationId: "review-selection-confirmation-b",
+      actionId: "review-selection-action-b",
+    },
+  },
+  currentProjectId: "current_project",
+  currentProjectRoot: "/tmp/p10-d7-project",
+  currentProjectFactHash: "p10-d7-fact",
+  referenceReviewCount: 2,
+  videoReviewCount: 2,
+});
+assert(versionSelectionProjection.step === "confirm_version_selection", "a staged winner selection should preempt passive A/B review");
+assert(versionSelectionProjection.source === "review_selection_confirmation", "winner selection must have its own current-task source");
+assert(versionSelectionProjection.confirmationKind === "review_selection", "winner selection must expose a structured selection boundary");
+assert(versionSelectionProjection.confirmationId === "review-selection-confirmation-b", "winner selection must retain the exact confirmation identity");
+assert(versionSelectionProjection.effect === "state_only", "winner selection must not generate media, promote facts, or export");
+assert(factValue(versionSelectionProjection.facts, "结果") === "只写选择回执", "winner selection facts must describe the receipt-only boundary");
+
+const projectFactPromotionProjection = buildAgentCurrentTaskProjection({
+  reviewVersionPair: {
+    pairId: "review_pair_P6S01",
+    shotId: "P6S01",
+    activeVersion: "B",
+    activeJobId: "job-b",
+    activeActionId: "action-b",
+  },
+  reviewSelection: {
+    status: "promotion_confirmation",
+    winnerVersion: "B",
+    selectionReceiptId: "review-selection-receipt-b",
+    promotionConfirmation: {
+      confirmationId: "review-promotion-confirmation-b",
+      actionId: "review-promotion-action-b",
+    },
+  },
+  currentProjectId: "current_project",
+  currentProjectRoot: "/tmp/p10-d7-project",
+  currentProjectFactHash: "p10-d7-fact",
+  referenceReviewCount: 2,
+  videoReviewCount: 2,
+});
+assert(projectFactPromotionProjection.step === "confirm_project_fact_promotion", "a selected winner should move to an independent project-fact promotion task");
+assert(projectFactPromotionProjection.source === "review_promotion_confirmation", "promotion must have its own current-task source");
+assert(projectFactPromotionProjection.confirmationKind === "project_fact_promotion", "promotion must expose a structured project-fact boundary");
+assert(projectFactPromotionProjection.confirmationId === "review-promotion-confirmation-b", "promotion must retain the exact confirmation identity");
+assert(projectFactPromotionProjection.effect === "state_only", "promotion confirmation must not export or create a generation job");
+assert(factValue(projectFactPromotionProjection.facts, "选择回执") === "review-selection-receipt-b", "promotion must bind the exact independent selection receipt");
+
 const planningDraftProjection = buildAgentCurrentTaskProjection({
   newVideoDraft: {
     status: "planning",

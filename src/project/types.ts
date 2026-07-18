@@ -211,12 +211,17 @@ export interface ProjectVibeReviewReceipt {
   id: string;
   createdAt: string;
   status: ProjectVibeReviewStatus;
-  decisionScope?: "agent_video_preview";
+  decisionScope?: "agent_video_preview" | "agent_video_promotion";
   projectId?: string;
   projectRoot?: string;
   projectFactHash?: string;
   jobId?: string;
   actionId?: string;
+  selectionReceiptId?: string;
+  versionPairId?: string;
+  winnerVersion?: "A" | "B";
+  promotionActionId?: string;
+  promotionConfirmationId?: string;
   reviewerId?: string;
   humanReviewed: boolean;
   shotId?: string;
