@@ -7,7 +7,7 @@ import type { ProjectRuntimeState } from "../../core/projectState";
 import type { AgentVideoGenerationJobLedger } from "../../core/agentVideoProductionContract";
 import type { AgentCurrentTaskProjection } from "../../core/agentCurrentTaskProjection";
 import { agentNewVideoProjectTargetMode } from "../../core/agentNewVideoProjectTarget";
-import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
+import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft, ProjectVibeReviewReceipt } from "../../project";
 import {
   buildVibeAgentTimelineStatusView,
   isVibeAgentIntakeTimelineEntry,
@@ -595,6 +595,7 @@ export function DirectorMode({
   restoredAgentActionLog,
   restoredAgentTimelineEntries,
   restoredAgentGenerationJobLedger,
+  reviewReceipts,
   onNewVideoStatusChange,
   onStagePrototypeAgentPlan,
   onClearPrototypeAgentPlan,
@@ -687,6 +688,7 @@ export function DirectorMode({
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
   restoredAgentGenerationJobLedger?: AgentVideoGenerationJobLedger;
+  reviewReceipts?: ProjectVibeReviewReceipt[];
   onNewVideoStatusChange?: (status?: NewVideoStartStatus) => void;
   onStagePrototypeAgentPlan?: (input: StagePrototypeAgentPlanInput) => StagePrototypeAgentPlanResult | void | Promise<StagePrototypeAgentPlanResult | void>;
   onClearPrototypeAgentPlan?: () => void | Promise<void>;
@@ -1293,6 +1295,7 @@ export function DirectorMode({
             restoredAgentActionLog={showNewVideoStart ? [] : restoredAgentActionLog}
             restoredAgentTimelineEntries={surfaceAgentTimelineEntries}
             restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+            reviewReceipts={reviewReceipts}
             onStagePrototypeAgentPlan={showNewVideoStart ? undefined : onStagePrototypeAgentPlan}
             onClearPrototypeAgentPlan={onClearPrototypeAgentPlan}
             onRefreshRestoredAgentStagedPlanDraft={onRefreshRestoredAgentStagedPlanDraft}

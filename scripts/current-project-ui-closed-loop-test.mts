@@ -899,6 +899,7 @@ function assertCreatorPanelContract() {
   assert(/currentProjectProjectionForRuntime[\s\S]*shots:\s*\[\][\s\S]*sections:\s*\[\]/.test(app), "Empty current-project placeholders must clear stale story and section state before rendering");
   assert(/const\s+currentProjectProjectionHasUsableContent\s*=\s*!currentProjectHasOnlyPlaceholder[\s\S]*currentProjectWorkbenchProjection\.sections\.length > 0/.test(app), "Current-project placeholder sections must not count as usable content that can overwrite a newly confirmed browser draft story");
   assert(/normalizeProjectRootForUiCompare/.test(appSource), "App must normalize project roots before comparing current-project projections");
+  assert(/function\s+normalizeProjectRootForUiCompare[\s\S]*replace\(\/\^\\\/private\\\/\(tmp\|var\)\(\?=\\\/\|\$\)\/[\s\S]*"\/\$1"\)/.test(appSource), "App project-root comparison must treat macOS /private/tmp and /tmp realpath aliases as the same project");
   assert(/\/\.vibe-runtime\//.test(appSource), "App project-root comparison must collapse absolute and repo-relative .vibe-runtime roots");
   assert(!/const\s+currentProjectProjectionMatchesSelectedRoot\s*=\s*runtimeCurrentProjectIsBound/.test(app), "App must not let a bound runtime projection bypass selected project-root matching");
   assert(/const\s+currentProjectProjectionMatchesSelectedRoot\s*=\s*!normalizedSelectedProjectRoot[\s\S]*normalizedProjectionProjectRoot\s*===\s*normalizedSelectedProjectRoot/.test(app), "App must only use current-project projection when it matches the selected project root");
@@ -931,8 +932,13 @@ function assertCreatorPanelContract() {
     /effectiveRuntimeProjectIdentity\?\.projectRoot \|\| prototypeProjectDraftTarget\.projectRoot/.test(appSource),
     "Runtime review decisions must prefer the canonical bound project root",
   );
+  assert(
+    /createRuntimeApiCurrentProjectReviewDecision\(\{[^}]*readFileSync,\s*existsSync,\s*writeFileSync,/s.test(localRuntimeApiServerSource),
+    "Runtime review decisions must receive the filesystem existence check used by strict generation-ledger validation",
+  );
   assert(/outputPath:\s*reviewMediaPath/.test(app), "Review decision outputPath must use the project-relative media path");
   assert(!/outputPath:\s*item\.mediaPath/.test(app), "Review decisions must not write raw item.mediaPath into Project.vibe");
+  assert(/outputPath:\s*agentVideoReviewOutputPath/.test(app), "Agent video review identity must retain the returned output path for ledger verification without using it as the Project.vibe candidate path");
   assert(/onRunProjectRealChain=\{runProjectRealChain\}/.test(appSource), "DirectorMode must pass runtime status run-check handler to the project panel");
   assert(/onRunProjectImage2Batch=\{runProjectImage2Batch\}/.test(appSource), "DirectorMode must pass Image2 batch run-check handler to the project panel");
   assert(/function\s+assetGenerationTarget/.test(image2AssetGenerationActionSource), "Reference completion must derive its target from the current selection");
@@ -1091,7 +1097,7 @@ function assertCreatorPanelContract() {
   assert(/const displayedScopeLabel = exportResultIsPrimary && exportFocusScopeLabel[\s\S]*\? exportFocusScopeLabel[\s\S]*: videoResultIsPrimary && videoFocusScopeLabel[\s\S]*\? videoFocusScopeLabel[\s\S]*: baseDisplayedScopeLabel/.test(agentPanelSource), "Agent Panel should let export/video primary tasks replace the selected-shot scope in the bottom composer");
   assert(/const displayedSelectionChips = pendingDraftShotCount[\s\S]*: workflow && preparedSelectionChips\.length \? preparedSelectionChips : liveSelectionChips/.test(agentPanelSource), "Agent Panel should keep selected-shot chips visible while video/export is the current primary task, except while an unsaved draft is being confirmed");
   assert(/const selectionContextTitle = exportResultIsPrimary \|\| videoResultIsPrimary[\s\S]*\? "当前任务"[\s\S]*pendingDraftShotCount[\s\S]*\? pendingDraftSelectionContext\?\.title \|\| "当前草案"[\s\S]*composerPermissionContract[\s\S]*\? "更新工作方式"[\s\S]*localProjectSetupConfirmationContextActive[\s\S]*\? "当前故事"[\s\S]*newVideoDraftBusyForAgent[\s\S]*\? "正在整理"[\s\S]*hasActiveSelection[\s\S]*\? "当前选择"[\s\S]*: "怎么用"/.test(agentPanelSource), "Agent Panel should label queued tasks, drafts, planning, and selections with the current Agent state");
-  assert(/<span>\{selectionContextTitle\}<\/span>/.test(agentPanelSource), "Agent Panel should render the state-aware context title");
+  assert(/const focusedSelectionContextTitle = focusedTaskOwnsVisibleContext[\s\S]*: selectionContextTitle[\s\S]*<span>\{focusedSelectionContextTitle\}<\/span>/.test(agentPanelSource), "Agent Panel should preserve the state-aware context title while letting the authoritative focused turn own the visible context");
   assert(/创作者路径/.test(agentPanelSource), "Agent Panel should label the default creator path");
   assert(/描述修改[\s\S]*生成计划[\s\S]*确认应用/.test(agentPanelSource), "Agent Panel should expose the simplified creator path");
   assert(/修改计划详情/.test(agentPanelSource), "Agent Panel should keep staged plan details behind disclosure");

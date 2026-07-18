@@ -59,10 +59,15 @@ import {
 import {
   buildAgentVideoPipelinePlan,
   createAgentVideoGenerationJobLedger,
+  planAgentVideoProductionAction,
   selectLatestAgentVideoGenerationReviewJob,
   type AgentVideoGenerationJob,
   type AgentVideoGenerationJobLedger,
 } from "../../core/agentVideoProductionContract";
+import {
+  agentDirectorApprovedReviewReceiptMatchesIdentity,
+  type AgentDirectorReviewIdentity,
+} from "../../core/agentDirectorReviewDecision";
 import {
   buildProjectInboxProjection,
   buildProjectObservation,
@@ -91,8 +96,10 @@ import type {
 } from "../../agent-core/types";
 import {
   bindProjectAgentTimelineEntriesToIdentity,
+  createProjectAgentStagedPlanDraft,
   type ProjectAgentActionLogItem,
   type ProjectAgentStagedPlanDraft,
+  type ProjectVibeReviewReceipt,
 } from "../../project";
 import { videoBlockerRecoveryIntent } from "../../core/videoBlockerRecovery";
 import {
@@ -163,11 +170,27 @@ import type { CreatorAgentCommand, CreatorReviewTrayItem } from "./creatorDeskTy
 import {
   activeAgentDirectorClarificationFromTimeline,
   agentDirectorClarificationReplyIntent,
+  buildAgentDirectorClarificationFreeformResolutionTimelineEntry,
   buildAgentDirectorClarificationResolutionTimelineEntry,
   buildAgentDirectorClarificationTimelineEntries,
   buildAgentDirectorClarificationTurn,
 } from "./agentDirectorClarification";
 import { buildAgentDirectorTurnProjection } from "./agentDirectorTurnProjection";
+import {
+  activeAgentDirectorReviewRevisionIntentFromTimeline,
+  buildAgentDirectorReviewRevisionIntent,
+  buildAgentDirectorReviewRevisionTimelineEntries,
+} from "./agentDirectorReviewRevision";
+import {
+  activeAgentDirectorReviewRegenerationConfirmationFromTimeline,
+  activeAgentDirectorReviewRegenerationProposalFromTimeline,
+  agentDirectorReviewRegenerationConfirmationMatchesJob,
+  buildAgentDirectorReviewRegenerationConfirmationTimelineEntries,
+  buildAgentDirectorReviewRegenerationProposal,
+  buildAgentDirectorReviewRegenerationProposalRevisionTimelineEntry,
+  buildAgentDirectorReviewRegenerationProposalTimelineEntries,
+  compileAgentDirectorReviewRegenerationPrompt,
+} from "./agentDirectorReviewRegeneration";
 import { cleanStoryText, formatShotNumber } from "./MinimalStoryFlow";
 import { usesEndpointEndFrame } from "./videoControlModeUi";
 import {
@@ -201,6 +224,7 @@ type MinimalAgentMessage = {
   facts?: Array<{ label: string; value: string }>;
   confirmationFacts?: Array<{ label: string; value: string }>;
   confirmationBoundary?: string;
+  executionMode?: "dry_run" | "live";
   resultView?: DirectorView;
   executionResult?: VibeAgentExecutionResultSummary;
   next?: string;
@@ -790,6 +814,9 @@ function minimalAgentMessageFromTimelineEntry(entry: VibeAgentTimelineEntry): Mi
   const assetActions = minimalAgentAssetActionsFromTimelineEntry(entry);
   const assetActionOverflow = minimalAgentAssetActionOverflowFromTimelineEntry(entry, assetActions.length);
   const skillRecommendations = minimalAgentSkillRecommendationsFromTimelineEntry(entry);
+  const executionMode = entry.details?.executionMode === "dry_run" || entry.details?.executionMode === "live"
+    ? entry.details.executionMode
+    : undefined;
   if (entry.type === "user_message") {
     return {
       id: entry.id,
@@ -818,6 +845,7 @@ function minimalAgentMessageFromTimelineEntry(entry: VibeAgentTimelineEntry): Mi
       toolName: entry.toolName,
       actionKind: entry.actionKind,
       actionId: entry.actionId,
+      executionMode,
       facts: entry.facts,
       resultView: timelineResultView(entry),
       executionResult,
@@ -840,6 +868,7 @@ function minimalAgentMessageFromTimelineEntry(entry: VibeAgentTimelineEntry): Mi
       toolName: entry.toolName,
       actionKind: entry.actionKind,
       actionId: entry.actionId,
+      executionMode,
       facts: entry.facts,
       next: next || "确认后我再执行，不会自动调用生成服务。",
     };
@@ -924,6 +953,7 @@ function minimalAgentConfirmationExecutionModeForCapabilities(
   },
 ): MinimalAgentConfirmationExecutionMode {
   if (!minimalAgentMessageRequestsActionConfirmation(message)) return undefined;
+  if (message.executionMode) return message.executionMode;
   if (message.actionKind === "prepare_reference_generation") return input.referenceLiveAdapterReady ? "live" : "dry_run";
   if (message.actionKind === "prepare_video_submit") return input.videoLiveAdapterReady ? "live" : "dry_run";
   if (message.actionKind === "query_video_result") return input.queryVideoLiveAdapterReady ? "live" : "dry_run";
@@ -4162,6 +4192,9 @@ function agentActionFieldLabel(field: string) {
   if (field === "exportPackage") return "导出包";
   if (field === "selectedScopeDraft") return "当前选择";
   if (field === "projectDraft") return "项目草案";
+  if (field === "directorIntent") return "修改方向";
+  if (field === "versionPolicy") return "版本处理";
+  if (field === "reviewGate") return "新版本复核";
   return field;
 }
 
@@ -4860,6 +4893,7 @@ export function MinimalAgentPanel({
   restoredAgentActionLog,
   restoredAgentTimelineEntries,
   restoredAgentGenerationJobLedger,
+  reviewReceipts,
   onStagePrototypeAgentPlan,
   onClearPrototypeAgentPlan,
   onRefreshRestoredAgentStagedPlanDraft,
@@ -4952,6 +4986,7 @@ export function MinimalAgentPanel({
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
   restoredAgentGenerationJobLedger?: AgentVideoGenerationJobLedger;
+  reviewReceipts?: ProjectVibeReviewReceipt[];
   onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
   onRememberAgentGenerationJobLedger?: (ledger: AgentVideoGenerationJobLedger) => void | Promise<void>;
   onSaveResearchAsReference?: (input: {
@@ -5129,15 +5164,51 @@ export function MinimalAgentPanel({
       agentVideoDryRunLedger,
     ],
   );
-  const recoveredVideoReviewTarget = useMemo(
-    () => minimalAgentReviewTargetFromGenerationJob(recoveredVideoReviewJob),
-    [recoveredVideoReviewJob],
+  const recoveredVideoReviewApproved = useMemo(
+    () => Boolean(
+      recoveredVideoReviewJob?.reviewResult
+      && reviewReceipts?.some((receipt) => agentDirectorApprovedReviewReceiptMatchesIdentity(
+        receipt,
+        recoveredVideoReviewJob.reviewResult!,
+      )),
+    ),
+    [recoveredVideoReviewJob, reviewReceipts],
   );
-  const effectiveReviewTarget = recoveredVideoReviewTarget
-    ? reviewTarget && minimalAgentReviewTargetsMatch(reviewTarget, recoveredVideoReviewTarget)
-      ? { ...recoveredVideoReviewTarget, label: reviewTarget.label, detail: reviewTarget.detail }
-      : reviewTarget || recoveredVideoReviewTarget
+  const recoveredVideoReviewTarget = useMemo(
+    () => recoveredVideoReviewApproved ? undefined : minimalAgentReviewTargetFromGenerationJob(recoveredVideoReviewJob),
+    [recoveredVideoReviewApproved, recoveredVideoReviewJob],
+  );
+  const visibleReviewTarget = recoveredVideoReviewApproved
+    && minimalAgentReviewTargetsMatch(reviewTarget, minimalAgentReviewTargetFromGenerationJob(recoveredVideoReviewJob))
+    ? undefined
     : reviewTarget;
+  const effectiveReviewTarget = recoveredVideoReviewTarget
+    ? visibleReviewTarget && minimalAgentReviewTargetsMatch(visibleReviewTarget, recoveredVideoReviewTarget)
+      ? { ...recoveredVideoReviewTarget, label: visibleReviewTarget.label, detail: visibleReviewTarget.detail }
+      : visibleReviewTarget || recoveredVideoReviewTarget
+    : visibleReviewTarget;
+  const effectiveReviewIdentity: AgentDirectorReviewIdentity | undefined = effectiveReviewTarget
+    && effectiveReviewTarget.jobId
+    && effectiveReviewTarget.actionId
+    && effectiveReviewTarget.projectFactHash
+    && effectiveReviewTarget.shotId
+    && effectiveReviewTarget.sourceReceiptId
+    && effectiveReviewTarget.mediaPath
+    && effectiveReviewTarget.outputHash
+    && agentGenerationProjectIdentity.projectId
+    && agentGenerationProjectIdentity.projectRoot
+    ? {
+        projectId: agentGenerationProjectIdentity.projectId,
+        projectRoot: agentGenerationProjectIdentity.projectRoot,
+        projectFactHash: effectiveReviewTarget.projectFactHash,
+        jobId: effectiveReviewTarget.jobId,
+        actionId: effectiveReviewTarget.actionId,
+        shotId: effectiveReviewTarget.shotId,
+        sourceReceiptId: effectiveReviewTarget.sourceReceiptId,
+        outputPath: effectiveReviewTarget.mediaPath,
+        outputHash: effectiveReviewTarget.outputHash,
+      }
+    : undefined;
 
   useEffect(() => {
     if (newVideoResetKeyRef.current === newVideoResetKey) return;
@@ -5222,7 +5293,22 @@ export function MinimalAgentPanel({
     && restoredAgentStagedPlanDraft.action?.kind === "prepare_reference_generation"
     ? restoredAgentStagedPlanDraft.action.actionId
     : timelineReferenceGenerationActionId;
+  const activeDirectorReviewRegenerationConfirmation = useMemo(
+    () => activeAgentDirectorReviewRegenerationConfirmationFromTimeline(agentTimelineEntries, effectiveReviewIdentity),
+    [
+      agentTimelineEntries,
+      effectiveReviewIdentity?.actionId,
+      effectiveReviewIdentity?.jobId,
+      effectiveReviewIdentity?.outputHash,
+      effectiveReviewIdentity?.projectFactHash,
+      effectiveReviewIdentity?.projectId,
+      effectiveReviewIdentity?.projectRoot,
+      effectiveReviewIdentity?.shotId,
+      effectiveReviewIdentity?.sourceReceiptId,
+    ],
+  );
   const visibleAgentTimelineEntries = useMemo(() => {
+    if (activeDirectorReviewRegenerationConfirmation) return agentTimelineEntries;
     const restoredPendingAgentIntent = restoredAgentStagedPlanDraft?.status === "active"
       ? restoredAgentStagedPlanDraft.userIntent?.trim() || ""
       : "";
@@ -5239,10 +5325,38 @@ export function MinimalAgentPanel({
     }
     if (!currentUserIntent) return agentTimelineEntries;
     return agentTimelineEntriesForCurrentUserIntent(agentTimelineEntries, currentUserIntent) || [];
-  }, [activeComposerTurnIntent, agentTimelineEntries, preparedContext?.userIntent, restoredAgentStagedPlanDraft?.status, restoredAgentStagedPlanDraft?.userIntent, restoredReferenceGenerationActionId, text]);
+  }, [activeComposerTurnIntent, activeDirectorReviewRegenerationConfirmation, agentTimelineEntries, preparedContext?.userIntent, restoredAgentStagedPlanDraft?.status, restoredAgentStagedPlanDraft?.userIntent, restoredReferenceGenerationActionId, text]);
   const activeDirectorClarificationTurn = useMemo(
     () => activeAgentDirectorClarificationFromTimeline(agentTimelineEntries),
     [agentTimelineEntries],
+  );
+  const activeDirectorReviewRevisionIntent = useMemo(
+    () => activeAgentDirectorReviewRevisionIntentFromTimeline(agentTimelineEntries, effectiveReviewIdentity),
+    [
+      agentTimelineEntries,
+      effectiveReviewIdentity?.actionId,
+      effectiveReviewIdentity?.jobId,
+      effectiveReviewIdentity?.outputHash,
+      effectiveReviewIdentity?.projectFactHash,
+      effectiveReviewIdentity?.projectId,
+      effectiveReviewIdentity?.projectRoot,
+      effectiveReviewIdentity?.shotId,
+      effectiveReviewIdentity?.sourceReceiptId,
+    ],
+  );
+  const activeDirectorReviewRegenerationProposal = useMemo(
+    () => activeAgentDirectorReviewRegenerationProposalFromTimeline(agentTimelineEntries, effectiveReviewIdentity),
+    [
+      agentTimelineEntries,
+      effectiveReviewIdentity?.actionId,
+      effectiveReviewIdentity?.jobId,
+      effectiveReviewIdentity?.outputHash,
+      effectiveReviewIdentity?.projectFactHash,
+      effectiveReviewIdentity?.projectId,
+      effectiveReviewIdentity?.projectRoot,
+      effectiveReviewIdentity?.shotId,
+      effectiveReviewIdentity?.sourceReceiptId,
+    ],
   );
   const referencePlanningFocusEntry = localReferencePlanningFocusEntry(visibleAgentTimelineEntries)
     || localReferencePlanningFocusEntry(agentTimelineEntries);
@@ -6539,17 +6653,30 @@ export function MinimalAgentPanel({
       selection: restoredSelection,
     }, projectReferenceGuide));
     const nextProjection = buildAgentPanelProjection(nextWorkflow, runtimeState, "review");
-	    const refreshedToolHandoff = buildVibeAgentToolHandoff({
-	      action: draft.action,
-	      userConfirmed: false,
-	      confirmedAt: draft.toolHandoff.createdAt || draft.createdAt,
-	      availability: currentAgentToolAvailability(draft.action),
-	    }) || draft.toolHandoff;
-	    const refreshedDraft = refreshedRestoredAgentStagedPlanDraft(draft, refreshedToolHandoff);
-	    if (restoredAgentStagedPlanDraftNeedsWriteBack(draft, refreshedDraft)) {
-	      void onRefreshRestoredAgentStagedPlanDraft?.(refreshedDraft);
-	    }
-	    setWorkflow(nextWorkflow);
+    const reviewRegenerationJob = activeDirectorReviewRegenerationConfirmation
+      ? agentVideoDryRunLedger.jobs.find((job) => job.jobId === activeDirectorReviewRegenerationConfirmation.jobId)
+      : undefined;
+    const preserveReviewRegenerationHandoff = agentDirectorReviewRegenerationConfirmationMatchesJob(
+      activeDirectorReviewRegenerationConfirmation,
+      {
+        actionId: draft.action.actionId,
+        confirmationId: draft.toolHandoff.handoffId,
+        job: reviewRegenerationJob,
+      },
+    );
+    const refreshedToolHandoff = preserveReviewRegenerationHandoff
+      ? draft.toolHandoff
+      : buildVibeAgentToolHandoff({
+          action: draft.action,
+          userConfirmed: false,
+          confirmedAt: draft.toolHandoff.createdAt || draft.createdAt,
+          availability: currentAgentToolAvailability(draft.action),
+        }) || draft.toolHandoff;
+    const refreshedDraft = refreshedRestoredAgentStagedPlanDraft(draft, refreshedToolHandoff);
+    if (restoredAgentStagedPlanDraftNeedsWriteBack(draft, refreshedDraft)) {
+      void onRefreshRestoredAgentStagedPlanDraft?.(refreshedDraft);
+    }
+    setWorkflow(nextWorkflow);
     setProjection(nextProjection);
     setFeedbackRecompile(undefined);
     setPreparedContext({
@@ -6585,7 +6712,9 @@ export function MinimalAgentPanel({
     });
     setStatus(draft.action.status === "blocked" ? "需要补充" : "等你确认");
   }, [
+    activeDirectorReviewRegenerationConfirmation,
     activeVideoPermissionContract,
+    agentVideoDryRunLedger,
     hasPreparedAgentState,
 	    localProjectReadyForTools,
 	    onRefreshRestoredAgentStagedPlanDraft,
@@ -7183,6 +7312,12 @@ export function MinimalAgentPanel({
         setStatus("先写一句，或拖文件");
         return;
       }
+      if (activeDirectorClarificationTurn?.reviewRevision) {
+        return await formReviewRegenerationProposal({
+          clarificationTurn: activeDirectorClarificationTurn,
+          resolvedIntent: userIntent,
+        });
+      }
       setActiveComposerTurnIntent(userIntent);
       if (!activeDirectorClarificationTurn && !options.skipClarification) {
         const clarificationShotId = selectionOverride?.selectedShotId
@@ -7194,6 +7329,12 @@ export function MinimalAgentPanel({
           selectedShotId: clarificationShotId,
           targetLabel: clarificationShotId,
           hasAttachments: attachments.length > 0,
+          reviewRevision: activeDirectorReviewRevisionIntent
+            ? {
+              intentId: activeDirectorReviewRevisionIntent.intentId,
+              identity: activeDirectorReviewRevisionIntent.identity,
+            }
+            : undefined,
         });
         if (clarificationTurn) {
           resetPreparedComposerState("需要确认导演意图");
@@ -7579,7 +7720,7 @@ export function MinimalAgentPanel({
           userIntent,
           action: nextAgentActionEnvelope,
         });
-      setAgentTimelineEntries(activeDirectorClarificationTurn
+      setAgentTimelineEntries(activeDirectorClarificationTurn || activeDirectorReviewRevisionIntent
         ? mergeVibeAgentTimelineEntries(agentTimelineEntries, preparedTimelineEntries)
         : preparedTimelineEntries);
       const agentResolvedShotIds = agentActionTargetShotIds(nextAgentActionEnvelope);
@@ -7827,7 +7968,8 @@ export function MinimalAgentPanel({
   ) {
     const boundEntries = bindProjectAgentTimelineEntriesToIdentity(entries, identity);
     setAgentTimelineEntries((current) => mergeVibeAgentTimelineEntries(current, boundEntries));
-    void onRememberAgentTimelineEntries?.(boundEntries);
+    const persistence = onRememberAgentTimelineEntries?.(boundEntries);
+    if (persistence) void persistence.catch((error) => console.warn("Failed to persist Agent timeline entries", error));
   }
 
   function rememberDirectProductAction(input: {
@@ -7994,6 +8136,10 @@ export function MinimalAgentPanel({
       action,
       activeVideoPermissionContract,
     );
+    const preStagedActionJob = action
+      ? [...agentVideoExecutionLedgerRef.current.jobs].reverse().find((job) => job.actionId === action.actionId && job.status === "staged")
+      : undefined;
+    const actionPinnedToDryRun = preStagedActionJob?.executionMode === "dry_run";
     const referenceLive = Boolean(
       action?.kind === "prepare_reference_generation"
       && action.executionContract.referenceGenerationAllowed
@@ -8004,6 +8150,7 @@ export function MinimalAgentPanel({
     );
     const videoLive = Boolean(
       action?.kind === "prepare_video_submit"
+      && !actionPinnedToDryRun
       && action.executionContract.videoSubmitAllowed
       && onSendSeedanceVideo
       && videoSendAction?.keyConfigured
@@ -8069,7 +8216,16 @@ export function MinimalAgentPanel({
       directorFeedbackCanConfirm(feedbackRecompile)
       && onDirectorFeedbackConfirmed,
     );
-    const preparedUserIntent = preparedContext?.userIntent?.trim() || await composerIntentFromInput(text, attachments);
+    const preStagedGenerationPrompt = agentActionEnvelope
+      ? [...agentVideoExecutionLedgerRef.current.jobs].reverse().find((job) => (
+        job.actionId === agentActionEnvelope.actionId
+        && job.status === "staged"
+        && job.executionMode === "dry_run"
+      ))?.prompt
+      : undefined;
+    const preparedUserIntent = preStagedGenerationPrompt?.trim()
+      || preparedContext?.userIntent?.trim()
+      || await composerIntentFromInput(text, attachments);
     const canPreviewPrototypeDemo = Boolean(onPreviewPrototypeAgentDemo && preparedUserIntent && !canConfirmFeedback);
     if (!workflowCanConfirm(workflow) && !canPreviewPrototypeDemo && !canConfirmFeedback) return;
     const confirmed = workflowCanConfirm(workflow)
@@ -9172,7 +9328,7 @@ export function MinimalAgentPanel({
   }, [reviewTargetIdentity.key]);
   useEffect(() => {
     setReviewHistoryOpen(false);
-  }, [activeDirectorClarificationTurn?.id, agentDirectorProposal?.actionId, reviewTargetIdentity.key]);
+  }, [activeDirectorClarificationTurn?.id, activeDirectorReviewRegenerationConfirmation?.confirmationId, activeDirectorReviewRegenerationProposal?.proposalId, activeDirectorReviewRevisionIntent?.intentId, agentDirectorProposal?.actionId, reviewTargetIdentity.key]);
   useEffect(() => {
     onCurrentTaskProjectionChange?.(agentCurrentTaskProjection);
   }, [agentCurrentTaskProjection, onCurrentTaskProjectionChange]);
@@ -10727,6 +10883,8 @@ export function MinimalAgentPanel({
   const agentDirectorTurnProjection = buildAgentDirectorTurnProjection({
     task: agentCurrentTaskProjection,
     reviewTarget: effectiveReviewTarget,
+    reviewRevisionIntent: activeDirectorReviewRevisionIntent,
+    reviewRegenerationProposal: activeDirectorReviewRegenerationProposal,
     clarification: activeDirectorClarificationTurn,
     proposal: agentDirectorProposal,
     currentProjectFactHash: projectFactHash,
@@ -10963,24 +11121,31 @@ export function MinimalAgentPanel({
   const clarificationTurnVisible = agentDirectorTurnProjection.phase === "clarification"
     && Boolean(agentDirectorTurnProjection.clarification);
   const proposalTurnVisible = agentDirectorTurnProjection.phase === "proposal"
-    && Boolean(agentDirectorTurnProjection.proposal);
+    && Boolean(agentDirectorTurnProjection.proposal || agentDirectorTurnProjection.reviewRegenerationProposal);
   const paidConfirmationTurnVisible = agentDirectorTurnProjection.phase === "confirmation"
     && agentCurrentTaskProjection.effect === "generation_job"
     && agentCurrentTaskProjection.source !== "pipeline_job";
   const runningTurnVisible = agentDirectorTurnProjection.phase === "running"
     && Boolean(agentDirectorTurnProjection.running);
   const reviewTurnVisible = currentView === "preview"
+    && agentDirectorTurnProjection.phase === "review"
     && agentCurrentTaskProjection.step === "submit_video"
     && (agentDirectorTurnProjection.mode === "review" || agentDirectorTurnProjection.mode === "blocked");
+  const reviewRevisionTurnVisible = agentDirectorTurnProjection.phase === "conversation"
+    && Boolean(agentDirectorTurnProjection.reviewRevisionIntent);
   const focusedTurnVisible = clarificationTurnVisible
     || proposalTurnVisible
     || paidConfirmationTurnVisible
     || runningTurnVisible
+    || reviewRevisionTurnVisible
     || reviewTurnVisible;
   const clarificationProjection = agentDirectorTurnProjection.clarification;
   const proposalProjection = agentDirectorTurnProjection.proposal;
+  const reviewRegenerationProposalProjection = agentDirectorTurnProjection.reviewRegenerationProposal;
+  const displayedProposalProjection = reviewRegenerationProposalProjection || proposalProjection;
   const paidConfirmationProjection = agentDirectorTurnProjection.confirmation;
   const runningProjection = agentDirectorTurnProjection.running;
+  const reviewRevisionProjection = agentDirectorTurnProjection.reviewRevisionIntent;
   const proposalConfirmAction = proposalTurnVisible
     ? agentDirectorTurnProjection.actions.find((action) => action.id === "confirm_current_task")
     : undefined;
@@ -11008,6 +11173,68 @@ export function MinimalAgentPanel({
   const activeJobInspectAction = runningTurnVisible
     ? agentDirectorTurnProjection.actions.find((action) => action.id === "inspect_job")
     : undefined;
+  const displayedCurrentTaskLabel = clarificationTurnVisible
+    ? "确认导演意图"
+    : proposalTurnVisible
+      ? proposalConfirmAction?.label || "确认当前提案"
+      : reviewRevisionTurnVisible
+        ? "说明修改方向"
+        : agentCurrentTaskProjection.label;
+  const displayedCurrentTaskEffect = clarificationTurnVisible
+    ? "先澄清导演方向，不创建新任务"
+    : proposalTurnVisible
+      ? "确认前只保留提案和原结果"
+      : reviewRevisionTurnVisible
+        ? "继续讨论修改，原结果保持不变"
+        : agentCurrentTaskEffectLabel(agentCurrentTaskProjection);
+  const displayedCurrentTaskStatus = clarificationTurnVisible
+    ? "等待选择"
+    : proposalTurnVisible
+      ? "等待确认"
+      : reviewRevisionTurnVisible
+        ? "等待说明"
+        : agentCurrentTaskStatusLabel(agentCurrentTaskProjection);
+  const displayedCurrentTaskTone = clarificationTurnVisible || proposalTurnVisible || reviewRevisionTurnVisible
+    ? "waiting"
+    : agentCurrentTaskTone(agentCurrentTaskProjection);
+  const reviewRegenerationConfirmationTurnVisible = paidConfirmationTurnVisible
+    && Boolean(activeDirectorReviewRegenerationConfirmation);
+  const focusedTaskOwnsVisibleContext = clarificationTurnVisible
+    || proposalTurnVisible
+    || reviewRevisionTurnVisible
+    || reviewRegenerationConfirmationTurnVisible;
+  const focusedCompactScopeLabel = focusedTaskOwnsVisibleContext
+    ? displayedCurrentTaskLabel
+    : displayedCompactScopeLabel;
+  const focusedCompactSelectionHint = focusedTaskOwnsVisibleContext
+    ? reviewRegenerationConfirmationTurnVisible
+      ? "新的本地验证任务已建立；确认前不执行，也不会调用付费生成服务。"
+      : displayedCurrentTaskEffect
+    : visibleCompactSelectionHint;
+  const focusedSelectionContextTitle = focusedTaskOwnsVisibleContext
+    ? "当前任务"
+    : selectionContextTitle;
+  const focusedSelectionChips = clarificationTurnVisible
+    ? [
+        { label: "范围", value: clarificationProjection?.targetLabel || "当前视频" },
+        { label: "原结果", value: "保留" },
+        { label: "新任务", value: "未创建" },
+      ]
+    : proposalTurnVisible
+      ? [
+          { label: "范围", value: displayedProposalProjection?.targetLabel || "当前视频" },
+          { label: "原结果", value: "保留" },
+          { label: "下一步", value: "确认新任务" },
+        ]
+      : reviewRevisionTurnVisible
+        ? [
+            { label: "范围", value: reviewRevisionProjection?.targetLabel || "当前视频" },
+            { label: "原结果", value: "保留" },
+            { label: "新任务", value: "未创建" },
+          ]
+        : reviewRegenerationConfirmationTurnVisible
+          ? paidConfirmationProjection?.facts.slice(0, 3) || []
+          : displayedSelectionChips;
 
   async function approveReviewFromAgentTurn() {
     if (
@@ -11029,11 +11256,103 @@ export function MinimalAgentPanel({
     }
   }
 
-  function discussReviewChanges() {
-    const targetLabel = effectiveReviewTarget?.label || shot?.id || "当前结果";
-    updateText(`${targetLabel} 需要修改：`);
-    setStatus("继续说明要改的时机、动作或连续性；不会自动重试。");
-    window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
+  async function discussReviewChanges() {
+    if (!effectiveReviewIdentity || !effectiveReviewTarget || !reviewRevisionAction?.enabled) {
+      setStatus("当前结果身份不完整，不能记录修改意图。");
+      return;
+    }
+    if (!onRememberAgentTimelineEntries) {
+      setStatus("修改意图无法持久化；原结果仍保持待复核。");
+      return;
+    }
+    const revision = buildAgentDirectorReviewRevisionIntent({
+      identity: effectiveReviewIdentity,
+      targetLabel: effectiveReviewTarget.label || shot?.id,
+    });
+    if (!revision.ok || !revision.intent) {
+      setStatus("当前结果身份不完整，不能记录修改意图。");
+      return;
+    }
+    const entries = bindProjectAgentTimelineEntriesToIdentity(
+      buildAgentDirectorReviewRevisionTimelineEntries(revision.intent),
+      agentGenerationProjectIdentityRef.current,
+    );
+    try {
+      await onRememberAgentTimelineEntries(entries);
+      setAgentTimelineEntries((current) => mergeVibeAgentTimelineEntries(current, entries));
+      updateText(revision.intent.composerPrompt);
+      setStatus("继续说明要改的时机、动作或连续性；原结果保持不变，不会自动重试。");
+      window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
+    } catch {
+      setStatus("修改意图保存失败；原结果仍保持待复核。");
+    }
+  }
+
+  async function formReviewRegenerationProposal(input: {
+    clarificationTurn: NonNullable<typeof activeDirectorClarificationTurn>;
+    resolvedIntent: string;
+    option?: NonNullable<typeof activeDirectorClarificationTurn>["options"][number];
+  }) {
+    const binding = input.clarificationTurn.reviewRevision;
+    if (!binding || !onRememberAgentTimelineEntries) {
+      setStatus("修改提案无法持久化；原结果保持不变。");
+      return false;
+    }
+    const createdAt = new Date().toISOString();
+    const result = buildAgentDirectorReviewRegenerationProposal({
+      revisionIntent: {
+        intentId: binding.intentId,
+        identity: binding.identity,
+        targetLabel: input.clarificationTurn.targetLabel,
+      },
+      clarification: input.clarificationTurn,
+      resolvedIntent: input.resolvedIntent,
+      directionLabel: input.option?.label,
+      createdAt,
+    });
+    if (!result.ok || !result.proposal) {
+      setStatus("修改提案与原结果身份不一致；没有创建新任务。");
+      return false;
+    }
+    const resolutionEntry = input.option
+      ? buildAgentDirectorClarificationResolutionTimelineEntry({
+        turn: input.clarificationTurn,
+        option: input.option,
+        createdAt,
+      })
+      : buildAgentDirectorClarificationFreeformResolutionTimelineEntry({
+        turn: input.clarificationTurn,
+        resolvedIntent: input.resolvedIntent,
+        createdAt,
+      });
+    const entries = bindProjectAgentTimelineEntriesToIdentity(
+      [
+        resolutionEntry,
+        ...buildAgentDirectorReviewRegenerationProposalTimelineEntries(result.proposal),
+      ],
+      agentGenerationProjectIdentityRef.current,
+    );
+    try {
+      await onRememberAgentTimelineEntries(entries);
+      setAgentTimelineEntries((current) => mergeVibeAgentTimelineEntries(current, entries));
+      setWorkflow(undefined);
+      setProjection(undefined);
+      setFeedbackRecompile(undefined);
+      setPreparedContext(undefined);
+      setAgentActionEnvelope(undefined);
+      setAgentToolHandoff(undefined);
+      setPlanPhase("idle");
+      setText("");
+      liveComposerValueRef.current = "";
+      lastVisibleComposerInputRef.current = "";
+      setAttachments([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setStatus("修改提案已形成；确认前不会创建新任务或调用付费生成服务。");
+      return true;
+    } catch {
+      setStatus("修改提案保存失败；原结果保持不变。");
+      return false;
+    }
   }
 
   async function chooseClarificationOption(optionId: string) {
@@ -11044,6 +11363,14 @@ export function MinimalAgentPanel({
     setClarificationResolvingId(option.id);
     setStatus("正在形成提案");
     try {
+      if (clarificationTurn.reviewRevision) {
+        await formReviewRegenerationProposal({
+          clarificationTurn,
+          resolvedIntent: option.resolvedIntent,
+          option,
+        });
+        return;
+      }
       const proposalStaged = await prepareChange(
         option.resolvedIntent,
         { selectedShotId: clarificationTurn.selectedShotId || currentSelectedShotId },
@@ -11069,15 +11396,179 @@ export function MinimalAgentPanel({
     window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
   }
 
+  async function confirmReviewRegenerationProposal() {
+    const proposal = activeDirectorReviewRegenerationProposal;
+    if (
+      !proposal
+      || !onRememberAgentTimelineEntries
+      || !onRememberAgentGenerationJobLedger
+      || !onRefreshRestoredAgentStagedPlanDraft
+      || !localProjectReadyForTools
+    ) {
+      setStatus("当前不能持久化新的生成确认；原结果保持不变。");
+      return;
+    }
+    const createdAt = new Date().toISOString();
+    const compiledPrompt = compileAgentDirectorReviewRegenerationPrompt(proposal);
+    const videoPermission = agentVideoPermissionForMode("video_allowed");
+    const action = buildDirectorAgentActionEnvelope({
+      userIntent: compiledPrompt,
+      snapshot: buildDirectorAgentStateSnapshot({
+        runtimeState,
+        currentView: "preview",
+        selectedShotId: proposal.sourceIdentity.shotId,
+        referenceReadyCount: Math.max(1, referenceReadyCountForAgent),
+        referenceReviewCount: 0,
+        referenceMissingCount: 0,
+        videoStatus: videoSendAction?.status,
+        videoCanResume,
+        videoWaitingCount: videoSendAction?.status === "submitted" ? 1 : 0,
+        videoCompletedCount: videoSendAction?.status === "needs_review" ? 1 : 0,
+        videoReviewCount: videoSendAction?.status === "needs_review" ? 1 : 0,
+        videoDetail: videoSendAction?.message,
+      }),
+      executionContract: directorAgentExecutionContractFromCreatorBoundary({
+        mode: videoPermission.mode,
+        referenceGenerationAllowed: videoPermission.referenceGenerationAllowed,
+        videoSubmitAllowed: videoPermission.videoSubmitAllowed,
+        reason: "确认修改提案后只建立新的独立生成动作。",
+      }),
+      generatedAt: createdAt,
+    });
+    if (action.kind !== "prepare_video_submit" || action.status !== "staged") {
+      setStatus(action.blockers[0] || "新的生成动作无法形成；原结果保持不变。");
+      return;
+    }
+    const handoff = buildVibeAgentToolHandoff({
+      action,
+      userConfirmed: false,
+      confirmedAt: createdAt,
+      availability: {
+        ...currentAgentToolAvailability(action),
+        videoSubmitReady: true,
+        videoSubmitBlockers: [],
+      },
+    });
+    if (!handoff || handoff.actionId !== action.actionId) {
+      setStatus("新的生成确认身份不完整；原结果保持不变。");
+      return;
+    }
+    const regenerationPipelinePlan = buildAgentVideoPipelinePlan({
+      planId: `review_regeneration_${proposal.proposalId}`,
+      generatedAt: createdAt,
+      storyDraftPresent: true,
+      storyConfirmed: true,
+      localProjectReady: true,
+      referenceMissingCount: 0,
+      videoSubmitted: false,
+      videoNeedsQuery: false,
+    });
+    const staged = planAgentVideoProductionAction({
+      plan: regenerationPipelinePlan,
+      ledger: agentVideoDryRunLedger,
+      action: "submit_video",
+      actionId: action.actionId,
+      executionMode: "dry_run",
+      generatedAt: createdAt,
+      sourceConfirmationId: handoff.handoffId,
+      sourceTimelineId: proposal.proposalId,
+      prompt: compiledPrompt,
+      inputAssets: [],
+      outputAssets: [],
+    });
+    if (staged.status !== "staged_job" || !staged.job) {
+      setStatus(staged.blockers[0] || "新的本地验证任务无法建立；原结果保持不变。");
+      return;
+    }
+    const confirmation = buildAgentDirectorReviewRegenerationConfirmationTimelineEntries({
+      proposal,
+      job: staged.job,
+      confirmationId: handoff.handoffId,
+      compiledPrompt,
+      createdAt,
+    });
+    if (!confirmation.ok) {
+      setStatus(confirmation.blockers[0] || "新的确认身份无法核对；原结果保持不变。");
+      return;
+    }
+    const suffix = createdAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
+    const draft: ProjectAgentStagedPlanDraft = createProjectAgentStagedPlanDraft({
+      status: "active",
+      draftId: `agent_staged_plan_${suffix}_${action.actionId}`,
+      createdAt,
+      expiresAt: new Date(Date.parse(createdAt) + 24 * 60 * 60 * 1000).toISOString(),
+      projectId: runtimeState.sourceIndex.projectId,
+      projectTitle: runtimeState.project.title,
+      projectRoot: runtimeState.project.root,
+      sourceFactHash: projectFactHash,
+      userIntent: compiledPrompt,
+      scopeLabel: proposal.targetLabel,
+      selectedShotId: proposal.sourceIdentity.shotId,
+      selectedShotIds: [proposal.sourceIdentity.shotId],
+      videoPermissionContract: videoPermission,
+      action,
+      toolHandoff: handoff,
+      projectTaskLabel: `确认重新生成 ${proposal.targetLabel}`,
+      loopStatus: "awaiting_confirmation",
+      blockedReasons: nonConfirmationToolBlockers(handoff),
+    });
+    const entries = bindProjectAgentTimelineEntriesToIdentity(
+      confirmation.entries,
+      agentGenerationProjectIdentityRef.current,
+    );
+    try {
+      await onRememberAgentGenerationJobLedger(staged.ledger);
+      await onRefreshRestoredAgentStagedPlanDraft(draft);
+      restoredAgentDraftIdRef.current = draft.draftId;
+      await onRememberAgentTimelineEntries(entries);
+      agentVideoExecutionLedgerRef.current = staged.ledger;
+      setAgentVideoDryRunLedger(staged.ledger);
+      setAgentTimelineEntries((current) => mergeVibeAgentTimelineEntries(current, entries));
+      const nextWorkflow = buildDirectorWorkflowState(withProjectGuide({
+        runtimeState,
+        userIntent: compiledPrompt,
+        selection: { selectedShotId: proposal.sourceIdentity.shotId },
+      }, projectReferenceGuide));
+      setWorkflow(nextWorkflow);
+      setProjection(buildAgentPanelProjection(nextWorkflow, runtimeState, "review"));
+      setFeedbackRecompile(undefined);
+      setPreparedContext({
+        scopeLabel: proposal.targetLabel,
+        selectionHint: "只建立新的独立候选版本；旧结果保持不变。",
+        userIntent: compiledPrompt,
+        selectedShotId: proposal.sourceIdentity.shotId,
+        videoPermissionContract: videoPermission,
+        projectTaskLabel: `确认重新生成 ${proposal.targetLabel}`,
+      });
+      setAgentActionEnvelope(action);
+      setAgentToolHandoff(handoff);
+      setPlanPhase("review");
+      setStatus("新的本地验证任务已建立；等待独立确认，不会调用付费生成服务。");
+    } catch {
+      setStatus("新的生成确认未能完整持久化；不会执行任务，原结果保持不变。");
+    }
+  }
+
   const proposalConfirmationDisabled = Boolean(
     !proposalConfirmAction?.enabled
-      || !proposalConfirmationMessage
+      || (!proposalConfirmationMessage && !reviewRegenerationProposalProjection)
+      || (reviewRegenerationProposalProjection && (
+        !onRememberAgentTimelineEntries
+        || !onRememberAgentGenerationJobLedger
+        || !onRefreshRestoredAgentStagedPlanDraft
+        || !localProjectReadyForTools
+      ))
       || hasVisibleComposerInput
       || isPreparingPlan,
   );
 
   async function confirmProposalFromAgentTurn() {
-    if (proposalConfirmationDisabled || !proposalConfirmationMessage) return;
+    if (proposalConfirmationDisabled) return;
+    if (reviewRegenerationProposalProjection) {
+      await confirmReviewRegenerationProposal();
+      return;
+    }
+    if (!proposalConfirmationMessage) return;
     if (workflow) {
       await confirmPlan();
       return;
@@ -11085,7 +11576,24 @@ export function MinimalAgentPanel({
     await confirmRestoredProjectEditFromMessage(proposalConfirmationMessage);
   }
 
-  function reviseProposalFromAgentTurn() {
+  async function reviseProposalFromAgentTurn() {
+    if (reviewRegenerationProposalProjection && onRememberAgentTimelineEntries) {
+      const entry = bindProjectAgentTimelineEntriesToIdentity([
+        buildAgentDirectorReviewRegenerationProposalRevisionTimelineEntry({
+          proposal: reviewRegenerationProposalProjection,
+        }),
+      ], agentGenerationProjectIdentityRef.current);
+      try {
+        await onRememberAgentTimelineEntries(entry);
+        setAgentTimelineEntries((current) => mergeVibeAgentTimelineEntries(current, entry));
+        updateText(reviewRegenerationProposalProjection.resolvedIntent);
+        setStatus("继续调整修改提案；尚未创建新任务。");
+        window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
+      } catch {
+        setStatus("提案状态保存失败；仍停留在当前提案。");
+      }
+      return;
+    }
     if (proposalConfirmationMessage) {
       reviseFromAgentMessage(proposalConfirmationMessage);
       return;
@@ -11142,8 +11650,8 @@ export function MinimalAgentPanel({
           aria-label="展开 AI 导演对话区"
         >
           <MessageCircle size={15} aria-hidden="true" />
-          <span>{displayedCompactScopeLabel}</span>
-          <small>{hasActiveSelection ? displayedCompactSelectionHint : "点开后输入脚本、文件或修改意见。"}</small>
+          <span>{focusedCompactScopeLabel}</span>
+          <small>{focusedTaskOwnsVisibleContext || hasActiveSelection ? focusedCompactSelectionHint : "点开后输入脚本、文件或修改意见。"}</small>
           <b>展开</b>
         </button>
       </aside>
@@ -11172,14 +11680,14 @@ export function MinimalAgentPanel({
         <div className="minimal-agent-cockpit-main">
           <div className="minimal-agent-head">
             <span>AI 导演</span>
-            <strong>{displayedCompactScopeLabel}</strong>
+            <strong>{focusedCompactScopeLabel}</strong>
           </div>
           <section className="minimal-agent-selection-context" aria-label="当前选择">
-            <span>{selectionContextTitle}</span>
-            <p>{visibleCompactSelectionHint}</p>
-            {displayedSelectionChips.length > 0 && (
+            <span>{focusedSelectionContextTitle}</span>
+            <p>{focusedCompactSelectionHint}</p>
+            {focusedSelectionChips.length > 0 && (
               <div className="minimal-agent-context-chips" aria-label="当前引用内容">
-                {displayedSelectionChips.map((item) => (
+                {focusedSelectionChips.map((item) => (
                   <small key={`${item.label}:${item.value}`}>
                     <b>{item.label}</b>
                     {item.value}
@@ -11215,7 +11723,7 @@ export function MinimalAgentPanel({
         </div>
       </div>
       <section
-        className={`signal-current-task ${agentCurrentTaskTone(agentCurrentTaskProjection)}`}
+        className={`signal-current-task ${displayedCurrentTaskTone}`}
         aria-label="AI 导演当前任务"
         aria-live="polite"
         data-current-task-step={agentCurrentTaskProjection.step}
@@ -11228,10 +11736,10 @@ export function MinimalAgentPanel({
         </div>
         <div className="signal-current-task-copy">
           <span>当前任务</span>
-          <strong>{agentCurrentTaskProjection.label}</strong>
-          <small>{agentCurrentTaskEffectLabel(agentCurrentTaskProjection)}</small>
+          <strong>{displayedCurrentTaskLabel}</strong>
+          <small>{displayedCurrentTaskEffect}</small>
         </div>
-        <em>{agentCurrentTaskStatusLabel(agentCurrentTaskProjection)}</em>
+        <em>{displayedCurrentTaskStatus}</em>
       </section>
       {clarificationTurnVisible && clarificationProjection && (
         <section
@@ -11274,7 +11782,7 @@ export function MinimalAgentPanel({
           <small className="minimal-agent-focused-boundary">{clarificationProjection.boundary}</small>
         </section>
       )}
-      {proposalTurnVisible && proposalProjection && (
+      {proposalTurnVisible && displayedProposalProjection && (
         <section
           className={`minimal-agent-focused-turn minimal-agent-proposal-turn ${agentDirectorTurnProjection.mode}`}
           aria-label="当前导演提案"
@@ -11283,23 +11791,25 @@ export function MinimalAgentPanel({
           <div className="minimal-agent-focused-turn-head">
             <div>
               <span>本轮 · Proposal</span>
-              <strong>提案已形成</strong>
+              <strong>{reviewRegenerationProposalProjection ? "修改提案已形成" : "提案已形成"}</strong>
             </div>
             <em>staged_only</em>
           </div>
-          <p>{proposalProjection.message}</p>
+          <p>{displayedProposalProjection.message}</p>
           <div className="minimal-agent-proposal-meta" aria-label="提案身份">
             <small>
               <span>范围</span>
-              <strong>{proposalProjection.targetLabel}</strong>
+              <strong>{displayedProposalProjection.targetLabel}</strong>
             </small>
             <small>
-              <span>动作</span>
-              <strong>{proposalProjection.actionId.slice(0, 18)}</strong>
+              <span>{reviewRegenerationProposalProjection ? "提案" : "动作"}</span>
+              <strong>{reviewRegenerationProposalProjection
+                ? reviewRegenerationProposalProjection.proposalId.slice(0, 18)
+                : proposalProjection?.actionId.slice(0, 18)}</strong>
             </small>
           </div>
           <div className="minimal-agent-proposal-changes" aria-label="提案改动">
-            {proposalProjection.proposedChanges.slice(0, 3).map((change) => (
+            {displayedProposalProjection.proposedChanges.slice(0, 3).map((change) => (
               <small key={`${change.field}:${change.to}`}>
                 <span>{agentActionFieldLabel(change.field)}</span>
                 <strong>{change.from ? `${change.from} → ${change.to}` : change.to}</strong>
@@ -11330,7 +11840,7 @@ export function MinimalAgentPanel({
             <button
               type="button"
               className="secondary"
-              onClick={reviseProposalFromAgentTurn}
+              onClick={() => void reviseProposalFromAgentTurn()}
               disabled={!proposalReviseAction?.enabled}
               title={proposalReviseAction?.boundary}
             >
@@ -11505,6 +12015,37 @@ export function MinimalAgentPanel({
           </small>
         </section>
       )}
+      {reviewRevisionTurnVisible && reviewRevisionProjection && (
+        <section
+          className="minimal-agent-focused-turn minimal-agent-review-turn conversation"
+          aria-label="当前视频修改意图"
+          aria-live="polite"
+        >
+          <div className="minimal-agent-review-turn-head">
+            <div>
+              <span>本轮 · 修改</span>
+              <strong>说明修改方向</strong>
+            </div>
+            <em>{reviewRevisionProjection.status}</em>
+          </div>
+          <p>
+            已保留 {reviewRevisionProjection.targetLabel} 当前返回版本。继续说明要修改的时机、动作或连续性，我会先整理成提案。
+          </p>
+          <div className="minimal-agent-review-facts" aria-label="修改意图边界">
+            <small>
+              <span>原结果</span>
+              <strong>保持不变</strong>
+            </small>
+            <small>
+              <span>新任务</span>
+              <strong>尚未创建</strong>
+            </small>
+          </div>
+          <small className="minimal-agent-review-boundary">
+            {reviewRevisionProjection.boundary}
+          </small>
+        </section>
+      )}
       {reviewTurnVisible && (
         <section
           className={`minimal-agent-focused-turn minimal-agent-review-turn ${agentDirectorTurnProjection.mode}`}
@@ -11569,7 +12110,7 @@ export function MinimalAgentPanel({
             <button
               type="button"
               className="secondary"
-              onClick={discussReviewChanges}
+              onClick={() => void discussReviewChanges()}
               disabled={!reviewRevisionAction?.enabled}
               title={reviewRevisionAction?.boundary}
             >
@@ -12577,7 +13118,7 @@ export function MinimalAgentPanel({
               <strong>选择一个方向，或继续补充；不会写项目。</strong>
             </> : proposalTurnVisible ? <>
               <small className="minimal-agent-footer-target">
-                {proposalProjection?.targetLabel || "当前范围"} · Proposal
+                {displayedProposalProjection?.targetLabel || "当前范围"} · Proposal
               </small>
               <strong>确认前只保留提案，不会调用外部生成服务。</strong>
             </> : paidConfirmationTurnVisible ? <>

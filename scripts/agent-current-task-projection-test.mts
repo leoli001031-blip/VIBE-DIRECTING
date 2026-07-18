@@ -707,6 +707,37 @@ const confirmationBeforeJobProjection = buildAgentCurrentTaskProjection({
 });
 assert(confirmationBeforeJobProjection.source === "timeline_confirmation", "a valid current confirmation must outrank a non-terminal job");
 
+const regenerationConfirmationOutranksOldReview = buildAgentCurrentTaskProjection({
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: true,
+    localProjectReady: true,
+    referenceMissingCount: 0,
+    videoSubmitted: true,
+  }),
+  jobLedger: videoLedger,
+  currentProjectId: "agent-current-task-project",
+  currentProjectRoot: "/tmp/agent-current-task-project",
+  currentProjectFactHash: "agent-current-task-facts",
+  videoReviewCount: 1,
+  timelineConfirmations: [{
+    confirmationId: "submit_video_confirmation",
+    step: "submit_video",
+    kind: "pipeline_action",
+    status: "waiting",
+    actionId: "submit_video_action",
+    projectId: "agent-current-task-project",
+    projectRoot: "/tmp/agent-current-task-project",
+    projectFactHash: "agent-current-task-facts",
+    createdAt: "2026-07-07T00:00:51.000Z",
+    label: "确认重新生成 P6S01",
+  }],
+});
+assert(regenerationConfirmationOutranksOldReview.source === "timeline_confirmation", "a new exact regeneration confirmation must outrank the preserved old review candidate");
+assert(regenerationConfirmationOutranksOldReview.step === "submit_video", "the regeneration confirmation must keep the video step even when the passive pipeline has reached export");
+assert(regenerationConfirmationOutranksOldReview.jobId === stagedVideo.job!.jobId, "the regeneration confirmation must expose the fresh staged job identity");
+assert(regenerationConfirmationOutranksOldReview.confirmationId === "submit_video_confirmation", "the regeneration confirmation must retain the exact fresh confirmation identity");
+
 const staleConfirmationYieldsToJob = buildAgentCurrentTaskProjection({
   pipelinePlan: submitVideoPlan,
   jobLedger: videoLedger,

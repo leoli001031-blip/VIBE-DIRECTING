@@ -48,6 +48,12 @@ export type ProjectVibeReviewPromotionTarget =
   | "asset_and_locked_visual_memory";
 
 export interface ProjectVibeReviewOutputCandidate {
+  decisionScope?: "agent_video_preview";
+  projectId?: string;
+  projectRoot?: string;
+  projectFactHash?: string;
+  jobId?: string;
+  actionId?: string;
   shotId?: string;
   assetId?: string;
   assetKind?: ProjectVibeAssetKind;
@@ -347,9 +353,10 @@ function reviewTargetNeedsPromotion(target: ProjectVibeReviewPromotionTarget): b
 }
 
 function projectVibeReviewDecisionBlockers(input: BuildProjectVibeReviewPromotionTransactionInput): string[] {
-  const { candidate, decision } = input;
+  const { candidate, decision, project } = input;
   const target = decision.promotionTarget || "review_receipt_only";
   const promotionRequested = decision.status === "approved" && reviewTargetNeedsPromotion(target);
+  const agentVideoPreview = candidate.decisionScope === "agent_video_preview";
   const outputPath = normalizedProjectPath(candidate.outputPath);
   const authorization = decision.promotionAuthorization;
   const reviewFinal = decision.status === "approved" || decision.status === "rejected" || decision.status === "retry_requested";
@@ -358,6 +365,17 @@ function projectVibeReviewDecisionBlockers(input: BuildProjectVibeReviewPromotio
     reviewFinal && !decision.reviewerId ? "reviewer_id_required" : undefined,
     decision.status === "retry_requested" && !candidate.shotId ? "retry_shot_id_required" : undefined,
     decision.status === "retry_requested" && decision.retryRequested !== true ? "retry_requested_flag_required" : undefined,
+    agentVideoPreview && candidate.projectId !== project.manifest.projectId ? "review_project_id_mismatch" : undefined,
+    agentVideoPreview && !candidate.projectRoot?.trim() ? "review_project_root_required" : undefined,
+    agentVideoPreview && !candidate.projectFactHash?.trim() ? "review_project_fact_hash_required" : undefined,
+    agentVideoPreview && !candidate.jobId?.trim() ? "review_job_id_required" : undefined,
+    agentVideoPreview && !candidate.actionId?.trim() ? "review_action_id_required" : undefined,
+    agentVideoPreview && !candidate.shotId?.trim() ? "review_shot_id_required" : undefined,
+    agentVideoPreview && !candidate.sourceReceiptId?.trim() ? "review_source_receipt_id_required" : undefined,
+    agentVideoPreview && (!outputPath || !isPortableProjectPath(outputPath)) ? "review_output_path_required" : undefined,
+    agentVideoPreview && !/^sha256:[a-f0-9]{64}$/i.test(candidate.outputHash?.trim() || "") ? "review_output_hash_invalid" : undefined,
+    agentVideoPreview && target !== "review_receipt_only" ? "review_preview_promotion_forbidden" : undefined,
+    agentVideoPreview && authorization?.authorized ? "review_preview_promotion_forbidden" : undefined,
     decision.rawFreeTextTask?.trim() ? "free_text_formal_task_forbidden" : undefined,
     decision.status !== "approved" && authorization?.authorized ? "promotion_authorization_requires_approved_review" : undefined,
     decision.status !== "approved" && reviewTargetNeedsPromotion(target) ? "review_status_must_be_approved_for_promotion" : undefined,
@@ -424,6 +442,12 @@ export function buildProjectVibeReviewPromotionTransaction(
     id: receiptId,
     createdAt: reviewedAt,
     status: decision.status,
+    decisionScope: candidate.decisionScope,
+    projectId: candidate.projectId,
+    projectRoot: candidate.projectRoot,
+    projectFactHash: candidate.projectFactHash,
+    jobId: candidate.jobId,
+    actionId: candidate.actionId,
     reviewerId: decision.reviewerId,
     humanReviewed: decision.humanReviewed,
     shotId: candidate.shotId,
@@ -440,6 +464,9 @@ export function buildProjectVibeReviewPromotionTransaction(
     promotionAuthorizedAt: authorization?.authorizedAt,
     evidenceRefs: reviewUnique([
       ...(candidate.evidenceRefs || []),
+      candidate.projectFactHash ? `project_fact_hash#${candidate.projectFactHash}` : undefined,
+      candidate.jobId ? `generation_job#${candidate.jobId}` : undefined,
+      candidate.actionId ? `generation_action#${candidate.actionId}` : undefined,
       candidate.sourceReceiptId ? `receipt#${candidate.sourceReceiptId}` : undefined,
       candidate.sourceRunId ? `run#${candidate.sourceRunId}` : undefined,
       outputPath ? `project_output#${outputPath}` : undefined,
@@ -670,6 +697,18 @@ export function validateProjectVibe(project: ProjectVibeDocument): ProjectVibeVa
 
   for (const receipt of receipts.reviewReceipts) {
     if (receipt.providerSelfReportIgnored !== true) errors.push(`review receipt ${receipt.id} providerSelfReportIgnored must be true.`);
+    if (receipt.decisionScope === "agent_video_preview") {
+      if (receipt.projectId !== project.manifest.projectId) errors.push(`review receipt ${receipt.id} must bind the current projectId.`);
+      if (!receipt.projectRoot) errors.push(`review receipt ${receipt.id} must carry projectRoot.`);
+      if (!receipt.projectFactHash) errors.push(`review receipt ${receipt.id} must carry projectFactHash.`);
+      if (!receipt.jobId) errors.push(`review receipt ${receipt.id} must carry jobId.`);
+      if (!receipt.actionId) errors.push(`review receipt ${receipt.id} must carry actionId.`);
+      if (!receipt.shotId) errors.push(`review receipt ${receipt.id} must carry shotId.`);
+      if (!receipt.sourceReceiptId) errors.push(`review receipt ${receipt.id} must carry sourceReceiptId.`);
+      if (!receipt.outputPath || !isPortableProjectPath(receipt.outputPath)) errors.push(`review receipt ${receipt.id} must carry a project-relative outputPath.`);
+      if (!/^sha256:[a-f0-9]{64}$/i.test(receipt.outputHash || "")) errors.push(`review receipt ${receipt.id} must carry a SHA-256 outputHash.`);
+      if (receipt.promotionAuthorized) errors.push(`review receipt ${receipt.id} cannot promote project facts during preview approval.`);
+    }
     if (receipt.status === "approved") {
       if (!receipt.humanReviewed) errors.push(`approved review receipt ${receipt.id} must be humanReviewed.`);
       if (!receipt.reviewerId) errors.push(`approved review receipt ${receipt.id} must carry reviewerId.`);

@@ -338,6 +338,66 @@ const mismatchedReceiptProjection = buildCurrentProjectPreviewProjection({
 assert(mismatchedReceiptProjection.reviewCount === 1, "a receipt for a different output hash must not clear review");
 assert(!mismatchedReceiptProjection.items[0]?.reviewReceiptId, "a mismatched receipt must not bind to the preview item");
 
+const strictReviewHash = `sha256:${"a".repeat(64)}`;
+const strictReviewSummary = {
+  status: "preview_ready_with_review",
+  projectId: currentProject.projectId,
+  projectRoot: currentProject.projectRoot,
+  previewItems: [{
+    id: "runtime-agent-review-video",
+    shotId: "S01",
+    mediaPath: "/workspace/self-contained/videos/S01.mp4",
+    outputExists: true,
+    status: "returned_with_review_overlay",
+    reviewRequired: true,
+    sourceReceiptId: "agent_video_result_s01",
+    outputHash: strictReviewHash,
+  }],
+};
+const strictReviewReceipt = {
+  id: "review_agent_video_s01",
+  createdAt: "2026-07-18T00:00:00.000Z",
+  status: "approved",
+  reviewerId: "local_user",
+  humanReviewed: true,
+  decisionScope: "agent_video_preview",
+  projectId: currentProject.projectId,
+  projectRoot: currentProject.projectRoot,
+  projectFactHash: "fact-current",
+  jobId: "job-current",
+  actionId: "action-current",
+  shotId: "S01",
+  sourceReceiptId: "agent_video_result_s01",
+  outputPath: "videos/S01.mp4",
+  outputHash: strictReviewHash,
+  retryRequested: false,
+  lateOutput: false,
+  providerSelfReportIgnored: true,
+  promotionAuthorized: false,
+  evidenceRefs: ["preview#runtime-agent-review-video"],
+  blockers: [],
+};
+const strictReceiptProjection = buildCurrentProjectPreviewProjection({
+  summary: strictReviewSummary,
+  reviewReceipts: [strictReviewReceipt],
+});
+assert(strictReceiptProjection.reviewCount === 0, "an exact Agent video review receipt should clear its bound Review");
+assert(strictReceiptProjection.items[0]?.reviewReceiptId === strictReviewReceipt.id, "an exact Agent video review receipt should bind to the preview item");
+
+const wrongProjectStrictReceiptProjection = buildCurrentProjectPreviewProjection({
+  summary: strictReviewSummary,
+  reviewReceipts: [{ ...strictReviewReceipt, projectId: "different-project" }],
+});
+assert(wrongProjectStrictReceiptProjection.reviewCount === 1, "an Agent video receipt from another project must not clear Review");
+assert(!wrongProjectStrictReceiptProjection.items[0]?.reviewReceiptId, "an Agent video receipt from another project must stay unbound");
+
+const wrongRootStrictReceiptProjection = buildCurrentProjectPreviewProjection({
+  summary: strictReviewSummary,
+  reviewReceipts: [{ ...strictReviewReceipt, projectRoot: "/workspace/different-project" }],
+});
+assert(wrongRootStrictReceiptProjection.reviewCount === 1, "an Agent video receipt from another project root must not clear Review");
+assert(!wrongRootStrictReceiptProjection.items[0]?.reviewReceiptId, "an Agent video receipt from another project root must stay unbound");
+
 const defaultDurationProjection = buildCurrentProjectPreviewProjection({
   summary,
   previewPlan: { ...previewPlan, clips: previewPlan.clips.map(({ durationSeconds, ...clip }) => clip) },

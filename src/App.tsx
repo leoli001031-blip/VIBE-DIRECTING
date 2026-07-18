@@ -136,6 +136,11 @@ import {
   type ProjectVibeDocument,
 } from "./project";
 import type { AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
+import {
+  agentDirectorReviewReceiptId,
+  validateAgentDirectorReviewIdentity,
+  type AgentDirectorReviewIdentity,
+} from "./core/agentDirectorReviewDecision";
 import type { AgentVideoExecutionReceipt } from "./core/agentVideoExecutionAdapter";
 import { EXPORT_DELIVERY_CONFIRMATION_SCHEMA_VERSION } from "./core/exportDeliveryGate";
 import { buildProviderReviewPromotionTransaction } from "./core/providerReviewPromotion";
@@ -583,7 +588,10 @@ function projectPathFromRuntimeBinding(projectRoot?: string, projectVibePath?: s
 }
 
 function normalizeProjectRootForUiCompare(value?: string) {
-  const normalized = value?.trim().replace(/\\/g, "/").replace(/\/+$/, "") || "";
+  const normalized = value?.trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/private\/(tmp|var)(?=\/|$)/, "/$1")
+    .replace(/\/+$/, "") || "";
   const runtimeProjectIndex = normalized.indexOf("/.vibe-runtime/");
   const comparable = runtimeProjectIndex >= 0
     ? normalized.slice(runtimeProjectIndex + 1)
@@ -4366,6 +4374,41 @@ function App() {
       item.mediaPath,
       effectiveRuntimeProjectIdentity?.projectRoot || prototypeProjectDraftTarget.projectRoot,
     );
+    const agentVideoReviewOutputPath = item.mediaPath || "";
+    const agentVideoPreviewApprovalRequested = mode === "approve" && Boolean(
+      item.jobId || item.actionId || item.projectFactHash,
+    );
+    const agentVideoReviewIdentity: AgentDirectorReviewIdentity | undefined = agentVideoPreviewApprovalRequested
+      ? {
+          projectId: effectiveRuntimeProjectIdentity?.projectId || prototypeProjectVibeRef.current.manifest.projectId,
+          projectRoot: effectiveRuntimeProjectIdentity?.projectRoot || prototypeProjectDraftTarget.projectRoot || "",
+          projectFactHash: item.projectFactHash || "",
+          jobId: item.jobId || "",
+          actionId: item.actionId || "",
+          shotId: item.shotId || "",
+          sourceReceiptId: item.sourceReceiptId || "",
+          outputPath: agentVideoReviewOutputPath,
+          outputHash: item.outputHash || "",
+        }
+      : undefined;
+    const agentVideoReviewIdentityBlockers = agentVideoReviewIdentity
+      ? validateAgentDirectorReviewIdentity(agentVideoReviewIdentity)
+      : [];
+    if (agentVideoPreviewApprovalRequested && (!agentVideoReviewIdentity || agentVideoReviewIdentityBlockers.length)) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "当前视频复核身份不完整",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "needs_review",
+        },
+      });
+      throw new Error(agentVideoReviewIdentityBlockers[0] || "agent_video_review_identity_required");
+    }
+    const agentVideoReviewReceiptId = agentVideoReviewIdentity
+      ? agentDirectorReviewReceiptId(agentVideoReviewIdentity)
+      : undefined;
     const approvedOneShotState = mode === "approve"
       ? approveProjectImage2OneShotUiState(projectImage2OneShotState, {
           shotId: item.shotId,
@@ -4411,8 +4454,10 @@ function App() {
       try {
         const runtimeReviewResult = await submitCurrentProjectReviewDecision(effectiveRuntimeProjectIdentity, {
           action: mode,
+          receiptId: agentVideoReviewReceiptId,
           reviewedAt: now,
           reviewerId: "local_user",
+          reviewIdentity: agentVideoReviewIdentity,
           item: {
             id: item.id,
             shotId: item.shotId,
@@ -4440,13 +4485,32 @@ function App() {
             assetLabel,
             usedByShotIds,
           },
-	        });
-	        if (runtimeReviewResult.ok) {
-	          if (effectiveRuntimeProjectCanUseRuntime) {
-	            const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
-	            setProjectRealChainState(refreshed);
-	          }
-	          const reopened = await openProjectVibeDraft(prototypeProjectDraftTarget);
+        });
+        if (runtimeReviewResult.ok) {
+          if (agentVideoReviewIdentity) {
+            const receipt = runtimeReviewResult.reviewReceipt;
+            const receiptMatches = Boolean(
+              receipt
+                && receipt.id === agentVideoReviewReceiptId
+                && receipt.decisionScope === "agent_video_preview"
+                && receipt.projectId === agentVideoReviewIdentity.projectId
+                && normalizeProjectRootForUiCompare(String(receipt.projectRoot || "")) === normalizeProjectRootForUiCompare(agentVideoReviewIdentity.projectRoot)
+                && receipt.projectFactHash === agentVideoReviewIdentity.projectFactHash
+                && receipt.jobId === agentVideoReviewIdentity.jobId
+                && receipt.actionId === agentVideoReviewIdentity.actionId
+                && receipt.shotId === agentVideoReviewIdentity.shotId
+                && receipt.sourceReceiptId === agentVideoReviewIdentity.sourceReceiptId
+                && receipt.outputPath === reviewMediaPath
+                && String(receipt.outputHash || "").toLowerCase() === agentVideoReviewIdentity.outputHash.toLowerCase()
+                && receipt.promotionAuthorized === false,
+            );
+            if (!receiptMatches) throw new Error("runtime_review_receipt_identity_mismatch");
+          }
+          if (effectiveRuntimeProjectCanUseRuntime) {
+            const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+            setProjectRealChainState(refreshed);
+          }
+          const reopened = await openProjectVibeDraft(prototypeProjectDraftTarget);
           if (reopened.ok && reopened.project && reopened.mode === "electron_project_file") {
             applyProjectVibeProjectState(reopened.project, prototypeProjectDraftTarget, { generatedAt: now });
           }
@@ -4465,10 +4529,28 @@ function App() {
           });
           return;
         }
+        if (agentVideoReviewIdentity) {
+          throw new Error(runtimeReviewResult.blockers?.[0] || runtimeReviewResult.message || "agent_video_review_write_blocked");
+        }
         console.warn("Runtime review decision did not apply; falling back to local Project.vibe patch", runtimeReviewResult);
       } catch (error) {
+        if (agentVideoReviewIdentity) {
+          setLatestPrototypeAgentDemo({
+            status: "error",
+            result: {
+              label: "视频复核记录写入失败",
+              projectVibeAdded: false,
+              waitingReview: true,
+              status: "needs_review",
+            },
+          });
+          throw error;
+        }
         console.error("Runtime review decision failed; falling back to local Project.vibe patch", error);
       }
+    }
+    if (agentVideoReviewIdentity) {
+      throw new Error("agent_video_review_requires_bound_runtime");
     }
     const result = buildProviderReviewPromotionTransaction({
       project: prototypeProjectVibeRef.current,
@@ -4901,6 +4983,7 @@ function App() {
       if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       if (!saveAgentTimelineResult.ok) {
         console.warn("Failed to save Agent timeline entries", saveAgentTimelineResult.errors[0]);
+        throw new Error(saveAgentTimelineResult.errors[0] || "agent_timeline_write_failed");
       }
       setRestoredAgentTimelineEntries(nextTimeline.entries);
     });
@@ -6269,8 +6352,9 @@ function App() {
           latestPrototypeAgentDemo={latestPrototypeAgentDemo}
           restoredAgentStagedPlanDraft={restoredAgentStagedPlanDraft}
           restoredAgentActionLog={restoredAgentActionLog}
-	          restoredAgentTimelineEntries={restoredAgentTimelineEntries}
-	          restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+          restoredAgentTimelineEntries={restoredAgentTimelineEntries}
+          restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+          reviewReceipts={prototypeProjectVibe.receipts?.reviewReceipts}
 	          onStagePrototypeAgentPlan={stagePrototypeAgentPlan}
 	          onClearPrototypeAgentPlan={clearPrototypeAgentPlan}
 	          onRefreshRestoredAgentStagedPlanDraft={refreshRestoredAgentStagedPlanDraft}

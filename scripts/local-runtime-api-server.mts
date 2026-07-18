@@ -1113,6 +1113,7 @@ const {
   requestOverrideDiagnostics,
   runtimePolicy,
   readFileSync,
+  existsSync,
   writeFileSync,
   mkdirSync,
   running: () => running,

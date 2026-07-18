@@ -56,6 +56,15 @@ export interface ProjectAgentStagedPlanDraft {
   blockedReasons: string[];
 }
 
+export function createProjectAgentStagedPlanDraft(
+  input: Omit<ProjectAgentStagedPlanDraft, "schemaVersion">,
+): ProjectAgentStagedPlanDraft {
+  return {
+    schemaVersion: PROJECT_AGENT_STAGED_PLAN_DRAFT_SCHEMA_VERSION,
+    ...input,
+  };
+}
+
 export type ProjectAgentStagedPlanRestoreStatus =
   | "restored"
   | "missing"

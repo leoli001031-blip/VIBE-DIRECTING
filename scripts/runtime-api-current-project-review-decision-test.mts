@@ -5,10 +5,16 @@ import { createRuntimeApiEndpoints } from "./runtime-api-endpoints.mts";
 import { createRuntimeApiCurrentProjectReviewDecision } from "./runtime-api-current-project-review-decision.mts";
 import {
   createProjectVibe,
+  hashProjectVibeFacts,
   parseProjectVibeText,
   serializeProjectVibe,
   type ProjectVibeDocument,
 } from "../src/project/index.ts";
+import { AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION } from "../src/core/agentVideoProductionContract.ts";
+import {
+  agentDirectorReviewReceiptId,
+  normalizeAgentDirectorReviewProjectRoot,
+} from "../src/core/agentDirectorReviewDecision.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -60,12 +66,68 @@ try {
     }],
   });
   writeFileSync(projectVibePath, serializeProjectVibe(project));
+  const projectFactHash = hashProjectVibeFacts(project);
+  const returnedResult = {
+    status: "needs_review" as const,
+    projectId: project.manifest.projectId,
+    projectRoot,
+    projectFactHash,
+    jobId: "job_runtime_review_p6s01",
+    actionId: "action_runtime_review_p6s01",
+    shotId: "S01",
+    sourceReceiptId: "seedance_submit_external_task_s01",
+    outputPath: path.join(projectRoot, "video", "seedance", "P6S01.mp4"),
+    outputHash: `sha256:${"a".repeat(64)}`,
+    receivedAt: "2026-07-18T10:03:00.000Z",
+  };
+  const generationLedgerPath = path.join(projectRoot, ".vibe-runtime", "agent-generation-job-ledger.json");
+  mkdirSync(path.dirname(generationLedgerPath), { recursive: true });
+  writeFileSync(generationLedgerPath, `${JSON.stringify({
+    schemaVersion: AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION,
+    ledgerId: "runtime_review_ledger",
+    projectId: project.manifest.projectId,
+    projectRoot,
+    projectFactHash,
+    createdAt: "2026-07-18T10:00:00.000Z",
+    updatedAt: returnedResult.receivedAt,
+    jobs: [{
+      jobId: returnedResult.jobId,
+      projectId: project.manifest.projectId,
+      projectRoot,
+      projectFactHash,
+      actionId: returnedResult.actionId,
+      operation: "execute",
+      executionMode: "dry_run",
+      providerCalled: false,
+      kind: "video_submit",
+      providerId: "vibe-director-dry-run-video",
+      modelId: "dry-run-video",
+      capability: "video_submit",
+      pipelineStep: "submit_video",
+      status: "succeeded",
+      sourceConfirmationId: "confirm_runtime_review_p6s01",
+      prompt: "P6S01",
+      inputAssets: [],
+      outputAssets: [returnedResult.outputPath],
+      reviewResult: returnedResult,
+      blockers: [],
+      statusHistory: [
+        { status: "staged", at: "2026-07-18T10:00:00.000Z" },
+        { status: "confirmed", at: "2026-07-18T10:01:00.000Z" },
+        { status: "running", at: "2026-07-18T10:02:00.000Z" },
+        { status: "succeeded", at: returnedResult.receivedAt },
+      ],
+      createdAt: "2026-07-18T10:00:00.000Z",
+      updatedAt: returnedResult.receivedAt,
+    }],
+  }, null, 2)}\n`);
 
   const endpoints = createRuntimeApiEndpoints();
   const source = {
+    runRootPath: projectRoot,
     projectVibePath,
-    projectVibeRelativePath: "project-root/project.vibe",
-    runRootRelativePath: "project-root",
+    projectVibeRelativePath: projectVibePath,
+    runRootRelativePath: projectRoot,
   };
   const api = createRuntimeApiCurrentProjectReviewDecision({
     currentProjectReviewDecisionEndpoint: endpoints.currentProjectReviewDecisionEndpoint,
@@ -81,24 +143,53 @@ try {
     requestOverrideDiagnostics: (requestContext: any) => ({ endpoint: requestContext.endpoint }),
     runtimePolicy: () => ({ runtimeApi: "local" }),
     readFileSync,
+    existsSync,
     writeFileSync,
     mkdirSync,
     running: () => false,
   });
 
   const beforePreviewApproval = loadProject(projectVibePath);
+  const textBeforePreviewApproval = readFileSync(projectVibePath, "utf8");
+  const stalePreviewApproval = api.currentProjectReviewDecisionResponse(api.reviewDecisionRequestInput(
+    new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=approve`),
+    {
+      action: "approve",
+      reviewIdentity: { ...returnedResult, projectFactHash: "stale-project-facts" },
+      candidate: {
+        shotId: returnedResult.shotId,
+        outputPath: "video/seedance/P6S01.mp4",
+        sourceReceiptId: returnedResult.sourceReceiptId,
+        outputHash: returnedResult.outputHash,
+      },
+    },
+  ), { running: false }, source);
+  assert(stalePreviewApproval.ok === false && stalePreviewApproval.blockers.includes("review_project_fact_hash_mismatch"), "preview approval from stale project facts must fail closed");
+
+  const wrongActionPreviewApproval = api.currentProjectReviewDecisionResponse(api.reviewDecisionRequestInput(
+    new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=approve`),
+    {
+      action: "approve",
+      reviewerId: "local_user",
+      reviewIdentity: { ...returnedResult, actionId: "action_from_another_generation" },
+    },
+  ), { running: false }, source);
+  assert(wrongActionPreviewApproval.ok === false && wrongActionPreviewApproval.blockers.includes("review_job_identity_mismatch"), "preview approval must match the exact generation job action");
+  assert(readFileSync(projectVibePath, "utf8") === textBeforePreviewApproval, "blocked review identities must not mutate Project.vibe");
+
   const previewApproveInput = api.reviewDecisionRequestInput(
     new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=approve`),
     {
-      receiptId: "review_preview_only_video_s01",
+      action: "approve",
       reviewerId: "local_user",
+      reviewIdentity: { ...returnedResult, projectRoot: `/private${projectRoot}` },
       item: {
         id: "preview_video_s01",
         shotId: "S01",
         label: "P6S01 returned video",
-        mediaPath: "project-root/video/seedance/P6S01.mp4",
-        sourceReceiptId: "seedance_submit_external_task_s01",
-        outputHash: "sha256:preview-only-video",
+        mediaPath: returnedResult.outputPath,
+        sourceReceiptId: returnedResult.sourceReceiptId,
+        outputHash: returnedResult.outputHash,
       },
     },
   );
@@ -106,14 +197,56 @@ try {
   assert(previewApprovePayload.ok === true && previewApprovePayload.status === "approved", "approve should persist a preview review receipt");
   assert(previewApprovePayload.promotionOperationCount === 0, "preview approval must not stage asset or visual-memory promotion operations");
   const previewApprovedProject = loadProject(projectVibePath);
-  const previewReceipt = previewApprovedProject.receipts?.reviewReceipts.find((receipt) => receipt.id === "review_preview_only_video_s01");
+  const expectedReviewReceiptId = agentDirectorReviewReceiptId(returnedResult);
+  const previewReceipt = previewApprovedProject.receipts?.reviewReceipts.find((receipt) => receipt.id === expectedReviewReceiptId);
   assert(previewReceipt?.outputPath === "video/seedance/P6S01.mp4", "preview approval should persist a project-relative media path");
-  assert(previewReceipt?.sourceReceiptId === "seedance_submit_external_task_s01", "preview approval should remain bound to the provider receipt");
-  assert(previewReceipt?.outputHash === "sha256:preview-only-video", "preview approval should remain bound to the exact output hash");
+  assert(
+    previewReceipt?.projectId === returnedResult.projectId
+      && normalizeAgentDirectorReviewProjectRoot(previewReceipt.projectRoot || "") === normalizeAgentDirectorReviewProjectRoot(returnedResult.projectRoot),
+    "preview approval should bind the canonical project id and root",
+  );
+  assert(previewReceipt?.projectFactHash === returnedResult.projectFactHash, "preview approval should bind the source project fact hash");
+  assert(previewReceipt?.jobId === returnedResult.jobId && previewReceipt.actionId === returnedResult.actionId, "preview approval should bind the generation job and action");
+  assert(previewReceipt?.shotId === returnedResult.shotId, "preview approval should bind the exact shot");
+  assert(previewReceipt?.sourceReceiptId === returnedResult.sourceReceiptId, "preview approval should remain bound to the provider receipt");
+  assert(previewReceipt?.outputHash === returnedResult.outputHash, "preview approval should remain bound to the exact output hash");
   assert(previewReceipt?.promotionAuthorized === false, "preview approval must not authorize project-fact promotion");
   assert(previewApprovedProject.assets.length === beforePreviewApproval.assets.length, "preview approval must not add an asset");
   assert(previewApprovedProject.visualMemory.entries.length === beforePreviewApproval.visualMemory.entries.length, "preview approval must not add visual memory");
   assert(JSON.stringify(previewApprovedProject.shots) === JSON.stringify(beforePreviewApproval.shots), "preview approval must not mutate shot facts");
+  const approvedText = readFileSync(projectVibePath, "utf8");
+  const replayPayload = api.currentProjectReviewDecisionResponse(api.reviewDecisionRequestInput(
+    new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=approve`),
+    {
+      action: "approve",
+      reviewedAt: "2026-07-18T11:00:00.000Z",
+      reviewerId: "local_user",
+      reviewIdentity: returnedResult,
+      candidate: {
+        shotId: returnedResult.shotId,
+        outputPath: "video/seedance/P6S01.mp4",
+        sourceReceiptId: returnedResult.sourceReceiptId,
+        outputHash: returnedResult.outputHash,
+      },
+    },
+  ), { running: false }, source);
+  assert(replayPayload.ok === true && replayPayload.idempotent === true, "replaying the same preview approval should return the existing receipt");
+  assert(replayPayload.reviewReceipt?.id === expectedReviewReceiptId, "idempotent replay should return the same Review Receipt identity");
+  assert(readFileSync(projectVibePath, "utf8") === approvedText, "idempotent replay must not rewrite Project.vibe");
+
+  const alternateReceiptReplayInput = api.reviewDecisionRequestInput(
+    new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=approve`),
+    {
+      action: "approve",
+      receiptId: "caller_selected_duplicate_receipt",
+      reviewerId: "local_user",
+      reviewIdentity: returnedResult,
+    },
+  );
+  assert(alternateReceiptReplayInput.receiptId === expectedReviewReceiptId, "strict Agent video approval must derive its receipt id from result identity");
+  const alternateReceiptReplay = api.currentProjectReviewDecisionResponse(alternateReceiptReplayInput, { running: false }, source);
+  assert(alternateReceiptReplay.ok === true && alternateReceiptReplay.idempotent === true, "a replay with an alternate caller receipt id must still resolve to the existing receipt");
+  assert(readFileSync(projectVibePath, "utf8") === approvedText, "an alternate receipt-id replay must not append or rewrite Project.vibe");
 
   const lockInput = api.reviewDecisionRequestInput(
     new URL(`http://127.0.0.1${endpoints.currentProjectReviewDecisionEndpoint}?action=lock`),
@@ -124,7 +257,7 @@ try {
         id: "preview_s01",
         shotId: "S01",
         label: "Ticket insert",
-        mediaPath: "project-root/runs/demo/S01/output.png",
+        mediaPath: path.join(projectRoot, "runs", "demo", "S01", "output.png"),
         sourceReceiptId: "provider_receipt_s01",
         outputHash: "sha256-lock",
       },
@@ -133,7 +266,7 @@ try {
         assetId: "旧书",
         assetKind: "prop",
         label: "Ticket insert",
-        outputPath: "project-root/runs/demo/S01/output.png",
+        outputPath: path.join(projectRoot, "runs", "demo", "S01", "output.png"),
         sourceReceiptId: "provider_receipt_s01",
         outputHash: "sha256-lock",
       },

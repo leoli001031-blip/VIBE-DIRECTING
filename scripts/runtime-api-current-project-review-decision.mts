@@ -2,9 +2,21 @@ import path from "node:path";
 import {
   applyProjectVibeTransaction,
   buildProjectVibeReviewPromotionTransaction,
+  hashProjectVibeFacts,
   parseProjectVibeText,
+  projectAgentGenerationJobLedgerPath,
+  restoreProjectAgentGenerationJobLedger,
   serializeProjectVibe,
 } from "../src/project/index.ts";
+import { agentVideoGenerationReviewResultMatchesJob } from "../src/core/agentVideoProductionContract.ts";
+import {
+  agentDirectorReviewIdentityFromUnknown,
+  agentDirectorReviewIdentityMatches,
+  agentDirectorReviewReceiptId,
+  normalizeAgentDirectorReviewOutputPath,
+  normalizeAgentDirectorReviewProjectRoot,
+  validateAgentDirectorReviewIdentity,
+} from "../src/core/agentDirectorReviewDecision.ts";
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,6 +84,8 @@ function reviewDecisionRequestInput(url, body) {
   const outputPath = asString(candidate.outputPath) || asString(candidate.mediaPath) || asString(item.mediaPath) || asString(body?.outputPath);
   const outputHash = asString(candidate.outputHash) || asString(candidate.outputSha256) || asString(item.outputHash) || asString(body?.outputHash);
   const sourceReceiptId = asString(candidate.sourceReceiptId) || asString(item.sourceReceiptId) || asString(body?.sourceReceiptId);
+  const reviewIdentity = agentDirectorReviewIdentityFromUnknown(body?.reviewIdentity);
+  const strictAgentVideoPreview = action === "approve" && reviewIdentity;
   const promotionAuthorization = action === "lock"
     ? {
         authorized: true,
@@ -83,15 +97,24 @@ function reviewDecisionRequestInput(url, body) {
   return {
     action,
     transactionId: asString(body?.transactionId),
-    receiptId: asString(body?.receiptId),
+    receiptId: strictAgentVideoPreview && validateAgentDirectorReviewIdentity(reviewIdentity).length === 0
+      ? agentDirectorReviewReceiptId(reviewIdentity)
+      : asString(body?.receiptId),
+    reviewIdentity,
     candidate: {
-      shotId,
+      decisionScope: strictAgentVideoPreview ? "agent_video_preview" : undefined,
+      projectId: strictAgentVideoPreview ? reviewIdentity.projectId : undefined,
+      projectRoot: strictAgentVideoPreview ? reviewIdentity.projectRoot : undefined,
+      projectFactHash: strictAgentVideoPreview ? reviewIdentity.projectFactHash : undefined,
+      jobId: strictAgentVideoPreview ? reviewIdentity.jobId : undefined,
+      actionId: strictAgentVideoPreview ? reviewIdentity.actionId : undefined,
+      shotId: strictAgentVideoPreview ? reviewIdentity.shotId : shotId,
       assetId: asString(candidate.assetId) || asString(item.assetId) || asString(body?.assetId),
       assetKind: asString(candidate.assetKind) || asString(body?.assetKind),
       label: asString(candidate.label) || asString(item.label) || asString(body?.label),
-      outputPath,
-      outputHash,
-      sourceReceiptId,
+      outputPath: strictAgentVideoPreview ? reviewIdentity.outputPath : outputPath,
+      outputHash: strictAgentVideoPreview ? reviewIdentity.outputHash : outputHash,
+      sourceReceiptId: strictAgentVideoPreview ? reviewIdentity.sourceReceiptId : sourceReceiptId,
       sourceRunId: asString(candidate.sourceRunId) || asString(item.sourceRunId) || asString(body?.sourceRunId),
       providerSelfReportedSuccess: candidate.providerSelfReportedSuccess === true || body?.providerSelfReportedSuccess === true,
       returnedOutput: candidate.returnedOutput === true || body?.returnedOutput === true || Boolean(outputPath),
@@ -124,10 +147,14 @@ export function createRuntimeApiCurrentProjectReviewDecision(deps) {
     requestOverrideDiagnostics,
     runtimePolicy,
     readFileSync,
+    existsSync,
     writeFileSync,
     mkdirSync,
     running,
   } = deps;
+  if (typeof existsSync !== "function") {
+    throw new Error("createRuntimeApiCurrentProjectReviewDecision requires existsSync");
+  }
 
   function runtimeState() {
     return typeof running === "function" ? running() : Boolean(running);
@@ -156,6 +183,160 @@ export function createRuntimeApiCurrentProjectReviewDecision(deps) {
         blockers: opened.errors,
         projectVibePath: source.projectVibeRelativePath,
         ...extra,
+      };
+    }
+
+    const strictIdentity = input.reviewIdentity;
+    if (strictIdentity) {
+      const identityBlockers = validateAgentDirectorReviewIdentity(strictIdentity);
+      if (action !== "approve") identityBlockers.push("review_agent_video_action_must_approve");
+      if (strictIdentity.projectId !== opened.project.manifest.projectId) identityBlockers.push("review_project_id_mismatch");
+      const currentRoot = normalizeAgentDirectorReviewProjectRoot(source.runRootRelativePath || source.runRootPath || "");
+      if (normalizeAgentDirectorReviewProjectRoot(strictIdentity.projectRoot) !== currentRoot) {
+        identityBlockers.push("review_project_root_mismatch");
+      }
+      if (identityBlockers.length) {
+        return {
+          ok: false,
+          ...runtimePolicy(),
+          status: "blocked",
+          message: "当前复核对象与项目身份不一致。",
+          action,
+          blockers: Array.from(new Set(identityBlockers)),
+          providerCalled: false,
+          projectFactsPromoted: false,
+          exportTriggered: false,
+          ...extra,
+        };
+      }
+
+      const receiptId = agentDirectorReviewReceiptId(strictIdentity);
+      const existingById = opened.project.receipts?.reviewReceipts.find((receipt) => receipt.id === receiptId);
+      const existingIdentity = existingById?.decisionScope === "agent_video_preview"
+        ? {
+            projectId: existingById.projectId || "",
+            projectRoot: existingById.projectRoot || "",
+            projectFactHash: existingById.projectFactHash || "",
+            jobId: existingById.jobId || "",
+            actionId: existingById.actionId || "",
+            shotId: existingById.shotId || "",
+            sourceReceiptId: existingById.sourceReceiptId || "",
+            outputPath: path.isAbsolute(existingById.outputPath || "")
+              ? existingById.outputPath || ""
+              : path.join(existingById.projectRoot || strictIdentity.projectRoot, existingById.outputPath || ""),
+            outputHash: existingById.outputHash || "",
+          }
+        : undefined;
+      if (existingById) {
+        if (
+          existingById.status === "approved"
+          && existingById.humanReviewed
+          && !existingById.promotionAuthorized
+          && agentDirectorReviewIdentityMatches(existingIdentity, strictIdentity)
+        ) {
+          return {
+            ok: true,
+            ...runtimePolicy(),
+            status: "approved",
+            message: "这份预览复核记录已经存在。",
+            action,
+            projectVibeWritten: true,
+            writePerformed: false,
+            idempotent: true,
+            reviewReceipt: existingById,
+            promotionOperationCount: 0,
+            providerCalled: false,
+            projectFactsPromoted: false,
+            exportTriggered: false,
+            ...extra,
+          };
+        }
+        return {
+          ok: false,
+          ...runtimePolicy(),
+          status: "blocked",
+          message: "同一复核回执已经绑定到不同结果。",
+          action,
+          blockers: ["review_receipt_identity_conflict"],
+          reviewReceipt: existingById,
+          providerCalled: false,
+          projectFactsPromoted: false,
+          exportTriggered: false,
+          ...extra,
+        };
+      }
+
+      if (hashProjectVibeFacts(opened.project) !== strictIdentity.projectFactHash) {
+        return {
+          ok: false,
+          ...runtimePolicy(),
+          status: "blocked",
+          message: "项目事实已变化，不能复核旧结果。",
+          action,
+          blockers: ["review_project_fact_hash_mismatch"],
+          providerCalled: false,
+          projectFactsPromoted: false,
+          exportTriggered: false,
+          ...extra,
+        };
+      }
+
+      const ledgerRoot = source.runRootPath || source.runRootRelativePath;
+      const ledgerPath = ledgerRoot ? path.join(ledgerRoot, projectAgentGenerationJobLedgerPath) : "";
+      let restoredLedger;
+      try {
+        if (!ledgerPath || !existsSync(ledgerPath)) throw new Error("missing");
+        restoredLedger = restoreProjectAgentGenerationJobLedger(JSON.parse(readFileSync(ledgerPath, "utf8")), {
+          projectId: strictIdentity.projectId,
+          projectRoot: normalizeAgentDirectorReviewProjectRoot(strictIdentity.projectRoot),
+          projectFactHash: strictIdentity.projectFactHash,
+        }, projectAgentGenerationJobLedgerPath);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        restoredLedger = { ok: false, errors: [`Generation ledger is missing or unreadable: ${reason}`] };
+      }
+      const reviewJob = restoredLedger.ok
+        ? restoredLedger.ledger?.jobs.find((job) => job.jobId === strictIdentity.jobId)
+        : undefined;
+      const jobIdentityMatches = reviewJob
+        && reviewJob.actionId === strictIdentity.actionId
+        && agentVideoGenerationReviewResultMatchesJob(reviewJob)
+        && agentDirectorReviewIdentityMatches(reviewJob.reviewResult, strictIdentity);
+      if (!jobIdentityMatches) {
+        return {
+          ok: false,
+          ...runtimePolicy(),
+          status: "blocked",
+          message: "当前结果与 generation job ledger 不一致。",
+          action,
+          blockers: restoredLedger.ok ? ["review_job_identity_mismatch"] : ["review_generation_ledger_unavailable", ...(restoredLedger.errors || [])],
+          providerCalled: false,
+          projectFactsPromoted: false,
+          exportTriggered: false,
+          ...extra,
+        };
+      }
+
+      input = {
+        ...input,
+        receiptId,
+        candidate: {
+          ...input.candidate,
+          decisionScope: "agent_video_preview",
+          projectId: strictIdentity.projectId,
+          projectRoot: strictIdentity.projectRoot,
+          projectFactHash: strictIdentity.projectFactHash,
+          jobId: strictIdentity.jobId,
+          actionId: strictIdentity.actionId,
+          shotId: strictIdentity.shotId,
+          sourceReceiptId: strictIdentity.sourceReceiptId,
+          outputPath: strictIdentity.outputPath,
+          outputHash: strictIdentity.outputHash,
+          evidenceRefs: [
+            ...(input.candidate.evidenceRefs || []),
+            `agent_generation_job#${strictIdentity.jobId}`,
+          ],
+        },
       };
     }
 
@@ -246,6 +427,8 @@ export function createRuntimeApiCurrentProjectReviewDecision(deps) {
             : "已写入复核记录。",
       action,
       projectVibeWritten: true,
+      writePerformed: true,
+      idempotent: false,
       projectRoot: source.runRootRelativePath,
       projectVibePath: source.projectVibeRelativePath,
       reviewReceipt: staged.reviewReceipt,
@@ -253,6 +436,9 @@ export function createRuntimeApiCurrentProjectReviewDecision(deps) {
       promotionOperationCount: staged.promotionOperationCount,
       providerSelfReportIgnored: staged.providerSelfReportIgnored,
       freeTextFormalTaskBlocked: staged.freeTextFormalTaskBlocked,
+      providerCalled: false,
+      projectFactsPromoted: staged.promotionOperationCount > 0,
+      exportTriggered: false,
       ...extra,
     };
   }

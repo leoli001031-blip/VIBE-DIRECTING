@@ -361,6 +361,21 @@ function latestCurrentJob(
     .sort((left, right) => timeValue(right.updatedAt) - timeValue(left.updatedAt))[0];
 }
 
+function latestCurrentJobAcrossPipeline(
+  ledger: AgentVideoGenerationJobLedger | undefined,
+  input: Pick<AgentCurrentTaskProjectionInput, "currentProjectId" | "currentProjectRoot" | "currentProjectFactHash">,
+) {
+  if (!input.currentProjectId || !input.currentProjectFactHash) return undefined;
+  return [...(ledger?.jobs || [])]
+    .filter((job) =>
+      !terminalJobStatuses.has(job.status)
+      && job.projectId === input.currentProjectId
+      && normalizeProjectRoot(job.projectRoot) === normalizeProjectRoot(input.currentProjectRoot)
+      && job.projectFactHash === input.currentProjectFactHash
+    )
+    .sort((left, right) => timeValue(right.updatedAt) - timeValue(left.updatedAt))[0];
+}
+
 function currentStepCompletion(input: AgentCurrentTaskProjectionInput, step: AgentCurrentTaskStep) {
   return [...(input.completedSteps || [])].reverse().find((completion) => (
     completion.step === step
@@ -472,6 +487,39 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
       blockers: input.restoredStagedPlan.blockers || [],
       facts: factsForInput(input, input.restoredStagedPlan.facts || []),
     });
+  }
+
+  const priorityJob = latestCurrentJobAcrossPipeline(input.jobLedger, input);
+  if (priorityJob) {
+    const jobStep = pipelineStepToCurrentTaskStep(priorityJob.pipelineStep);
+    const matchingConfirmation = priorityJob.status === "staged"
+      ? latestWaitingConfirmation(input.timelineConfirmations, jobStep, input)
+      : undefined;
+    const confirmationMatchesJob = Boolean(
+      matchingConfirmation
+        && matchingConfirmation.confirmationId === priorityJob.sourceConfirmationId
+        && matchingConfirmation.actionId === priorityJob.actionId,
+    );
+    const queryRecovery = priorityJob.status === "running"
+      && priorityJob.kind === "video_submit"
+      && input.pipelinePlan?.currentOperation === "query";
+    if (priorityJob.status !== "staged" || confirmationMatchesJob) {
+      return buildProjection({
+        source: confirmationMatchesJob ? "timeline_confirmation" : "pipeline_job",
+        step: jobStep,
+        label: matchingConfirmation?.label || (queryRecovery ? "查询视频结果" : labelForStep(jobStep)),
+        requiresConfirmation: priorityJob.status === "staged" || queryRecovery,
+        confirmationKind: priorityJob.status === "staged" || queryRecovery ? matchingConfirmation?.kind || "pipeline_action" : undefined,
+        confirmationId: priorityJob.status === "staged" ? priorityJob.sourceConfirmationId : undefined,
+        actionId: queryRecovery ? undefined : priorityJob.actionId,
+        jobId: priorityJob.jobId,
+        blockers: priorityJob.blockers,
+        facts: factsForInput(input, [
+          { label: "任务", value: priorityJob.jobId },
+          { label: "状态", value: priorityJob.status },
+        ]),
+      });
+    }
   }
 
   const referenceReviewCount = Math.max(0, Math.floor(input.referenceReviewCount || 0));

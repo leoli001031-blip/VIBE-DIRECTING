@@ -7,7 +7,10 @@ import {
   agentVideoGenerationReviewResultMatchesJob,
   type AgentVideoGenerationJob,
 } from "../../core/agentVideoProductionContract";
+import { agentDirectorReviewIdentityMatches } from "../../core/agentDirectorReviewDecision";
 import type { CreatorReviewTrayItem } from "./creatorDeskTypes";
+import type { AgentDirectorReviewRevisionIntent } from "./agentDirectorReviewRevision";
+import type { AgentDirectorReviewRegenerationProposal } from "./agentDirectorReviewRegeneration";
 
 export type AgentDirectorTurnMode = "conversation" | "confirmation" | "running" | "review" | "blocked" | "idle";
 
@@ -127,6 +130,8 @@ export interface AgentDirectorTurnProjection {
   phase: AgentDirectorTurnPhase;
   task: AgentCurrentTaskProjection;
   reviewTarget?: CreatorReviewTrayItem;
+  reviewRevisionIntent?: AgentDirectorReviewRevisionIntent;
+  reviewRegenerationProposal?: AgentDirectorReviewRegenerationProposal;
   clarification?: AgentDirectorClarificationProjection;
   proposal?: AgentDirectorProposalProjection;
   confirmation?: AgentDirectorConfirmationProjection;
@@ -140,6 +145,10 @@ export interface AgentDirectorTurnProjection {
 
 function clean(value: string | undefined) {
   return value?.trim() || "";
+}
+
+function reviewRevisionBoundaryForDisplay(value: string) {
+  return value.replace(/\bProvider\b/giu, "付费生成服务");
 }
 
 function reviewTargetHasIdentity(target: CreatorReviewTrayItem | undefined) {
@@ -238,6 +247,8 @@ function buildRunningProjection(
 export function buildAgentDirectorTurnProjection(input: {
   task: AgentCurrentTaskProjection;
   reviewTarget?: CreatorReviewTrayItem;
+  reviewRevisionIntent?: AgentDirectorReviewRevisionIntent;
+  reviewRegenerationProposal?: AgentDirectorReviewRegenerationProposal;
   clarification?: Omit<AgentDirectorClarificationProjection, "options"> & {
     options: Array<Omit<AgentDirectorClarificationOptionProjection, "effect">>;
   };
@@ -250,6 +261,8 @@ export function buildAgentDirectorTurnProjection(input: {
   const {
     task,
     reviewTarget,
+    reviewRevisionIntent,
+    reviewRegenerationProposal,
     clarification,
     proposal,
     confirmationContext,
@@ -260,8 +273,16 @@ export function buildAgentDirectorTurnProjection(input: {
   const reviewTask = !task.requiresConfirmation
     && task.effect === "none"
     && (task.step === "prepare_references" || task.step === "submit_video");
+  const strictVideoReview = task.step === "submit_video";
   const reviewIdentityReady = reviewTargetHasIdentity(reviewTarget)
-    && (!reviewJob || reviewTargetMatchesJob(reviewTarget, reviewJob, currentProjectFactHash));
+    && (strictVideoReview
+      ? Boolean(reviewJob && reviewTargetMatchesJob(reviewTarget, reviewJob, currentProjectFactHash))
+      : (!reviewJob || reviewTargetMatchesJob(reviewTarget, reviewJob, currentProjectFactHash)));
+  const reviewRevisionIdentityReady = Boolean(
+    reviewRevisionIntent
+      && (!clean(currentProjectFactHash) || reviewRevisionIntent.identity.projectFactHash === currentProjectFactHash)
+      && (!reviewJob || agentDirectorReviewIdentityMatches(reviewRevisionIntent.identity, reviewJob.reviewResult)),
+  );
   const paidConfirmationTask = task.requiresConfirmation
     && task.effect === "generation_job"
     && task.source !== "pipeline_job";
@@ -278,6 +299,42 @@ export function buildAgentDirectorTurnProjection(input: {
     ? false
     : runningJobMatchesTask({ task, job: runningJob, currentProjectFactHash });
   const blockers = [...task.blockers];
+
+  if (reviewRegenerationProposal) {
+    const proposalIdentityReady = Boolean(
+      (!clean(currentProjectFactHash) || reviewRegenerationProposal.sourceIdentity.projectFactHash === currentProjectFactHash)
+        && (!reviewJob || agentDirectorReviewIdentityMatches(reviewRegenerationProposal.sourceIdentity, reviewJob.reviewResult)),
+    );
+    if (!proposalIdentityReady) blockers.push("当前重新生成提案与原返回结果身份不一致，不能创建新任务。");
+    return {
+      mode: proposalIdentityReady && !blockers.length ? "confirmation" : "blocked",
+      phase: "proposal",
+      task,
+      reviewRegenerationProposal,
+      confirmationIdentityReady,
+      runningIdentityReady,
+      reviewIdentityReady,
+      blockers,
+      actions: [
+        {
+          id: "confirm_current_task",
+          label: "确认重新生成提案",
+          effect: "generation_job",
+          enabled: proposalIdentityReady && !blockers.length,
+          requiresConfirmation: true,
+          boundary: "确认后只创建新的本地验证任务和独立确认卡；不调用付费生成服务、不覆盖旧结果。",
+        },
+        {
+          id: "continue_conversation",
+          label: "继续调整",
+          effect: "conversation_only",
+          enabled: true,
+          requiresConfirmation: false,
+          boundary: "只返回对话继续修改提案，不创建任务、不调用付费生成服务。",
+        },
+      ],
+    };
+  }
 
   const taskIsProjectEditConfirmation = task.requiresConfirmation && task.confirmationKind === "project_edit";
   if (proposal || taskIsProjectEditConfirmation) {
@@ -343,6 +400,32 @@ export function buildAgentDirectorTurnProjection(input: {
     };
   }
 
+  if (reviewRevisionIntent) {
+    if (!reviewRevisionIdentityReady) blockers.push("当前修改意图与返回结果身份不一致，不能继续形成提案。");
+    const visibleReviewRevisionIntent = {
+      ...reviewRevisionIntent,
+      boundary: reviewRevisionBoundaryForDisplay(reviewRevisionIntent.boundary),
+    };
+    return {
+      mode: blockers.length ? "blocked" : "conversation",
+      phase: "conversation",
+      task,
+      reviewRevisionIntent: visibleReviewRevisionIntent,
+      confirmationIdentityReady,
+      runningIdentityReady,
+      reviewIdentityReady,
+      blockers,
+      actions: [{
+        id: "continue_conversation",
+        label: "继续说明",
+        effect: "conversation_only",
+        enabled: !blockers.length,
+        requiresConfirmation: false,
+        boundary: visibleReviewRevisionIntent.boundary,
+      }],
+    };
+  }
+
   if (reviewTask) {
     if (!reviewIdentityReady) blockers.push(reviewJob
       ? "当前复核结果与返回任务的动作、事实、路径或哈希不一致，不能写入 Review Receipt。"
@@ -369,7 +452,7 @@ export function buildAgentDirectorTurnProjection(input: {
           id: "request_changes",
           label: "需要修改",
           effect: "conversation_only",
-          enabled: true,
+          enabled: !strictVideoReview || reviewIdentityReady,
           requiresConfirmation: false,
           boundary: "只进入修改讨论，不会自动重试或重新提交外部任务。",
         },

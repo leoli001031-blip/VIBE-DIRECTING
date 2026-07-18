@@ -4,6 +4,7 @@ import {
   projectRuntimeRequestPath,
   type ProjectRuntimeIdentity,
 } from "./runtimeApiClient";
+import type { AgentDirectorReviewIdentity } from "./agentDirectorReviewDecision";
 
 export const projectReviewDecisionEndpoint = `${projectRuntimeBasePath}/projects/current/review/decision`;
 
@@ -11,8 +12,10 @@ export type ProjectReviewDecisionAction = "approve" | "lock" | "reject" | "retry
 
 export type ProjectReviewDecisionRequest = {
   action: ProjectReviewDecisionAction;
+  receiptId?: string;
   reviewedAt?: string;
   reviewerId?: string;
+  reviewIdentity?: AgentDirectorReviewIdentity;
   item?: Record<string, unknown>;
   candidate?: Record<string, unknown>;
   decision?: Record<string, unknown>;
@@ -23,6 +26,9 @@ export type ProjectReviewDecisionStatus = {
   status?: string;
   message?: string;
   projectVibeWritten?: boolean;
+  writePerformed?: boolean;
+  idempotent?: boolean;
+  reviewReceipt?: Record<string, unknown>;
   blockers?: string[];
 };
 
@@ -79,6 +85,9 @@ export async function submitCurrentProjectReviewDecision(
     status: typeof payload.status === "string" ? payload.status : undefined,
     message: typeof payload.message === "string" ? payload.message : undefined,
     projectVibeWritten: payload.projectVibeWritten === true,
+    writePerformed: payload.writePerformed === true,
+    idempotent: payload.idempotent === true,
+    reviewReceipt: isRecord(payload.reviewReceipt) ? payload.reviewReceipt : undefined,
     blockers: Array.isArray(payload.blockers)
       ? payload.blockers.filter((item): item is string => typeof item === "string")
       : undefined,

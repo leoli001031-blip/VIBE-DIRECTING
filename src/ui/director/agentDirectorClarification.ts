@@ -1,4 +1,9 @@
 import type { VibeAgentTimelineEntry } from "../../agent-core/types";
+import {
+  agentDirectorReviewIdentityFromUnknown,
+  validateAgentDirectorReviewIdentity,
+  type AgentDirectorReviewIdentity,
+} from "../../core/agentDirectorReviewDecision";
 
 const clarificationDetailKind = "agent_director_clarification";
 const clarificationResolutionDetailKind = "agent_director_clarification_resolution";
@@ -9,7 +14,9 @@ export type AgentDirectorClarificationOptionId =
   | "advance_as_turn"
   | "hold_and_strengthen"
   | "extend_action"
-  | "hold_and_soften";
+  | "hold_and_soften"
+  | "apply_as_stated"
+  | "strengthen_direction";
 
 export interface AgentDirectorClarificationOption {
   id: AgentDirectorClarificationOptionId;
@@ -26,6 +33,10 @@ export interface AgentDirectorClarificationTurn {
   question: string;
   options: AgentDirectorClarificationOption[];
   boundary: string;
+  reviewRevision?: {
+    intentId: string;
+    identity: AgentDirectorReviewIdentity;
+  };
 }
 
 function clean(value: unknown) {
@@ -101,34 +112,62 @@ function clarificationOptions(
   ];
 }
 
+function reviewRevisionClarificationOptions(sourceIntent: string): AgentDirectorClarificationOption[] {
+  return [
+    {
+      id: "apply_as_stated",
+      label: "按此修改",
+      detail: "保持你刚才的修改方向，整理成一个独立新版本提案。",
+      resolvedIntent: sourceIntent,
+    },
+    {
+      id: "strengthen_direction",
+      label: "强化方向",
+      detail: "保留当前故事事实，并进一步强化这条导演修改方向。",
+      resolvedIntent: `${sourceIntent}；在不改变当前故事事实的前提下，进一步强化这条修改方向。`,
+    },
+  ];
+}
+
 export function buildAgentDirectorClarificationTurn(input: {
   userIntent: string;
   selectedShotId?: string;
   targetLabel?: string;
   hasAttachments?: boolean;
   createdAt?: string;
+  reviewRevision?: AgentDirectorClarificationTurn["reviewRevision"];
 }): AgentDirectorClarificationTurn | undefined {
   const sourceIntent = clean(input.userIntent);
   const selectedShotId = clean(input.selectedShotId);
-  if (!sourceIntent || !selectedShotId || input.hasAttachments || alreadyContainsDirection(sourceIntent)) return undefined;
+  if (!sourceIntent || !selectedShotId || input.hasAttachments) return undefined;
+  if (input.reviewRevision && validateAgentDirectorReviewIdentity(input.reviewRevision.identity).length) return undefined;
   const concern = timingConcern(sourceIntent);
-  if (!concern) return undefined;
+  const useReviewRevisionClarification = Boolean(
+    input.reviewRevision && (!concern || alreadyContainsDirection(sourceIntent)),
+  );
+  if (!concern && !useReviewRevisionClarification) return undefined;
+  if (!input.reviewRevision && alreadyContainsDirection(sourceIntent)) return undefined;
   const targetLabel = clean(input.targetLabel) || selectedShotId;
   const createdAt = input.createdAt || new Date().toISOString();
   const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase() || "now";
-  const question = concern === "late"
-    ? "你希望把这个变化提前作为主要转折，还是保留当前时机并加强前面的铺垫？"
-    : concern === "fast"
-      ? "你希望拉长主要动作，还是保留当前时长但减弱这个变化？"
-      : "你希望把这个变化留到主要动作完成后作为情绪转折，还是保留当前时机只做提前预兆？";
+  const question = useReviewRevisionClarification
+    ? "你希望按这条修改形成新版本提案，还是在此基础上进一步强化？"
+    : concern === "late"
+      ? "你希望把这个变化提前作为主要转折，还是保留当前时机并加强前面的铺垫？"
+      : concern === "fast"
+        ? "你希望拉长主要动作，还是保留当前时长但减弱这个变化？"
+        : "你希望把这个变化留到主要动作完成后作为情绪转折，还是保留当前时机只做提前预兆？";
   return {
     id: `agent_director_clarification_${suffix}`,
     sourceIntent,
     targetLabel,
     selectedShotId,
     question,
-    options: clarificationOptions(concern, sourceIntent),
+    options: useReviewRevisionClarification
+      ? reviewRevisionClarificationOptions(sourceIntent)
+      : clarificationOptions(concern!, sourceIntent),
     boundary: "选择只会形成一条待确认提案；不会写项目、调用外部生成服务或导出。",
+    reviewRevision: input.reviewRevision,
   };
 }
 
@@ -166,6 +205,7 @@ export function buildAgentDirectorClarificationTimelineEntries(
         question: turn.question,
         boundary: turn.boundary,
         options: turn.options,
+        reviewRevision: turn.reviewRevision,
       },
     },
   ];
@@ -193,6 +233,31 @@ export function buildAgentDirectorClarificationResolutionTimelineEntry(input: {
       clarificationId: input.turn.id,
       optionId: input.option.id,
       resolvedIntent: input.option.resolvedIntent,
+      reviewRevisionIntentId: input.turn.reviewRevision?.intentId,
+    },
+  };
+}
+
+export function buildAgentDirectorClarificationFreeformResolutionTimelineEntry(input: {
+  turn: AgentDirectorClarificationTurn;
+  resolvedIntent: string;
+  createdAt?: string;
+}): VibeAgentTimelineEntry {
+  const createdAt = input.createdAt || new Date().toISOString();
+  return {
+    id: `${input.turn.id}_resolved_custom`,
+    type: "user_message",
+    createdAt,
+    title: "你",
+    body: input.resolvedIntent,
+    status: "done",
+    facts: [{ label: "范围", value: input.turn.targetLabel }],
+    details: {
+      directorTurnKind: clarificationResolutionDetailKind,
+      clarificationId: input.turn.id,
+      optionId: "custom",
+      resolvedIntent: input.resolvedIntent,
+      reviewRevisionIntentId: input.turn.reviewRevision?.intentId,
     },
   };
 }
@@ -215,6 +280,15 @@ function clarificationTurnFromEntry(entry: VibeAgentTimelineEntry): AgentDirecto
   const selectedShotId = clean(details.selectedShotId);
   const question = clean(details.question);
   const boundary = clean(details.boundary);
+  const reviewRevisionRecord = record(details.reviewRevision);
+  const reviewRevisionIdentity = agentDirectorReviewIdentityFromUnknown(reviewRevisionRecord?.identity);
+  const reviewRevisionIntentId = clean(reviewRevisionRecord?.intentId);
+  const reviewRevision = reviewRevisionIntentId
+    && reviewRevisionIdentity
+    && validateAgentDirectorReviewIdentity(reviewRevisionIdentity).length === 0
+    ? { intentId: reviewRevisionIntentId, identity: reviewRevisionIdentity }
+    : undefined;
+  if (reviewRevisionRecord && !reviewRevision) return undefined;
   if (!sourceIntent || !targetLabel || !selectedShotId || !question || options.length < 2) return undefined;
   return {
     id: entry.id,
@@ -224,6 +298,7 @@ function clarificationTurnFromEntry(entry: VibeAgentTimelineEntry): AgentDirecto
     question,
     options,
     boundary: boundary || "选择只会形成一条待确认提案；不会执行。",
+    reviewRevision,
   };
 }
 

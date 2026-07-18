@@ -1,6 +1,7 @@
 import type { AgentCurrentTaskProjection } from "../src/core/agentCurrentTaskProjection.ts";
 import type { AgentVideoGenerationJob } from "../src/core/agentVideoProductionContract.ts";
 import { buildAgentDirectorTurnProjection } from "../src/ui/director/agentDirectorTurnProjection.ts";
+import { buildAgentDirectorReviewRevisionIntent } from "../src/ui/director/agentDirectorReviewRevision.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -79,8 +80,8 @@ const returnedReviewJob = job({
 const review = buildAgentDirectorTurnProjection({
   task: task({
     source: "project_observation",
-    step: "submit_video",
-    label: "复核视频",
+    step: "prepare_references",
+    label: "复核参考",
   }),
   reviewTarget: {
     id: "p6s01-result",
@@ -117,7 +118,15 @@ const reviewWithoutIdentity = buildAgentDirectorTurnProjection({
 });
 assert(reviewWithoutIdentity.mode === "blocked", "review must fail closed when receipt identity is incomplete");
 assert(reviewWithoutIdentity.actions.find((action) => action.id === "approve_preview")?.enabled === false, "a hashless result must not be reviewable");
-assert(reviewWithoutIdentity.actions.find((action) => action.id === "request_changes")?.enabled === true, "the user should still be able to discuss a blocked result");
+assert(reviewWithoutIdentity.actions.find((action) => action.id === "request_changes")?.enabled === false, "a video result without job identity must not create an unbound revision intent");
+
+const videoReviewWithoutLedgerJob = buildAgentDirectorTurnProjection({
+  task: task({ source: "project_observation", step: "submit_video", label: "复核视频" }),
+  currentProjectFactHash: "p10-d-fact-hash",
+  reviewTarget: review.reviewTarget,
+});
+assert(videoReviewWithoutLedgerJob.mode === "blocked", "video review must require the exact restored generation job");
+assert(videoReviewWithoutLedgerJob.actions.every((action) => action.id !== "approve_preview" || !action.enabled), "video approval must fail closed without a ledger job");
 
 const recoveredReview = buildAgentDirectorTurnProjection({
   task: task({
@@ -168,6 +177,30 @@ const recoveredReviewFromOldFacts = buildAgentDirectorTurnProjection({
 });
 assert(recoveredReviewFromOldFacts.mode === "blocked", "a returned result from older project facts must fail closed");
 
+const reviewRevisionIntent = buildAgentDirectorReviewRevisionIntent({
+  identity: returnedReviewJob.reviewResult!,
+  targetLabel: "P6S01",
+  createdAt: "2026-07-17T01:04:00.000Z",
+});
+assert(reviewRevisionIntent.intent, "the exact returned result should form a revision intent");
+const revisionConversation = buildAgentDirectorTurnProjection({
+  task: recoveredReview.task,
+  currentProjectFactHash: "p10-d-fact-hash",
+  reviewJob: returnedReviewJob,
+  reviewTarget: recoveredReview.reviewTarget,
+  reviewRevisionIntent: reviewRevisionIntent.intent,
+});
+assert(revisionConversation.mode === "conversation" && revisionConversation.phase === "conversation", "a structured request-changes decision should own the current conversation turn");
+assert(revisionConversation.reviewRevisionIntent?.intentId === reviewRevisionIntent.intent.intentId, "the current turn should retain the exact revision-intent identity");
+assert(!revisionConversation.actions.some((action) => action.id === "approve_preview"), "the old Review actions must not remain active while revision clarification owns the turn");
+assert(revisionConversation.actions.every((action) => action.effect === "conversation_only"), "revision intent must not create a job, promote facts, or export");
+
+const revisionConversationOverPassiveExport = buildAgentDirectorTurnProjection({
+  task: task({ source: "project_status", step: "export", label: "准备交付" }),
+  reviewRevisionIntent: reviewRevisionIntent.intent,
+});
+assert(revisionConversationOverPassiveExport.phase === "conversation", "a passive export state must not steal an unresolved review revision intent");
+
 const clarification = buildAgentDirectorTurnProjection({
   task: task({
     source: "project_observation",
@@ -189,6 +222,47 @@ const clarification = buildAgentDirectorTurnProjection({
 assert(clarification.mode === "conversation" && clarification.phase === "clarification", "an unresolved creative choice should become a clarification conversation turn");
 assert(clarification.clarification?.options.every((option) => option.effect === "conversation_only"), "clarification choices must stay conversation-only");
 assert(clarification.actions.every((action) => action.effect === "conversation_only"), "clarification must not expose a project or provider effect");
+
+const regenerationProposal = buildAgentDirectorTurnProjection({
+  task: recoveredReview.task,
+  currentProjectFactHash: "p10-d-fact-hash",
+  reviewJob: returnedReviewJob,
+  reviewTarget: recoveredReview.reviewTarget,
+  reviewRegenerationProposal: {
+    schemaVersion: "agent_director_review_regeneration/1.0.0",
+    proposalId: "proposal-agent-video-p6s01",
+    status: "awaiting_confirmation",
+    revisionIntentId: reviewRevisionIntent.intent.intentId,
+    clarificationId: "clarify-p6s01-timing",
+    sourceIdentity: returnedReviewJob.reviewResult!,
+    targetLabel: "P6S01",
+    resolvedIntent: "先完成递交动作，再让纸飞机发光。",
+    directionLabel: "情绪转折",
+    summary: "修改后重新生成 P6S01",
+    message: "保留旧版本，形成一个新候选。",
+    proposedChanges: [
+      { field: "directorIntent", to: "延后发光", reason: "确认导演目标" },
+      { field: "versionPolicy", from: "旧 candidate", to: "新增 candidate", reason: "保留旧结果" },
+    ],
+    promptPolicy: "compile_after_proposal_confirmation",
+    originalResultPreserved: true,
+    generationActionCreated: false,
+    providerCalled: false,
+    createdAt: "2026-07-17T01:05:00.000Z",
+  },
+});
+assert(regenerationProposal.phase === "proposal" && regenerationProposal.mode === "confirmation", "an exact review-regeneration proposal should own the proposal turn over the old candidate");
+assert(regenerationProposal.actions.find((action) => action.id === "confirm_current_task")?.label === "确认重新生成提案", "review regeneration must use an explicit proposal confirmation action");
+assert(regenerationProposal.actions.find((action) => action.id === "confirm_current_task")?.boundary.includes("不调用付费生成服务"), "proposal confirmation must stop before paid generation execution");
+assert(!regenerationProposal.actions.some((action) => action.id === "approve_preview"), "the old Review decision must not remain active while the new proposal owns the turn");
+
+const staleRegenerationProposal = buildAgentDirectorTurnProjection({
+  task: recoveredReview.task,
+  currentProjectFactHash: "different-fact",
+  reviewJob: returnedReviewJob,
+  reviewRegenerationProposal: regenerationProposal.reviewRegenerationProposal,
+});
+assert(staleRegenerationProposal.phase === "proposal" && staleRegenerationProposal.mode === "blocked", "a regeneration proposal from old facts must fail closed");
 
 const proposal = buildAgentDirectorTurnProjection({
   task: task({

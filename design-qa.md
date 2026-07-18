@@ -1,10 +1,11 @@
 # Vibe Director Studio P10-D Director Turn Design QA
 
-Date: 2026-07-17
+Date: 2026-07-18
 
 Scope: **P10-D Review first slice, Clarify/Proposal second slice, Paid
 Confirmation/Running third slice, and Running-to-Review recovery fourth slice
-only**. This is not acceptance of a real paid Provider task, A/B comparison,
+and Review Decision fifth slice, plus Review regeneration sixth slice only**.
+This is not acceptance of a real paid Provider task, A/B comparison,
 project-fact promotion, or P10-E Delivery.
 
 ## Comparison targets
@@ -33,11 +34,29 @@ project-fact promotion, or P10-E Delivery.
   `docs/evidence/p10-d-running-review-recovery-20260718/02-packaged-review-returned.png`
 - Packaged cold-restart Review evidence:
   `docs/evidence/p10-d-running-review-recovery-20260718/03-packaged-review-cold-restart.png`
+- Packaged Request Changes evidence:
+  `docs/evidence/p10-d-review-decision-20260718/02-packaged-request-changes.png`
+- Packaged approved-preview evidence:
+  `docs/evidence/p10-d-review-decision-20260718/04-packaged-preview-approved.png`
+- Packaged approved-preview cold-restart evidence:
+  `docs/evidence/p10-d-review-decision-20260718/05-packaged-preview-approved-cold-restart.png`
+- Packaged Review-regeneration Clarify evidence:
+  `docs/evidence/p10-d-review-regeneration-20260718/01-packaged-clarification.png`
+- Packaged Review-regeneration Proposal evidence:
+  `docs/evidence/p10-d-review-regeneration-20260718/02-packaged-proposal.png`
+- Packaged Review-regeneration Proposal cold-restart evidence:
+  `docs/evidence/p10-d-review-regeneration-20260718/03-packaged-proposal-cold-restart.png`
+- Packaged Review-regeneration Confirmation evidence:
+  `docs/evidence/p10-d-review-regeneration-20260718/04-packaged-new-confirmation.png`
+- Packaged Review-regeneration Confirmation cold-restart evidence:
+  `docs/evidence/p10-d-review-regeneration-20260718/05-packaged-confirmation-cold-restart.png`
 
 Each Clarify, Proposal, Paid Confirmation, and Running reference was opened
 together with its corresponding packaged capture for final pairwise comparison.
 The Review reference and the packaged returned-result capture were also opened
 together in one comparison input.
+The D6 Clarify, Proposal, and Confirmation captures were inspected as one
+continuous packaged turn and again after their exact cold-restart boundaries.
 The generated references and packaged window have different native canvas
 dimensions, so this check judges the selected product hierarchy and interaction
 contract rather than claiming a pixel clone.
@@ -67,8 +86,20 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
   no-retry/no-promotion/no-export boundaries visible.
 - Cold restart restores the same Review hierarchy without an old confirmation
   or passive export task taking priority.
+- Request Changes replaces Review with one focused modification-intent turn,
+  retains the original result, and keeps the composer available for a concrete
+  revision direction.
+- Preview approval removes the old Review turn and Review actions. Cold restart
+  does not revive the immutable ledger result after its exact strict Review
+  Receipt has been written.
+- Review regeneration keeps the old P6S01 result visible while Clarify and
+  Proposal own the right rail, then creates one fresh local Confirmation only
+  after the Proposal is confirmed.
+- The D6 Confirmation keeps `本地验证 · 不计费`, old-result preservation, and
+  explicit user confirmation visible; no passive Review card or old-video
+  blocker competes with it after cold restart.
 - The existing restrained shell, spacing, borders, typography, and project
-  navigation remain consistent across all six accepted turn states.
+  navigation remain consistent across all accepted P10-D1 through D6 states.
 
 ## Interaction QA
 
@@ -92,6 +123,21 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
   Running to `needs_review`; stale or mismatched identities fail closed.
 - The returned video workspace opens once for a new Review identity, while a
   stable identity does not repeatedly force the user back after navigation.
+- `通过预览` writes one deterministic Review Receipt; exact replay performs no
+  second write and no duplicate card appears.
+- `需要修改` persists the structured intent before pre-filling the composer;
+  cold restart restores that one intent rather than passive export status.
+- A blocked confirmation can no longer render a second stale Review card because
+  the visible Review surface requires the structured `review` phase.
+- D6 clarification cannot create a generation action or job. Its Proposal keeps
+  the raw revision separate from the compiled generation prompt.
+- Confirming the D6 Proposal creates fresh action, confirmation, and job ids;
+  the old result identity is not reused as a retry identity.
+- Clarify, Proposal, and the new local Confirmation each survive cold restart
+  without changing `project.vibe` or the existing P6S01 media.
+- The D6 staged plan remains `awaiting_confirmation`; its handoff has only
+  `user_confirmation_required` and is not overwritten by the old video's
+  `already_sent` state.
 - The packaged returned-result and cold-restart captures are byte-identical;
   the project file, media, ledger, and preview plan also remain unchanged.
 - `project.vibe` remained at SHA-256
@@ -99,6 +145,9 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
   through Clarify, Proposal, and Continue Adjusting.
 - The separate Paid Confirmation/Running fixture remained at SHA-256
   `47e5280209fa508c96ba36ce804fd370da4f62a04a06952cf9dbe7633177d5af`.
+- The D6 Review-regeneration fixture retained the same `project.vibe` SHA-256
+  and P6S01 MP4 SHA-256
+  `6c1cc9d172160c36634d19ba84839b5738a5c9be3a862c1a1928d46535a135f1`.
 - No provider submission, paid request, retry, project-fact promotion, or export
   was triggered during this QA pass.
 
@@ -117,6 +166,9 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 - The Review reference illustrates an A/B version pair. The fourth-slice
   fixture intentionally presents one returned P6S01 result because durable
   version-pair comparison remains outside this acceptance.
+- The sixth slice stops before executing the new candidate. Its center therefore
+  continues to show the immutable old P6S01 result rather than inventing a
+  second version or an A/B comparison.
 
 ## Remaining work
 
@@ -126,5 +178,6 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 - A/B compare requires a durable version-pair contract and two real results.
 - Project-fact promotion, Provider execution, Delivery, and export retain their
   independent boundaries and were not exercised.
+- P10-D7 was not entered after the sixth-slice acceptance.
 
 final result: passed

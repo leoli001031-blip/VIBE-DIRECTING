@@ -2,6 +2,10 @@ import type { PreviewQueueItem, PreviewQueueItemKind } from "./previewPlayerQueu
 import type { ProjectImage2OneShotStatus } from "./projectImage2Types";
 import type { ProjectVibeReviewReceipt } from "../project/types";
 import {
+  normalizeAgentDirectorReviewOutputPath,
+  normalizeAgentDirectorReviewProjectRoot,
+} from "./agentDirectorReviewDecision";
+import {
   buildJimengVideoStatusProjection,
   type JimengVideoStatusProjection,
 } from "./jimengVideoCli";
@@ -201,11 +205,14 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 }
 
-function normalizedReviewPath(value: string | undefined) {
-  return cleanPath(value)
-    ?.replace(/^file:\/+/, "")
-    .replace(/^\.\//, "")
-    .replace(/\/{2,}/g, "/");
+function normalizedReviewPath(value: string | undefined, projectRoot?: string) {
+  const candidate = normalizeAgentDirectorReviewOutputPath(
+    cleanPath(value)?.replace(/^file:\/{2,}/, "/") || "",
+  );
+  const normalizedProjectRoot = normalizeAgentDirectorReviewProjectRoot(projectRoot || "");
+  return normalizedProjectRoot && candidate.startsWith(`${normalizedProjectRoot}/`)
+    ? candidate.slice(normalizedProjectRoot.length + 1)
+    : candidate;
 }
 
 function cleanPath(value: string | undefined) {
@@ -214,12 +221,14 @@ function cleanPath(value: string | undefined) {
 
 function latestMatchingReviewReceipt(input: {
   receipts: ProjectVibeReviewReceipt[] | undefined;
+  projectId?: string;
+  projectRoot?: string;
   shotId?: string;
   mediaPath?: string;
   sourceReceiptId?: string;
   outputHash?: string;
 }) {
-  const mediaPath = normalizedReviewPath(input.mediaPath);
+  const mediaPath = normalizedReviewPath(input.mediaPath, input.projectRoot);
   const sourceReceiptId = stringValue(input.sourceReceiptId);
   const outputHash = stringValue(input.outputHash);
   if (!mediaPath || !sourceReceiptId || !outputHash) return undefined;
@@ -228,7 +237,17 @@ function latestMatchingReviewReceipt(input: {
   let latestTime = Number.NEGATIVE_INFINITY;
   for (const receipt of input.receipts || []) {
     if (
-      normalizedReviewPath(receipt.outputPath) !== mediaPath
+      receipt.decisionScope === "agent_video_preview"
+      && (
+        !input.projectId
+        || !input.projectRoot
+        || receipt.projectId !== input.projectId
+        || normalizeAgentDirectorReviewProjectRoot(receipt.projectRoot || "")
+          !== normalizeAgentDirectorReviewProjectRoot(input.projectRoot)
+      )
+    ) continue;
+    if (
+      normalizedReviewPath(receipt.outputPath, input.projectRoot) !== mediaPath
       || stringValue(receipt.sourceReceiptId) !== sourceReceiptId
       || stringValue(receipt.outputHash) !== outputHash
       || (input.shotId && receipt.shotId !== input.shotId)
@@ -654,6 +673,8 @@ export function buildCurrentProjectPreviewProjection(
   input: BuildCurrentProjectPreviewProjectionInput,
 ): CurrentProjectPreviewProjection {
   const summary = input.summary;
+  const projectId = stringValue(input.projectId) || stringValue(summary?.projectId);
+  const projectRoot = stringValue(input.projectRoot) || stringValue(summary?.projectRoot);
   const clips = clipList(input.previewPlan);
   const clipsByShotId = byShotId(clips.filter((clip) => Boolean(clipId(clip))));
   const reviewShots = reviewShotSet(summary);
@@ -667,6 +688,8 @@ export function buildCurrentProjectPreviewProjection(
     const mediaPath = itemMediaPath(item, clip);
     const reviewReceipt = latestMatchingReviewReceipt({
       receipts: input.reviewReceipts,
+      projectId,
+      projectRoot,
       shotId,
       mediaPath,
       sourceReceiptId,
@@ -728,8 +751,8 @@ export function buildCurrentProjectPreviewProjection(
     schemaVersion: currentProjectPreviewProjectionSchemaVersion,
     source: currentProjectPreviewProjectionSource,
     available: items.length > 0 && summary?.status !== "unbound",
-    projectId: input.projectId || summary?.projectId,
-    projectRoot: input.projectRoot || summary?.projectRoot,
+    projectId,
+    projectRoot,
     generatedAt: input.generatedAt || summary?.generatedAt,
     previewStatus: summary?.previewStatus || input.previewPlan?.previewStatus,
     productionStatus: summary?.productionStatus || input.previewPlan?.productionStatus,
