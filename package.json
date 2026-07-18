@@ -25,6 +25,8 @@
     "agent-director-clarification:test": "tsx scripts/agent-director-clarification-test.mts",
     "agent-director-review-decision:test": "tsx scripts/agent-director-review-decision-test.mts",
     "agent-director-review-regeneration:test": "tsx scripts/agent-director-review-regeneration-test.mts",
+    "agent-director-review-version-pair:test": "tsx scripts/agent-director-review-version-pair-test.mts",
+    "p10-d7-packaged-acceptance:test": "tsx scripts/agent-director-review-version-pair-packaged-acceptance.mts",
     "agent-video-dry-run-adapter:test": "tsx scripts/agent-video-dry-run-adapter-test.mts",
     "agent-video-execution-adapter:test": "tsx scripts/agent-video-execution-adapter-test.mts",
     "agent-video-execution-controller:test": "tsx scripts/agent-video-execution-controller-test.mts",

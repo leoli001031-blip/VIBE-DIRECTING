@@ -14,6 +14,11 @@ import type { JimengVideoStatusProjection } from "../../core/jimengVideoCli";
 import { MediaFrame, toMediaSrc } from "../common/MediaFrame";
 import { formatShotNumber } from "./MinimalStoryFlow";
 import type { CreatorReviewTrayItem } from "./creatorDeskTypes";
+import {
+  agentDirectorReviewVersionPairCandidate,
+  type AgentDirectorReviewVersion,
+  type AgentDirectorReviewVersionPair,
+} from "../../core/agentDirectorReviewVersionPair";
 
 type DisplayItem = PreviewQueueItem & {
   reviewRequired?: boolean;
@@ -132,6 +137,9 @@ export function MinimalPreview({
   selectedShotId,
   onSelectShot,
   onActiveReviewTargetChange,
+  reviewVersionPair,
+  activeReviewVersion = "B",
+  onActiveReviewVersionChange,
 }: {
   previewExport: ProjectPreviewExportState;
   currentProjectPreviewItems?: PreviewQueueItem[];
@@ -143,6 +151,9 @@ export function MinimalPreview({
   selectedShotId: string;
   onSelectShot: (id: string) => void;
   onActiveReviewTargetChange?: (item: CreatorReviewTrayItem | undefined) => void;
+  reviewVersionPair?: AgentDirectorReviewVersionPair;
+  activeReviewVersion?: AgentDirectorReviewVersion;
+  onActiveReviewVersionChange?: (version: AgentDirectorReviewVersion) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -155,13 +166,48 @@ export function MinimalPreview({
   const projection = useMemo(() => buildMinimalRuntimeProjection({ previewQueue: queue }), [queue]);
   const total = queue.length ? Math.max(1, getPreviewPlayerTotalDuration(queue)) : 0;
   const layoutTotal = Math.max(1, total);
-  const activeItem = getPreviewPlayerActiveItem(queue, currentTime) as DisplayItem | undefined;
-  const activeLabel = previewItemLabel(activeItem);
+  const timelineActiveItem = getPreviewPlayerActiveItem(queue, currentTime) as DisplayItem | undefined;
+  const activeVersionCandidate = reviewVersionPair
+    ? agentDirectorReviewVersionPairCandidate(reviewVersionPair, activeReviewVersion)
+    : undefined;
+  const versionPairDisplayItem: DisplayItem | undefined = activeVersionCandidate && reviewVersionPair
+    ? {
+        id: `${reviewVersionPair.pairId}_${activeReviewVersion}`,
+        shotId: reviewVersionPair.shotId,
+        label: `${reviewVersionPair.shotId} · 版本 ${activeReviewVersion}`,
+        kind: "video_clip",
+        mediaPath: activeVersionCandidate.identity.outputPath,
+        startSeconds: timelineActiveItem?.startSeconds || 0,
+        durationSeconds: timelineActiveItem?.durationSeconds || 5,
+        reviewRequired: true,
+        status: "needs_review",
+        sourceReceiptId: activeVersionCandidate.identity.sourceReceiptId,
+        outputHash: activeVersionCandidate.identity.outputHash,
+      }
+    : undefined;
+  const activeItem = versionPairDisplayItem || timelineActiveItem;
+  const activeLabel = reviewVersionPair
+    ? `${formatShotNumber(reviewVersionPair.shotId)} · 版本 ${activeReviewVersion}`
+    : previewItemLabel(activeItem);
   const activeNeedsReview = previewNeedsReview(activeItem);
-  const activeReviewTarget = useMemo(
-    () => previewReviewTarget(activeItem, activeLabel),
-    [activeItem, activeLabel],
-  );
+  const activeReviewTarget = useMemo(() => {
+    if (reviewVersionPair && activeVersionCandidate) {
+      return {
+        id: `${reviewVersionPair.pairId}_${activeReviewVersion}`,
+        shotId: reviewVersionPair.shotId,
+        label: activeLabel,
+        detail: "双版本复核",
+        status: "needs_review" as const,
+        mediaPath: activeVersionCandidate.identity.outputPath,
+        sourceReceiptId: activeVersionCandidate.identity.sourceReceiptId,
+        outputHash: activeVersionCandidate.identity.outputHash,
+        jobId: activeVersionCandidate.identity.jobId,
+        actionId: activeVersionCandidate.identity.actionId,
+        projectFactHash: activeVersionCandidate.identity.projectFactHash,
+      };
+    }
+    return previewReviewTarget(activeItem, activeLabel);
+  }, [activeItem, activeLabel, activeReviewVersion, activeVersionCandidate, reviewVersionPair]);
   const activeVideoStatusLabel = previewVideoStatusLabel(activeItem);
   const progress = total > 0 ? Math.min(100, Math.max(0, (currentTime / total) * 100)) : 0;
   const reviewCount = queue.filter((item) => previewNeedsReview(item as DisplayItem)).length;
@@ -352,6 +398,26 @@ export function MinimalPreview({
           <b>{formatDuration(total)}</b>
           <b>{previewStatusLabel}</b>
         </div>
+        {reviewVersionPair && (
+          <div className="preview-version-switch" aria-label={`${reviewVersionPair.shotId} 版本切换`}>
+            <button
+              type="button"
+              className={activeReviewVersion === "A" ? "selected" : undefined}
+              aria-pressed={activeReviewVersion === "A"}
+              onClick={() => onActiveReviewVersionChange?.("A")}
+            >
+              A
+            </button>
+            <button
+              type="button"
+              className={activeReviewVersion === "B" ? "selected" : undefined}
+              aria-pressed={activeReviewVersion === "B"}
+              onClick={() => onActiveReviewVersionChange?.("B")}
+            >
+              B
+            </button>
+          </div>
+        )}
       </div>
       <section
         className="preview-stage selected"
@@ -369,7 +435,7 @@ export function MinimalPreview({
         )}
         {activeNeedsReview && (
           <div className="preview-review-actions">
-            <b className="preview-review-badge">待复核</b>
+            <b className="preview-review-badge">{reviewVersionPair ? `版本 ${activeReviewVersion} · 待复核` : "待复核"}</b>
           </div>
         )}
         <button

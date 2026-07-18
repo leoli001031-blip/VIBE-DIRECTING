@@ -6,6 +6,11 @@ import type { ExportWorkerState } from "../../core/exportWorker";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { AgentVideoGenerationJobLedger } from "../../core/agentVideoProductionContract";
 import type { AgentCurrentTaskProjection } from "../../core/agentCurrentTaskProjection";
+import {
+  agentDirectorReviewVersionPairCandidate,
+  buildAgentDirectorReviewVersionPair,
+  type AgentDirectorReviewVersion,
+} from "../../core/agentDirectorReviewVersionPair";
 import { agentNewVideoProjectTargetMode } from "../../core/agentNewVideoProjectTarget";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft, ProjectVibeReviewReceipt } from "../../project";
 import {
@@ -165,6 +170,7 @@ function currentTaskObjectLabel(step: AgentCurrentTaskProjection["step"] | undef
   if (step === "choose_save_location") return "项目位置";
   if (step === "prepare_references") return "参考素材";
   if (step === "submit_video") return "视频任务";
+  if (step === "compare_versions") return "版本复核";
   if (step === "export") return "交付资料";
   return "当前项目";
 }
@@ -744,6 +750,49 @@ export function DirectorMode({
   const [agentEditingPendingConfirmation, setAgentEditingPendingConfirmation] = useState(false);
   const [agentCurrentTaskProjection, setAgentCurrentTaskProjection] = useState<AgentCurrentTaskProjection>();
   const [activePreviewReviewTarget, setActivePreviewReviewTarget] = useState<CreatorReviewTrayItem>();
+  const reviewVersionPairResult = useMemo(() => buildAgentDirectorReviewVersionPair({
+    ledger: restoredAgentGenerationJobLedger,
+    identity: {
+      projectId: runtimeState.sourceIndex.projectId,
+      projectRoot: folderReady ? runtimeState.project.root : undefined,
+      projectFactHash: projectFactHash || "",
+    },
+  }), [
+    folderReady,
+    projectFactHash,
+    restoredAgentGenerationJobLedger,
+    runtimeState.project.root,
+    runtimeState.sourceIndex.projectId,
+  ]);
+  const reviewVersionPair = reviewVersionPairResult.status === "ready"
+    ? reviewVersionPairResult.pair
+    : undefined;
+  const [activeReviewVersionState, setActiveReviewVersionState] = useState<{
+    pairId: string;
+    version: AgentDirectorReviewVersion;
+  }>();
+  const activeReviewVersion: AgentDirectorReviewVersion = activeReviewVersionState
+    && activeReviewVersionState.pairId === reviewVersionPair?.pairId
+    ? activeReviewVersionState.version
+    : "B";
+  const activeReviewVersionCandidate = reviewVersionPair
+    ? agentDirectorReviewVersionPairCandidate(reviewVersionPair, activeReviewVersion)
+    : undefined;
+  const pairedPreviewReviewTarget: CreatorReviewTrayItem | undefined = reviewVersionPair && activeReviewVersionCandidate
+    ? {
+        id: `${reviewVersionPair.pairId}_${activeReviewVersion}`,
+        shotId: reviewVersionPair.shotId,
+        label: `${reviewVersionPair.shotId} · 版本 ${activeReviewVersion}`,
+        detail: "双版本复核",
+        status: "needs_review",
+        mediaPath: activeReviewVersionCandidate.identity.outputPath,
+        sourceReceiptId: activeReviewVersionCandidate.identity.sourceReceiptId,
+        outputHash: activeReviewVersionCandidate.identity.outputHash,
+        jobId: activeReviewVersionCandidate.identity.jobId,
+        actionId: activeReviewVersionCandidate.identity.actionId,
+        projectFactHash: activeReviewVersionCandidate.identity.projectFactHash,
+      }
+    : undefined;
   const activeNewVideoResetKey = newVideoResetKey || 0;
   const activeNewVideoResetKeyRef = useRef(activeNewVideoResetKey);
   activeNewVideoResetKeyRef.current = activeNewVideoResetKey;
@@ -773,6 +822,19 @@ export function DirectorMode({
       return target;
     });
   }, []);
+  const handleActiveReviewVersionChange = useCallback((version: AgentDirectorReviewVersion) => {
+    if (!reviewVersionPair) return;
+    setActiveReviewVersionState({ pairId: reviewVersionPair.pairId, version });
+  }, [reviewVersionPair]);
+  useEffect(() => {
+    if (!reviewVersionPair) return;
+    setActiveReviewVersionState((current) => current?.pairId === reviewVersionPair.pairId
+      ? current
+      : { pairId: reviewVersionPair.pairId, version: "B" });
+    if (reviewVersionPair.shotId && reviewVersionPair.shotId !== selectedShotId) {
+      onSelectShot(reviewVersionPair.shotId);
+    }
+  }, [onSelectShot, reviewVersionPair, selectedShotId]);
   useEffect(() => {
     if (directorView === "preview") return;
     setActivePreviewReviewTarget(undefined);
@@ -1238,6 +1300,9 @@ export function DirectorMode({
               selectedShotId={selectedShotId}
               onSelectShot={onSelectShot}
               onActiveReviewTargetChange={handleActivePreviewReviewTargetChange}
+              reviewVersionPair={reviewVersionPair}
+              activeReviewVersion={activeReviewVersion}
+              onActiveReviewVersionChange={handleActiveReviewVersionChange}
             />
             <MinimalAudioPlan
               audioPlanning={runtimeState.audioPlanning}
@@ -1333,7 +1398,10 @@ export function DirectorMode({
             onRunExport={onRunExport}
             onOpenResultView={onOpenDirectorView}
             onRetryMissingBatch={onRetryMissingBatch}
-            reviewTarget={directorView === "preview" ? activePreviewReviewTarget : undefined}
+            reviewTarget={directorView === "preview" ? pairedPreviewReviewTarget || activePreviewReviewTarget : undefined}
+            reviewVersionPair={directorView === "preview" ? reviewVersionPair : undefined}
+            activeReviewVersion={activeReviewVersion}
+            onActiveReviewVersionChange={handleActiveReviewVersionChange}
             onApproveReviewItem={onApproveReviewItem}
             videoPermissionContract={videoPermissionContract}
             onVideoPermissionContractChange={setVideoPermissionContract}

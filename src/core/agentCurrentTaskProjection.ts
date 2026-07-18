@@ -17,6 +17,7 @@ export type AgentCurrentTaskStep =
   | "choose_save_location"
   | "prepare_references"
   | "submit_video"
+  | "compare_versions"
   | "export"
   | "idle";
 
@@ -128,6 +129,13 @@ export interface AgentCurrentTaskProjectionInput {
   completedSteps?: AgentCurrentTaskCompletedStep[];
   referenceReviewCount?: number;
   videoReviewCount?: number;
+  reviewVersionPair?: {
+    pairId: string;
+    shotId: string;
+    activeVersion: "A" | "B";
+    activeJobId: string;
+    activeActionId: string;
+  };
   facts?: AgentCurrentTaskFact[];
 }
 
@@ -187,12 +195,13 @@ function labelForStep(step: AgentCurrentTaskStep) {
   if (step === "choose_save_location") return "选择保存位置";
   if (step === "prepare_references") return "补参考";
   if (step === "submit_video") return "发送视频";
+  if (step === "compare_versions") return "比较两个视频版本";
   if (step === "export") return "导出交付包";
   return "继续描述想法";
 }
 
 function confirmationRequiredForStep(step: AgentCurrentTaskStep) {
-  return step !== "draft_story" && step !== "idle";
+  return step !== "draft_story" && step !== "compare_versions" && step !== "idle";
 }
 
 function effectForStep(step: AgentCurrentTaskStep): AgentCurrentTaskEffect {
@@ -520,6 +529,24 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
         ]),
       });
     }
+  }
+
+  if (input.reviewVersionPair) {
+    return buildProjection({
+      source: "project_observation",
+      step: "compare_versions",
+      label: `比较 ${input.reviewVersionPair.shotId} 两个版本`,
+      requiresConfirmation: false,
+      effect: "none",
+      actionId: input.reviewVersionPair.activeActionId,
+      jobId: input.reviewVersionPair.activeJobId,
+      blockers: [],
+      facts: factsForInput(input, [
+        { label: "版本", value: "A / B" },
+        { label: "当前查看", value: `版本 ${input.reviewVersionPair.activeVersion}` },
+        { label: "镜头", value: input.reviewVersionPair.shotId },
+      ]),
+    });
   }
 
   const referenceReviewCount = Math.max(0, Math.floor(input.referenceReviewCount || 0));

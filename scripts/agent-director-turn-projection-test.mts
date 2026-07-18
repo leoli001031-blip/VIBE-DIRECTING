@@ -2,6 +2,7 @@ import type { AgentCurrentTaskProjection } from "../src/core/agentCurrentTaskPro
 import type { AgentVideoGenerationJob } from "../src/core/agentVideoProductionContract.ts";
 import { buildAgentDirectorTurnProjection } from "../src/ui/director/agentDirectorTurnProjection.ts";
 import { buildAgentDirectorReviewRevisionIntent } from "../src/ui/director/agentDirectorReviewRevision.ts";
+import { buildAgentDirectorReviewVersionPair } from "../src/core/agentDirectorReviewVersionPair.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -176,6 +177,95 @@ const recoveredReviewFromOldFacts = buildAgentDirectorTurnProjection({
   reviewTarget: recoveredReview.reviewTarget,
 });
 assert(recoveredReviewFromOldFacts.mode === "blocked", "a returned result from older project facts must fail closed");
+
+const returnedReviewJobB = job({
+  jobId: "p6s01-job-b",
+  actionId: "submit-p6s01-b-once",
+  sourceConfirmationId: "submit_p6s01_b_once",
+  createdAt: "2026-07-17T01:04:00.000Z",
+  updatedAt: "2026-07-17T01:05:00.000Z",
+  outputAssets: ["/tmp/p10-d-project/video/P6S01-b.mp4"],
+  status: "succeeded",
+  statusHistory: [
+    { status: "staged", at: "2026-07-17T01:04:00.000Z" },
+    { status: "succeeded", at: "2026-07-17T01:05:00.000Z" },
+  ],
+  reviewResult: {
+    status: "needs_review",
+    projectId: "p10-d-project",
+    projectRoot: "/tmp/p10-d-project",
+    projectFactHash: "p10-d-fact-hash",
+    jobId: "p6s01-job-b",
+    actionId: "submit-p6s01-b-once",
+    shotId: "P6S01",
+    sourceReceiptId: "provider_receipt_p6s01_b",
+    outputPath: "/tmp/p10-d-project/video/P6S01-b.mp4",
+    outputHash: `sha256:${"b".repeat(64)}`,
+    receivedAt: "2026-07-17T01:05:00.000Z",
+  },
+});
+const versionPair = buildAgentDirectorReviewVersionPair({
+  ledger: {
+    schemaVersion: "agent_video_generation_job_ledger/0.5.0",
+    ledgerId: "p10-d-pair-ledger",
+    projectId: "p10-d-project",
+    projectRoot: "/tmp/p10-d-project",
+    projectFactHash: "p10-d-fact-hash",
+    createdAt: "2026-07-17T01:00:00.000Z",
+    updatedAt: "2026-07-17T01:05:00.000Z",
+    jobs: [returnedReviewJob, returnedReviewJobB],
+  },
+  identity: {
+    projectId: "p10-d-project",
+    projectRoot: "/tmp/p10-d-project",
+    projectFactHash: "p10-d-fact-hash",
+  },
+}).pair!;
+const pairReview = buildAgentDirectorTurnProjection({
+  task: task({
+    source: "project_observation",
+    step: "compare_versions",
+    label: "比较 P6S01 两个版本",
+    jobId: returnedReviewJobB.jobId,
+    actionId: returnedReviewJobB.actionId,
+  }),
+  currentProjectFactHash: "p10-d-fact-hash",
+  reviewVersionPair: versionPair,
+  activeReviewVersion: "B",
+  reviewJob: returnedReviewJobB,
+  reviewTarget: {
+    id: "p6s01-returned-result-b",
+    shotId: "P6S01",
+    label: "P6S01 · 版本 B",
+    detail: "视频结果已返回",
+    status: "needs_review",
+    mediaPath: returnedReviewJobB.reviewResult!.outputPath,
+    sourceReceiptId: returnedReviewJobB.reviewResult!.sourceReceiptId,
+    outputHash: returnedReviewJobB.reviewResult!.outputHash,
+    jobId: returnedReviewJobB.jobId,
+    actionId: returnedReviewJobB.actionId,
+    projectFactHash: returnedReviewJobB.projectFactHash,
+  },
+});
+assert(pairReview.mode === "review" && pairReview.reviewIdentityReady, "an exact pair and active candidate should restore A/B Review");
+assert(pairReview.actions.find((action) => action.id === "view_version_a")?.enabled, "A/B Review should allow viewing version A");
+assert(pairReview.actions.find((action) => action.id === "view_version_b")?.enabled, "A/B Review should allow viewing version B");
+assert(pairReview.actions.find((action) => action.id === "select_candidate")?.requiresConfirmation, "choosing a candidate must lead to a separate confirmation boundary");
+assert(!pairReview.actions.some((action) => action.id === "approve_preview"), "A/B Review must not silently collapse candidate selection into preview approval");
+assert(pairReview.actions.find((action) => action.id === "promote_project_fact")?.enabled === false, "D7 must keep project-fact promotion disabled");
+
+const mismatchedPairReview = buildAgentDirectorTurnProjection({
+  ...{
+    task: pairReview.task,
+    currentProjectFactHash: "p10-d-fact-hash",
+    reviewVersionPair: versionPair,
+    activeReviewVersion: "A" as const,
+    reviewJob: returnedReviewJobB,
+  },
+  reviewTarget: pairReview.reviewTarget,
+});
+assert(mismatchedPairReview.mode === "blocked", "a target for B must not be selectable while A is active");
+assert(mismatchedPairReview.actions.find((action) => action.id === "select_candidate")?.enabled === false, "mismatched active candidate identity must fail closed");
 
 const reviewRevisionIntent = buildAgentDirectorReviewRevisionIntent({
   identity: returnedReviewJob.reviewResult!,

@@ -69,6 +69,11 @@ import {
   type AgentDirectorReviewIdentity,
 } from "../../core/agentDirectorReviewDecision";
 import {
+  agentDirectorReviewVersionPairCandidate,
+  type AgentDirectorReviewVersion,
+  type AgentDirectorReviewVersionPair,
+} from "../../core/agentDirectorReviewVersionPair";
+import {
   buildProjectInboxProjection,
   buildProjectObservation,
   isContinueIntent,
@@ -4918,6 +4923,9 @@ export function MinimalAgentPanel({
   onOpenResultView,
   onRetryMissingBatch,
   reviewTarget,
+  reviewVersionPair,
+  activeReviewVersion = "B",
+  onActiveReviewVersionChange,
   onApproveReviewItem,
   onSelectShot,
   agentCommand,
@@ -5015,6 +5023,9 @@ export function MinimalAgentPanel({
   onOpenResultView?: (view: DirectorView) => void;
   onRetryMissingBatch?: (target?: Pick<AgentControlledToolInvocationTarget, "signal">) => unknown | Promise<unknown>;
   reviewTarget?: CreatorReviewTrayItem;
+  reviewVersionPair?: AgentDirectorReviewVersionPair;
+  activeReviewVersion?: AgentDirectorReviewVersion;
+  onActiveReviewVersionChange?: (version: AgentDirectorReviewVersion) => void;
   onApproveReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onSelectShot?: (id: string, additive?: boolean) => void;
   agentCommand?: CreatorAgentCommand;
@@ -5065,6 +5076,7 @@ export function MinimalAgentPanel({
   const [generationDetailsOpen, setGenerationDetailsOpen] = useState(false);
   const [referenceStatus, setReferenceStatus] = useState<"idle" | "saving" | "saved" | "blocked">("idle");
   const [reviewDecisionStatus, setReviewDecisionStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [pendingReviewVersionSelection, setPendingReviewVersionSelection] = useState<AgentDirectorReviewVersion>();
   const [reviewHistoryOpen, setReviewHistoryOpen] = useState(false);
   const [clarificationResolvingId, setClarificationResolvingId] = useState("");
   const [isPreparingPlan, setIsPreparingPlan] = useState(false);
@@ -5155,9 +5167,18 @@ export function MinimalAgentPanel({
     restoredAgentGenerationJobLedger,
   ]);
 
+  const activeReviewVersionCandidate = reviewVersionPair
+    ? agentDirectorReviewVersionPairCandidate(reviewVersionPair, activeReviewVersion)
+    : undefined;
+  useEffect(() => {
+    setPendingReviewVersionSelection(undefined);
+  }, [activeReviewVersion, reviewVersionPair?.pairId]);
   const recoveredVideoReviewJob = useMemo(
-    () => selectLatestAgentVideoGenerationReviewJob(agentVideoDryRunLedger, agentGenerationProjectIdentity),
+    () => activeReviewVersionCandidate
+      ? agentVideoDryRunLedger.jobs.find((job) => job.jobId === activeReviewVersionCandidate.identity.jobId)
+      : selectLatestAgentVideoGenerationReviewJob(agentVideoDryRunLedger, agentGenerationProjectIdentity),
     [
+      activeReviewVersionCandidate?.identity.jobId,
       agentGenerationProjectIdentity.projectFactHash,
       agentGenerationProjectIdentity.projectId,
       agentGenerationProjectIdentity.projectRoot,
@@ -5166,13 +5187,15 @@ export function MinimalAgentPanel({
   );
   const recoveredVideoReviewApproved = useMemo(
     () => Boolean(
+      !reviewVersionPair
+      &&
       recoveredVideoReviewJob?.reviewResult
       && reviewReceipts?.some((receipt) => agentDirectorApprovedReviewReceiptMatchesIdentity(
         receipt,
         recoveredVideoReviewJob.reviewResult!,
       )),
     ),
-    [recoveredVideoReviewJob, reviewReceipts],
+    [recoveredVideoReviewJob, reviewReceipts, reviewVersionPair],
   );
   const recoveredVideoReviewTarget = useMemo(
     () => recoveredVideoReviewApproved ? undefined : minimalAgentReviewTargetFromGenerationJob(recoveredVideoReviewJob),
@@ -9271,6 +9294,15 @@ export function MinimalAgentPanel({
       completedSteps: agentCurrentTaskCompletedSteps,
       referenceReviewCount: referenceReviewCountForAgent,
       videoReviewCount: videoReviewCountForAgent,
+      reviewVersionPair: reviewVersionPair && activeReviewVersionCandidate
+        ? {
+            pairId: reviewVersionPair.pairId,
+            shotId: reviewVersionPair.shotId,
+            activeVersion: activeReviewVersion,
+            activeJobId: activeReviewVersionCandidate.identity.jobId,
+            activeActionId: activeReviewVersionCandidate.identity.actionId,
+          }
+        : undefined,
       facts: projectStatusView?.facts,
     }),
     [
@@ -9292,6 +9324,9 @@ export function MinimalAgentPanel({
       projectStatusView,
       projectFactHash,
       referenceReviewCountForAgent,
+      reviewVersionPair,
+      activeReviewVersion,
+      activeReviewVersionCandidate,
       videoReviewCountForAgent,
       runtimeState.project.root,
       runtimeState.sourceIndex.projectId,
@@ -10883,6 +10918,8 @@ export function MinimalAgentPanel({
   const agentDirectorTurnProjection = buildAgentDirectorTurnProjection({
     task: agentCurrentTaskProjection,
     reviewTarget: effectiveReviewTarget,
+    reviewVersionPair,
+    activeReviewVersion,
     reviewRevisionIntent: activeDirectorReviewRevisionIntent,
     reviewRegenerationProposal: activeDirectorReviewRegenerationProposal,
     clarification: activeDirectorClarificationTurn,
@@ -11129,7 +11166,7 @@ export function MinimalAgentPanel({
     && Boolean(agentDirectorTurnProjection.running);
   const reviewTurnVisible = currentView === "preview"
     && agentDirectorTurnProjection.phase === "review"
-    && agentCurrentTaskProjection.step === "submit_video"
+    && (agentCurrentTaskProjection.step === "submit_video" || agentCurrentTaskProjection.step === "compare_versions")
     && (agentDirectorTurnProjection.mode === "review" || agentDirectorTurnProjection.mode === "blocked");
   const reviewRevisionTurnVisible = agentDirectorTurnProjection.phase === "conversation"
     && Boolean(agentDirectorTurnProjection.reviewRevisionIntent);
@@ -11160,6 +11197,9 @@ export function MinimalAgentPanel({
     : undefined;
   const reviewApprovalAction = agentDirectorTurnProjection.actions.find((action) => action.id === "approve_preview");
   const reviewRevisionAction = agentDirectorTurnProjection.actions.find((action) => action.id === "request_changes");
+  const reviewViewAAction = agentDirectorTurnProjection.actions.find((action) => action.id === "view_version_a");
+  const reviewViewBAction = agentDirectorTurnProjection.actions.find((action) => action.id === "view_version_b");
+  const reviewSelectionAction = agentDirectorTurnProjection.actions.find((action) => action.id === "select_candidate");
   const reviewPromotionAction = agentDirectorTurnProjection.actions.find((action) => action.id === "promote_project_fact");
   const paidConfirmationAction = paidConfirmationTurnVisible
     ? agentDirectorTurnProjection.actions.find((action) => action.id === "confirm_current_task")
@@ -12055,13 +12095,15 @@ export function MinimalAgentPanel({
           <div className="minimal-agent-review-turn-head">
             <div>
               <span>本轮 · Review</span>
-              <strong>{effectiveReviewTarget ? "新版本已返回" : "复核身份不完整"}</strong>
+              <strong>{effectiveReviewTarget ? reviewVersionPair ? "比较两个返回版本" : "新版本已返回" : "复核身份不完整"}</strong>
             </div>
             <em>{effectiveReviewTarget?.status || "blocked"}</em>
           </div>
           <p>
             {effectiveReviewTarget
-              ? "结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。"
+              ? reviewVersionPair
+                ? `当前查看版本 ${activeReviewVersion}。比较动作完成点、情绪转折与连续性后，再进入独立选择确认。`
+                : "结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。"
               : agentDirectorTurnProjection.blockers[0] || "当前结果还不能进入复核。"}
           </p>
           {effectiveReviewTarget && (
@@ -12082,6 +12124,12 @@ export function MinimalAgentPanel({
                 <span>输出</span>
                 <strong>{reviewTargetIdentity.outputId ? reviewTargetIdentity.outputId.slice(0, 12) : "缺失"}</strong>
               </small>
+              {reviewVersionPair && (
+                <small>
+                  <span>版本对</span>
+                  <strong>{reviewVersionPair.pairId.slice(-12)}</strong>
+                </small>
+              )}
             </div>
           )}
           {agentDirectorTurnProjection.blockers.length > 0 && (
@@ -12093,20 +12141,59 @@ export function MinimalAgentPanel({
           <small className="minimal-agent-review-skill">
             审查依据：{selectedSkillSummary?.label || "当前项目导演方法"}
           </small>
+          {reviewVersionPair && (
+            <div className="minimal-agent-review-actions" aria-label="版本查看">
+              <button
+                type="button"
+                className={activeReviewVersion === "A" ? undefined : "secondary"}
+                onClick={() => onActiveReviewVersionChange?.("A")}
+                disabled={!reviewViewAAction?.enabled}
+                title={reviewViewAAction?.boundary}
+                aria-pressed={activeReviewVersion === "A"}
+              >
+                {reviewViewAAction?.label || "查看 A"}
+              </button>
+              <button
+                type="button"
+                className={activeReviewVersion === "B" ? undefined : "secondary"}
+                onClick={() => onActiveReviewVersionChange?.("B")}
+                disabled={!reviewViewBAction?.enabled}
+                title={reviewViewBAction?.boundary}
+                aria-pressed={activeReviewVersion === "B"}
+              >
+                {reviewViewBAction?.label || "查看 B"}
+              </button>
+            </div>
+          )}
           <div className="minimal-agent-review-actions">
-            <button
-              type="button"
-              onClick={() => void approveReviewFromAgentTurn()}
-              disabled={!reviewApprovalAction?.enabled || !onApproveReviewItem || reviewDecisionStatus === "saving" || reviewDecisionStatus === "saved" || hasVisibleComposerInput || Boolean(attachments.length)}
-              title={hasVisibleComposerInput || attachments.length
-                ? "先发送或清空当前修改说明，再通过预览。"
-                : reviewApprovalAction?.enabled
-                  ? reviewApprovalAction.boundary
-                  : agentDirectorTurnProjection.blockers[0]}
-            >
-              <CheckCircle2 size={15} aria-hidden="true" />
-              {reviewDecisionStatus === "saving" ? "写入中" : reviewDecisionStatus === "saved" ? "预览已通过" : reviewApprovalAction?.label || "通过预览"}
-            </button>
+            {reviewVersionPair ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingReviewVersionSelection(activeReviewVersion);
+                  setStatus(`${reviewSelectionAction?.label || `选择版本 ${activeReviewVersion}`} 等待独立确认。`);
+                }}
+                disabled={!reviewSelectionAction?.enabled || hasVisibleComposerInput || Boolean(attachments.length)}
+                title={reviewSelectionAction?.boundary}
+              >
+                <CheckCircle2 size={15} aria-hidden="true" />
+                {reviewSelectionAction?.label || `选择版本 ${activeReviewVersion}`}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void approveReviewFromAgentTurn()}
+                disabled={!reviewApprovalAction?.enabled || !onApproveReviewItem || reviewDecisionStatus === "saving" || reviewDecisionStatus === "saved" || hasVisibleComposerInput || Boolean(attachments.length)}
+                title={hasVisibleComposerInput || attachments.length
+                  ? "先发送或清空当前修改说明，再通过预览。"
+                  : reviewApprovalAction?.enabled
+                    ? reviewApprovalAction.boundary
+                    : agentDirectorTurnProjection.blockers[0]}
+              >
+                <CheckCircle2 size={15} aria-hidden="true" />
+                {reviewDecisionStatus === "saving" ? "写入中" : reviewDecisionStatus === "saved" ? "预览已通过" : reviewApprovalAction?.label || "通过预览"}
+              </button>
+            )}
             <button
               type="button"
               className="secondary"
@@ -12118,8 +12205,29 @@ export function MinimalAgentPanel({
               {reviewRevisionAction?.label || "需要修改"}
             </button>
           </div>
+          {reviewVersionPair && pendingReviewVersionSelection && (
+            <div className="minimal-agent-review-selection-boundary" aria-label="版本选择确认" role="status">
+              <div>
+                <span>选择待确认</span>
+                <strong>版本 {pendingReviewVersionSelection}</strong>
+                <small>尚未写入选择回执，也不会晋级项目事实或导出。</small>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setPendingReviewVersionSelection(undefined);
+                  setStatus("继续比较两个版本。");
+                }}
+              >
+                返回比较
+              </button>
+            </div>
+          )}
           <small className="minimal-agent-review-boundary">
-            {reviewApprovalAction?.boundary || "只写入复核记录，不会晋级项目事实，不会导出。"}
+            {reviewVersionPair
+              ? reviewSelectionAction?.boundary || "选择仍需独立确认，不会晋级项目事实或导出。"
+              : reviewApprovalAction?.boundary || "只写入复核记录，不会晋级项目事实，不会导出。"}
           </small>
           <button
             type="button"

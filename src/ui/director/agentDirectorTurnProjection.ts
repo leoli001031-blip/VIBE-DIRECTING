@@ -8,6 +8,12 @@ import {
   type AgentVideoGenerationJob,
 } from "../../core/agentVideoProductionContract";
 import { agentDirectorReviewIdentityMatches } from "../../core/agentDirectorReviewDecision";
+import {
+  agentDirectorReviewVersionPairCandidate,
+  agentDirectorReviewVersionPairMatchesProject,
+  type AgentDirectorReviewVersion,
+  type AgentDirectorReviewVersionPair,
+} from "../../core/agentDirectorReviewVersionPair";
 import type { CreatorReviewTrayItem } from "./creatorDeskTypes";
 import type { AgentDirectorReviewRevisionIntent } from "./agentDirectorReviewRevision";
 import type { AgentDirectorReviewRegenerationProposal } from "./agentDirectorReviewRegeneration";
@@ -31,6 +37,9 @@ export type AgentDirectorTurnActionId =
   | "inspect_job"
   | "approve_preview"
   | "request_changes"
+  | "view_version_a"
+  | "view_version_b"
+  | "select_candidate"
   | "promote_project_fact";
 
 export type AgentDirectorTurnActionEffect =
@@ -38,6 +47,7 @@ export type AgentDirectorTurnActionEffect =
   | "conversation_only"
   | "job_observation"
   | "review_receipt"
+  | "review_selection"
   | "project_edit"
   | "project_fact_promotion";
 
@@ -130,6 +140,8 @@ export interface AgentDirectorTurnProjection {
   phase: AgentDirectorTurnPhase;
   task: AgentCurrentTaskProjection;
   reviewTarget?: CreatorReviewTrayItem;
+  reviewVersionPair?: AgentDirectorReviewVersionPair;
+  activeReviewVersion?: AgentDirectorReviewVersion;
   reviewRevisionIntent?: AgentDirectorReviewRevisionIntent;
   reviewRegenerationProposal?: AgentDirectorReviewRegenerationProposal;
   clarification?: AgentDirectorClarificationProjection;
@@ -247,6 +259,8 @@ function buildRunningProjection(
 export function buildAgentDirectorTurnProjection(input: {
   task: AgentCurrentTaskProjection;
   reviewTarget?: CreatorReviewTrayItem;
+  reviewVersionPair?: AgentDirectorReviewVersionPair;
+  activeReviewVersion?: AgentDirectorReviewVersion;
   reviewRevisionIntent?: AgentDirectorReviewRevisionIntent;
   reviewRegenerationProposal?: AgentDirectorReviewRegenerationProposal;
   clarification?: Omit<AgentDirectorClarificationProjection, "options"> & {
@@ -261,6 +275,8 @@ export function buildAgentDirectorTurnProjection(input: {
   const {
     task,
     reviewTarget,
+    reviewVersionPair,
+    activeReviewVersion = "B",
     reviewRevisionIntent,
     reviewRegenerationProposal,
     clarification,
@@ -272,8 +288,8 @@ export function buildAgentDirectorTurnProjection(input: {
   } = input;
   const reviewTask = !task.requiresConfirmation
     && task.effect === "none"
-    && (task.step === "prepare_references" || task.step === "submit_video");
-  const strictVideoReview = task.step === "submit_video";
+    && (task.step === "prepare_references" || task.step === "submit_video" || task.step === "compare_versions");
+  const strictVideoReview = task.step === "submit_video" || task.step === "compare_versions";
   const reviewIdentityReady = reviewTargetHasIdentity(reviewTarget)
     && (strictVideoReview
       ? Boolean(reviewJob && reviewTargetMatchesJob(reviewTarget, reviewJob, currentProjectFactHash))
@@ -282,6 +298,23 @@ export function buildAgentDirectorTurnProjection(input: {
     reviewRevisionIntent
       && (!clean(currentProjectFactHash) || reviewRevisionIntent.identity.projectFactHash === currentProjectFactHash)
       && (!reviewJob || agentDirectorReviewIdentityMatches(reviewRevisionIntent.identity, reviewJob.reviewResult)),
+  );
+  const activePairCandidate = reviewVersionPair
+    ? agentDirectorReviewVersionPairCandidate(reviewVersionPair, activeReviewVersion)
+    : undefined;
+  const reviewVersionPairReady = !reviewVersionPair || Boolean(
+    agentDirectorReviewVersionPairMatchesProject(reviewVersionPair, {
+      projectId: reviewVersionPair.projectId,
+      projectRoot: reviewVersionPair.projectRoot,
+      projectFactHash: currentProjectFactHash || "",
+    })
+      && activePairCandidate
+      && reviewTarget
+      && reviewTarget.jobId === activePairCandidate.identity.jobId
+      && reviewTarget.actionId === activePairCandidate.identity.actionId
+      && reviewTarget.sourceReceiptId === activePairCandidate.identity.sourceReceiptId
+      && reviewTarget.outputHash?.toLowerCase() === activePairCandidate.identity.outputHash.toLowerCase()
+      && normalizeMediaPath(reviewTarget.mediaPath) === normalizeMediaPath(activePairCandidate.identity.outputPath),
   );
   const paidConfirmationTask = task.requiresConfirmation
     && task.effect === "generation_job"
@@ -427,6 +460,9 @@ export function buildAgentDirectorTurnProjection(input: {
   }
 
   if (reviewTask) {
+    if (task.step === "compare_versions" && (!reviewVersionPair || !reviewVersionPairReady)) {
+      blockers.push("当前 A/B 版本对与项目事实或查看中的候选身份不一致，不能选择版本。");
+    }
     if (!reviewIdentityReady) blockers.push(reviewJob
       ? "当前复核结果与返回任务的动作、事实、路径或哈希不一致，不能写入 Review Receipt。"
       : "当前复核结果缺少回执或输出哈希，不能写入 Review Receipt。");
@@ -435,11 +471,54 @@ export function buildAgentDirectorTurnProjection(input: {
       phase: "review",
       task,
       reviewTarget,
+      reviewVersionPair,
+      activeReviewVersion,
       confirmationIdentityReady,
       runningIdentityReady,
       reviewIdentityReady,
       blockers,
-      actions: [
+      actions: reviewVersionPair ? [
+        {
+          id: "view_version_a",
+          label: "查看 A",
+          effect: "job_observation",
+          enabled: reviewVersionPairReady,
+          requiresConfirmation: false,
+          boundary: "只切换本地预览，不写选择回执、不修改项目事实。",
+        },
+        {
+          id: "view_version_b",
+          label: "查看 B",
+          effect: "job_observation",
+          enabled: reviewVersionPairReady,
+          requiresConfirmation: false,
+          boundary: "只切换本地预览，不写选择回执、不修改项目事实。",
+        },
+        {
+          id: "select_candidate",
+          label: `选择版本 ${activeReviewVersion}`,
+          effect: "review_selection",
+          enabled: reviewIdentityReady && reviewVersionPairReady,
+          requiresConfirmation: true,
+          boundary: "只进入独立版本选择确认；不会晋级项目事实或导出。",
+        },
+        {
+          id: "request_changes",
+          label: "需要修改",
+          effect: "conversation_only",
+          enabled: reviewIdentityReady && reviewVersionPairReady,
+          requiresConfirmation: false,
+          boundary: "只针对当前查看版本进入修改讨论；两个候选都保持不变。",
+        },
+        {
+          id: "promote_project_fact",
+          label: "晋级为项目事实",
+          effect: "project_fact_promotion",
+          enabled: false,
+          requiresConfirmation: true,
+          boundary: "必须先完成独立版本选择回执，并再次确认晋级。",
+        },
+      ] : [
         {
           id: "approve_preview",
           label: "通过预览",

@@ -85,6 +85,26 @@ function plan(input: {
   });
 }
 
+const versionPairProjection = buildAgentCurrentTaskProjection({
+  reviewVersionPair: {
+    pairId: "review_pair_P6S01",
+    shotId: "P6S01",
+    activeVersion: "B",
+    activeJobId: "job-b",
+    activeActionId: "action-b",
+  },
+  currentProjectId: "current_project",
+  currentProjectRoot: "/tmp/p10-d7-project",
+  currentProjectFactHash: "p10-d7-fact",
+  referenceReviewCount: 2,
+  videoReviewCount: 2,
+});
+assert(versionPairProjection.step === "compare_versions", "an exact version pair should own the current task before passive review counts");
+assert(versionPairProjection.label === "比较 P6S01 两个版本", "version-pair task copy should identify the shot");
+assert(!versionPairProjection.requiresConfirmation && versionPairProjection.effect === "none", "A/B inspection must not mutate state");
+assert(versionPairProjection.jobId === "job-b" && versionPairProjection.actionId === "action-b", "the current task should bind the actively viewed candidate");
+assert(factValue(versionPairProjection.facts, "当前查看") === "版本 B", "the current-task facts should expose the active version structurally");
+
 const planningDraftProjection = buildAgentCurrentTaskProjection({
   newVideoDraft: {
     status: "planning",

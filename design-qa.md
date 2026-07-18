@@ -163,9 +163,9 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 - The Paid Confirmation and Running references include illustrative video
   media. The real third-slice fixture intentionally has no output media because
   no Provider task was submitted; the center keeps the real project state.
-- The Review reference illustrates an A/B version pair. The fourth-slice
-  fixture intentionally presents one returned P6S01 result because durable
-  version-pair comparison remains outside this acceptance.
+- The Review reference illustrates an A/B version pair. P10-D7 now implements
+  that hierarchy with two identity-complete local results, one shared active
+  version, and an independent selection boundary.
 - The sixth slice stops before executing the new candidate. Its center therefore
   continues to show the immutable old P6S01 result rather than inventing a
   second version or an A/B comparison.
@@ -175,9 +175,25 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 - A real paid Provider transition remains outside this slice.
 - Real Provider polling and result recovery remain outside this slice; the
   accepted recovery is local/dry-run only.
-- A/B compare requires a durable version-pair contract and two real results.
 - Project-fact promotion, Provider execution, Delivery, and export retain their
   independent boundaries and were not exercised.
-- P10-D7 was not entered after the sixth-slice acceptance.
+- P10-D8 selection receipt and promotion were not entered in the D7 acceptance.
+
+## P10-D7 packaged update
+
+- The packaged Preview and Agent rail share one active A/B candidate and expose
+  one stable version switch; B is the deterministic default after cold start.
+- A and B resolve to separate local media paths and distinct SHA-256 values.
+- The right rail keeps exactly one `compare_versions` task and one Review turn.
+- `选择版本` stops at a visible confirmation boundary. Promotion remains
+  disabled, and no Delivery or export action is introduced.
+- `需要修改` replaces Review with one focused revision turn while both original
+  candidates remain immutable.
+- A damaged generation ledger fails closed: no A/B switch and no Review turn
+  are restored.
+- Project facts, the generation ledger, and both media files retain their
+  baseline hashes. Provider calls and fees remain zero.
+- Evidence:
+  `docs/evidence/p10-d-version-pair-20260719/packaged-observation.json`.
 
 final result: passed
