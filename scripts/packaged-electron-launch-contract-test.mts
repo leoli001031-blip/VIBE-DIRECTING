@@ -384,6 +384,8 @@ assert(mainSource.includes("VIBE_CORE_RUNTIME_API_PORT"), "built Electron main m
 assert(mainSource.includes("VIBE_ELECTRON_PACKAGED_ACCEPTANCE"), "built Electron main must gate packaged control acceptance behind an explicit test-only flag");
 assert(mainSource.includes("VIBE_ELECTRON_ACCEPTANCE_CONTROL_TOKEN"), "packaged acceptance control must require an ephemeral token");
 assert(mainSource.includes('server.listen(packagedAcceptanceControlPort, "127.0.0.1"'), "packaged acceptance control must bind to loopback only");
+assert(mainSource.includes('request.method === "set_bounds"'), "packaged acceptance control must support authenticated responsive-window checks");
+assert(mainSource.includes('request.method === "capture_page"'), "packaged acceptance control must support authenticated visual evidence capture");
 assert(preloadSource.includes("contextBridge"), "built preload must expose a context-isolated bridge");
 assert(preloadSource.includes("vibeRuntime"), "built preload must expose vibeRuntime");
 assert(preloadSource.includes("ensureRuntimeApiBaseUrl"), "built preload must expose lazy runtime startup");

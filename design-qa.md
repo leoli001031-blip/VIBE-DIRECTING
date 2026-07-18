@@ -170,14 +170,13 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
   continues to show the immutable old P6S01 result rather than inventing a
   second version or an A/B comparison.
 
-## Remaining work
+## P10-D6 boundary at acceptance time
 
 - A real paid Provider transition remains outside this slice.
 - Real Provider polling and result recovery remain outside this slice; the
   accepted recovery is local/dry-run only.
 - Project-fact promotion, Provider execution, Delivery, and export retain their
   independent boundaries and were not exercised.
-- P10-D8 selection receipt and promotion were not entered in the D7 acceptance.
 
 ## P10-D7 packaged update
 
@@ -193,6 +192,7 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
   are restored.
 - Project facts, the generation ledger, and both media files retain their
   baseline hashes. Provider calls and fees remain zero.
+- P10-D8 selection receipt and promotion were not entered in the D7 acceptance.
 - Evidence:
   `docs/evidence/p10-d-version-pair-20260719/packaged-observation.json`.
 
@@ -216,5 +216,41 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
   remained zero.
 - Evidence:
   `docs/evidence/p10-d-review-selection-20260719/packaged-observation.json`.
+
+## P10-D9 packaged update
+
+- Only the exact promoted winner enters Delivery; the loser, stale fact,
+  `needs_review` result, and incomplete identity remain excluded.
+- Delivery retains a separate `确认导出` boundary and writes nothing before the
+  exact confirmation.
+- The local package contains one winner MP4 plus project-relative manifests and
+  receipts. Its copied media SHA-256 matches the promoted source.
+- Atomic publish and cold restore preserve a byte-identical package without
+  reviving Review, Selection, Promotion, or Export confirmations.
+- Provider calls and fees remain zero.
+- Evidence:
+  `docs/evidence/p10-d-delivery-handoff-20260719/packaged-observation.json`.
+
+## P10-E packaged update
+
+- The packaged workflow completes Review, revision, Clarify, Proposal, local
+  Confirmation/Running, A/B Review, selection, promotion, Delivery, and cold
+  restore in one fresh `/tmp` fixture.
+- Every observed stage has one current task or one focused turn. Historical
+  cards, passive project status, and terminal results do not reclaim focus.
+- Candidate A and B have different job, action, receipt, path, and SHA-256
+  identities; both remain preserved after winner B is delivered.
+- Selection, project-fact promotion, and Delivery each use an independent,
+  identity-bound confirmation.
+- At `1440 x 900` and `900 x 760`, the Agent rail remains inside the viewport,
+  Review buttons are not clipped, and composer copy does not overlap controls.
+- The constrained focused turn scrolls when needed so the composer remains
+  visible. Restored material facts no longer collapse into vertical labels.
+- The local export contains 16 entries and only the promoted winner B media.
+- Cold restore shows one idle task and no stale actionable confirmation.
+- Provider calls and fees remain zero; real Provider execution remains
+  unverified.
+- Evidence:
+  `docs/evidence/p10-e-packaged-director-workflow-20260719/packaged-observation.json`.
 
 final result: passed

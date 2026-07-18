@@ -11573,6 +11573,13 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   padding: 14px 0 16px;
 }
 
+.director-agent-rail .minimal-agent-focused-turn {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .minimal-agent-focused-turn-head {
   display: flex;
   align-items: flex-start;
@@ -12286,6 +12293,14 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .minimal-agent-message em {
   color: var(--signal-muted);
   font-weight: 600;
+}
+
+.director-agent-rail .minimal-agent-asset-inbox-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.director-agent-rail .minimal-agent-asset-inbox-summary > small:first-child {
+  grid-column: 1 / -1;
 }
 
 .minimal-agent-plan.is-inline,

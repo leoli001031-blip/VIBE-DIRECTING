@@ -1,0 +1,671 @@
+{
+  "schemaVersion": "p10_e_packaged_director_workflow/1.0.0",
+  "status": "pass",
+  "acceptedAt": "2026-07-18T19:08:15.229Z",
+  "fixture": {
+    "root": "/tmp/vibe-director-p10-e-20260719-lqHliu",
+    "profileRoot": "/tmp/vibe-director-p10-e-20260719-lqHliu/profile",
+    "projectsRoot": "/tmp/vibe-director-p10-e-20260719-lqHliu/projects",
+    "runtimeRoot": "/tmp/vibe-director-p10-e-20260719-lqHliu/runtime",
+    "projectRoot": "/tmp/vibe-director-p10-e-20260719-lqHliu/projects/p10-e-packaged-director-workflow",
+    "projectId": "p10_e_packaged_project",
+    "sourceProjectFactHash": "pv_efadc4ac",
+    "promotedProjectFactHash": "pv_53bee4bc",
+    "shotId": "P10ES01",
+    "appPath": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app"
+  },
+  "chain": [
+    "review",
+    "revision",
+    "clarify",
+    "proposal",
+    "confirmation",
+    "running",
+    "needs_review_pair",
+    "selected",
+    "promoted",
+    "delivery_confirmation",
+    "delivered",
+    "cold_restore"
+  ],
+  "identities": {
+    "candidateAJobId": "agent_video_job_p10_e_initial_review_plan_submit_video_001",
+    "candidateBJobId": "agent_video_job_review_regeneration_proposal_agent_video_P10ES01_1289dfec_submit_video_002",
+    "selectionReceiptId": "review_selection_receipt_review_selection_confirmation_review_pair_P10ES01_e7cf315e_b_001",
+    "promotionConfirmationId": "review_promotion_confirmation_review_selection_receipt_review_selection_confirmation_review_pair_P10ES01_e7cf315e_b_001",
+    "promotionReceiptId": "review_promotion_receipt_review_selection_receipt_review_selection_confirmation_review_pair_P10ES01_e7cf315e_b_001",
+    "deliveryActionId": "footer_project_export",
+    "deliveryConfirmationId": "footer_action_export",
+    "deliveryReceiptId": "agent_video_execution_receipt_footer_action_export"
+  },
+  "stages": {
+    "review": {
+      "currentTaskStep": "submit_video",
+      "currentTaskSource": "project_observation",
+      "currentTaskLabel": "复核视频",
+      "currentTaskCount": 1,
+      "turnPhase": "review",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 1,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP10ES01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n本轮 · Review\n新版本已返回\nneeds_review\n\n结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。\n\n对象\nP10ES01\n范围\nP10ES01\n回执\np10e_local_r\n输出\nsha256:44f30\n审查依据：全能参考\n通过预览\n需要修改\n只写入 Review Receipt，不会晋级项目事实，不会导出。\n晋级为项目事实\n需要另行确认\n更早的对话\n3 条\n添加文件\nP10ES01 · needs_review\n补充修改意图不会自动重试或提交。\n发送\n已恢复本地项目"
+    },
+    "reviewActions": {
+      "buttons": [
+        {
+          "text": "通过预览",
+          "disabled": false,
+          "title": "只写入 Review Receipt，不会晋级项目事实，不会导出。"
+        },
+        {
+          "text": "需要修改",
+          "disabled": false,
+          "title": "只进入修改讨论，不会自动重试或重新提交外部任务。"
+        },
+        {
+          "text": "晋级为项目事实需要另行确认",
+          "disabled": true,
+          "title": "需要独立授权，不能由预览通过代替。"
+        }
+      ],
+      "text": "本轮 · Review新版本已返回needs_review结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。对象P10ES01范围P10ES01回执p10e_local_r输出sha256:44f30审查依据：全能参考通过预览需要修改只写入 Review Receipt，不会晋级项目事实，不会导出。晋级为项目事实需要另行确认"
+    },
+    "revision": {
+      "currentTaskStep": "submit_video",
+      "currentTaskSource": "project_observation",
+      "currentTaskLabel": "说明修改方向",
+      "currentTaskCount": 1,
+      "turnPhase": "conversation",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 1,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n说明修改方向\n当前任务\n\n继续讨论修改，原结果保持不变\n\n范围\nP10ES01\n原结果\n保留\n新任务\n未创建\n本轮 · 修改\n说明修改方向\nclarify\n\n已保留 P10ES01 当前返回版本。继续说明要修改的时机、动作或连续性，我会先整理成提案。\n\n原结果\n保持不变\n新任务\n尚未创建\n只记录修改意图并进入导演讨论；保留原结果，不会自动重试、提交 付费生成服务、晋级或导出。\n更早的对话\n4 条\n添加文件\n你说“这个”时，我会理解为：正在看视频结果\n脚本、图片、声音或视频会先进入素材收件箱，AI 导演先分类；采用前等你确认。\n点发送或 Cmd Enter，交给 AI 导演整理\n识别为：修改当前内容\n发送\n已恢复本地项目"
+    },
+    "clarify": {
+      "currentTaskStep": "submit_video",
+      "currentTaskSource": "project_observation",
+      "currentTaskLabel": "确认导演意图",
+      "currentTaskCount": 1,
+      "turnPhase": "clarification",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 1,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n确认导演意图\n当前任务\n\n先澄清导演方向，不创建新任务\n\n范围\nP10ES01\n原结果\n保留\n新任务\n未创建\n本轮 · Clarify\n确认导演意图\nconversation_only\n\n纸飞机亮得太早了。让机器人接稳以后再亮，保留女孩递出动作和中远景连续性。\n\n你希望把这个变化留到主要动作完成后作为情绪转折，还是保留当前时机只做提前预兆？\n\n情绪转折\n先完成主要动作，再让变化成为情绪转折。\n提前预兆\n保留当前时机，但只做较弱的提前预兆。\n我再描述\n选择只会形成一条待确认提案；不会写项目、调用外部生成服务或导出。\n更早的对话\n4 条\n添加文件\nP10ES01 · Clarify\n选择一个方向，或继续补充；不会写项目。\n发送\n已恢复本地项目"
+    },
+    "proposal": {
+      "currentTaskStep": "submit_video",
+      "currentTaskSource": "project_observation",
+      "currentTaskLabel": "确认重新生成提案",
+      "currentTaskCount": 1,
+      "turnPhase": "proposal",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 1,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n确认重新生成提案\n当前任务\n\n确认前只保留提案和原结果\n\n范围\nP10ES01\n原结果\n保留\n下一步\n确认新任务\n本轮 · Proposal\n修改提案已形成\nstaged_only\n\n保留当前 P10ES01 版本，按“情绪转折”形成一个新的候选版本。\n\n范围\nP10ES01\n提案\nproposal_agent_vid\n修改方向\n纸飞机亮得太早了。让机器人接稳以后再亮，保留女孩递出动作和中远景连续性。；调整为先完成主要动作，再出现这个变化，把它作为情绪转折。\n先确认导演修改目标，再编译新的生成请求。\n版本处理\n当前返回版本 → 保留旧版本，新增独立候选\n重新生成不能覆盖旧媒体或旧复核证据。\n新版本复核\n新结果仍需人工复核\n新结果不得自动通过、晋级项目事实或导出。\n确认重新生成提案\n继续调整\n确认后只创建新的本地验证任务和独立确认卡；不调用付费生成服务、不覆盖旧结果。\n更早的对话\n4 条\n添加文件\nP10ES01 · Proposal\n确认前只保留提案，不会调用外部生成服务。\n发送\n已恢复本地项目"
+    },
+    "confirmation": {
+      "currentTaskStep": "submit_video",
+      "currentTaskSource": "timeline_confirmation",
+      "currentTaskLabel": "确认验证视频流程",
+      "currentTaskCount": 1,
+      "turnPhase": "confirmation",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 1,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n确认验证视频流程\n当前任务\n\n新的本地验证任务已建立；确认前不执行，也不会调用付费生成服务。\n\n目标\nP10ES01\n本轮 · Confirmation\n确认重新生成 P10ES01\n本地验证 · 不计费\n\n我准备验证视频提交的执行合同。这一步只做本地合同验证，不会调用真实 provider，也不会提交或生成真实视频。\n\n确认\nagent_tool_handoff\n动作\nagent_action_2026_\n目标\nP10ES01\n本轮只验证本地执行合同，不调用付费外部生成服务。\n确认并提交 1 次\n返回调整\n只执行当前已确认的生成任务，不自动重试、批准或导出。\n更早的对话\n4 条\n添加文件\n确认验证视频流程 · Confirmation\n输入修改会返回调整，不会执行当前任务。\n发送"
+    },
+    "running": {
+      "currentTaskStep": "submit_video",
+      "currentTaskSource": "pipeline_job",
+      "currentTaskLabel": "发送视频",
+      "currentTaskCount": 1,
+      "turnPhase": "running",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 1,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP10ES01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n已确认：发送视频 · 仅此任务\n本轮 · Running\n发送视频\n执行中\n任务\nagent_video_job_re\n模式\ndry_run\n执行方\nvibe-director-dry-run-video\n模型\ndry-run-i2v\n确认回执已锁定\n本地执行合同已接收\n执行中\n已登记一次执行；不会自动重试、批准、晋级或导出。\n后台运行\n查看任务记录\n当前版本保持可复核；新结果返回后仍进入 needs_review。\n更早的对话\n3 条\n添加文件\n发送视频 · Running\n可以继续讨论；当前任务不会重复提交或自动重试。\n发送\n已恢复待确认计划\n已恢复本地项目"
+    },
+    "versionReviewDesktop": {
+      "currentTaskStep": "compare_versions",
+      "currentTaskSource": "project_observation",
+      "currentTaskLabel": "比较 P10ES01 两个版本",
+      "currentTaskCount": 1,
+      "turnPhase": "review",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 1,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n版本复核\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01 · 版本 B\n1 段\n5s\n1 个待复核\nA\nB\n版本 B · 待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP10ES01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n本轮 · Review\n比较两个返回版本\nneeds_review\n\n当前查看版本 B。比较动作完成点、情绪转折与连续性后，再进入独立选择确认。\n\n对象\nP10ES01 · 版本 B\n范围\nP10ES01\n回执\np10e_local_r\n输出\nsha256:0a858\n版本对\nS01_e7cf315e\n审查依据：全能参考\n查看 A\n查看 B\n选择版本 B\n需要修改\n只进入独立版本选择确认；不会晋级项目事实或导出。\n晋级为项目事实\n需要另行确认\n更早的对话\n4 条\n添加文件\nP10ES01 · 版本 B · needs_review\n补充修改意图不会自动重试或提交。\n发送\n已恢复待确认计划\n已恢复本地项目"
+    },
+    "desktopGeometry": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentScrollWidth": 1440,
+      "panel": {
+        "left": 1073,
+        "top": 48,
+        "right": 1440,
+        "bottom": 900,
+        "width": 367,
+        "height": 852
+      },
+      "task": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "width": 0,
+        "height": 0
+      },
+      "turn": {
+        "left": 1089,
+        "top": 196.4453125,
+        "right": 1424,
+        "bottom": 643.203125,
+        "width": 335,
+        "height": 446.7578125
+      },
+      "panelInsideViewport": true,
+      "taskBeforeTurn": true,
+      "focusedTurnOverflow": 0,
+      "clippedButtons": [],
+      "buttonsOutsideTurn": [],
+      "footer": {
+        "left": 1089,
+        "top": 798.203125,
+        "right": 1424,
+        "bottom": 850,
+        "width": 335,
+        "height": 51.796875
+      },
+      "footerInsidePanel": true,
+      "footerCopyOverlapsButtons": [],
+      "assetSummaryOverflow": 0,
+      "assetSummaryItemWidths": [],
+      "activeElementLabel": "和 AI 导演说"
+    },
+    "constrainedGeometry": {
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "documentScrollWidth": 900,
+      "panel": {
+        "left": 565,
+        "top": 48,
+        "right": 900,
+        "bottom": 760,
+        "width": 335,
+        "height": 712
+      },
+      "task": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "width": 0,
+        "height": 0
+      },
+      "turn": {
+        "left": 581,
+        "top": 196.4453125,
+        "right": 884,
+        "bottom": 503.203125,
+        "width": 303,
+        "height": 306.7578125
+      },
+      "panelInsideViewport": true,
+      "taskBeforeTurn": true,
+      "focusedTurnOverflow": 0,
+      "clippedButtons": [],
+      "buttonsOutsideTurn": [],
+      "footer": {
+        "left": 581,
+        "top": 658.203125,
+        "right": 884,
+        "bottom": 710,
+        "width": 303,
+        "height": 51.796875
+      },
+      "footerInsidePanel": true,
+      "footerCopyOverlapsButtons": [],
+      "assetSummaryOverflow": 0,
+      "assetSummaryItemWidths": [],
+      "activeElementLabel": "和 AI 导演说"
+    },
+    "selectionConfirmation": {
+      "currentTaskStep": "confirm_version_selection",
+      "currentTaskSource": "review_selection_confirmation",
+      "currentTaskLabel": "确认选择版本 B",
+      "currentTaskCount": 1,
+      "turnPhase": "selection",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 1,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n版本选择\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01 · 版本 B\n1 段\n5s\n1 个待复核\nA\nB\n版本 B · 待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n确认选择版本 B\n当前任务\n\n只写独立选择回执，不改项目事实\n\n镜头\nP10ES01\n获胜版本\nB\n边界\n只写选择回执\n本轮 · Selection\n确认选择版本 B\nwaiting\n\n确认后只把版本 B 记为获胜候选。\n\n镜头\nP10ES01\n获胜版本\nB\n版本对\nS01_e7cf315e\n选择回执\n确认后生成\n确认选择版本 B\n返回比较\n选择回执独立保存；不会修改项目事实、Visual Memory 或 Delivery。\n更早的对话\n4 条\n添加文件\n你说“这个”时，我会理解为：正在看视频结果；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送\n已恢复待确认计划\n已恢复本地项目"
+    },
+    "promotionConfirmation": {
+      "currentTaskStep": "confirm_project_fact_promotion",
+      "currentTaskSource": "review_promotion_confirmation",
+      "currentTaskLabel": "确认版本 B 晋级",
+      "currentTaskCount": 1,
+      "turnPhase": "selection",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 1
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n事实晋级\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01 · 版本 B\n1 段\n5s\n1 个待复核\nA\nB\n版本 B · 待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n确认版本 B 晋级\n当前任务\n\n只晋级已选择的获胜版本，不导出\n\n镜头\nP10ES01\n获胜版本\nB\n边界\n只晋级项目事实\n本轮 · Promotion\n确认版本 B 晋级\nwaiting\n\n版本 B 已有人工选择回执；确认后才会写入项目事实。\n\n镜头\nP10ES01\n获胜版本\nB\n版本对\nS01_e7cf315e\n选择回执\ncf315e_b_001\n确认晋级项目事实\n返回比较\n晋级只写获胜版本事实；不会删除落选版本，也不会导出。\n更早的对话\n4 条\n添加文件\n你说“这个”时，我会理解为：正在看视频结果；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送\n已恢复待确认计划\n已恢复本地项目"
+    },
+    "promotionColdRestore": {
+      "currentTaskStep": "confirm_project_fact_promotion",
+      "currentTaskSource": "review_promotion_confirmation",
+      "currentTaskLabel": "确认版本 B 晋级",
+      "currentTaskCount": 1,
+      "turnPhase": "selection",
+      "focusedTurnCount": 1,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 1
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n事实晋级\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01 · 版本 B\n1 段\n5s\n1 个待复核\nA\nB\n版本 B · 待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n确认版本 B 晋级\n当前任务\n\n只晋级已选择的获胜版本，不导出\n\n镜头\nP10ES01\n获胜版本\nB\n边界\n只晋级项目事实\n本轮 · Promotion\n确认版本 B 晋级\nwaiting\n\n版本 B 已有人工选择回执；确认后才会写入项目事实。\n\n镜头\nP10ES01\n获胜版本\nB\n版本对\nS01_e7cf315e\n选择回执\ncf315e_b_001\n确认晋级项目事实\n返回比较\n晋级只写获胜版本事实；不会删除落选版本，也不会导出。\n更早的对话\n4 条\n添加文件\n你说“这个”时，我会理解为：正在看视频结果；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送\n已恢复待确认计划\n已恢复本地项目"
+    },
+    "promoted": {
+      "currentTaskStep": "export",
+      "currentTaskSource": "pipeline_plan",
+      "currentTaskLabel": "导出交付包",
+      "currentTaskCount": 1,
+      "turnPhase": "confirmation",
+      "focusedTurnCount": 0,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n交付资料\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n可播放\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\nP10ES01\n当前选择\n\n正在看 镜头 P10ES01。直接说这一段怎么改。\n\n位置\n当前段落里的镜头\n镜头\nP10ES01 · 雨夜递出纸飞机\n方式\n全能参考\n时长\n5s\n当前任务\n导出交付包\n只写入本地交付资料包\n等待确认\n导演经验\n全能参考\n点开查看 Skills\n工作方式\n确认导出\n和 AI 导演的对话\n前面的记录已保存，这里只显示最近一次推进。\n输入\n你：确认修改提案\n\n纸飞机亮得太早了。让机器人接稳以后再亮，保留女孩递出动作和中远景连续性。；调整为先完成主要动作，再出现这个变化，把它作为情绪转折。\n\n当前选择\n我知道你在说哪里了\n已完成\n\n现在你说“这个”，我会理解为正在看 镜头 P10ES01。已选中 正在看 镜头 P10ES01。直接说这一段怎么改。\n\n这个指向\n正在看 镜头 P10ES01\n位置\n当前段落里的镜头\n镜头\nP10ES01 · 雨夜递出纸飞机\n方式\n全能参考\n直接说改法，或说“继续下一步”。\n素材识别\n素材已识别\n已完成\n\n1 个素材已进入项目，0 个需要确认用途。\n\n分类\n场景 1\n待确认\n没有\n保护\n确认前不改绑定\n示例\n雨夜便利店门口：建议用于 镜头 P10ES01\n1 个素材已进入项目，0 个需要确认用途。\n素材已可供 Agent 规划使用。\n类型\n场景 1\n等你确认\n没有\n边界\n先确认再写入项目\n处理方式\n可独立 1\n建议绑定\n雨夜便利店门口 → 作为场景参考 / 建议用于 镜头 P10ES01\n我先把建议列出来，不会直接改素材。需要采用时，直接说“确认这些素材用途”。\n雨夜便利店门口 · 作为场景参考\n建议用于 镜头 P10ES01。判断理由：根据素材类型和已有绑定推断，确认后可进入后续规划。\n素材已可供 Agent 规划使用。\n添加文件\n你说“这个”时，我会理解为：P10ES01；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送\n获胜版本已晋级项目事实\n故事已确认\n已保存到项目\n预览已生成"
+    },
+    "deliveryConfirmation": {
+      "currentTaskStep": "export",
+      "currentTaskSource": "pipeline_plan",
+      "currentTaskLabel": "导出交付包",
+      "currentTaskCount": 1,
+      "turnPhase": "confirmation",
+      "focusedTurnCount": 0,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n交付\n项目交付\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n交付资料\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n交付准备\n交付包\n先处理确认\n生成交付包\n先处理右侧消息里的「导出交付包」，确认前不会导出文件。\n14\n文件\n1\n可打包资料\n3\n待处理\n0\n本片参考\n1\n声音参考\n视频结果：0 待确认 · 1 已通过 · 0 缺失；视频素材已确认\n资料包还没准备好\n素材清单还未核对完成。\n查看本地包明细\n1 个可打包资料 · 3 个待处理\n正式预览还需复核：\n素材清单还未核对完成。\n正式预览还有检查未完成。\n视频结果还没出来或还没确认。\n还有制作检查未完成。\n声音计划：1 个镜头 · 声音参考随视频模型使用，配乐留到后期\n收起\nAI 导演\n本地交付包\n当前任务\n导出交付包\n只写入本地交付资料包\n等待确认\n工作方式\n确认卡接管\n和 AI 导演的对话\n前面的记录已保存，这里只显示最近一次推进。\n需要确认\n建议行动：导出交付包\n等你确认\n\n我准备导出，范围是当前项目。确认后才会写入本地导出文件。\n\n目标\n当前项目\n包含\n当前可打包资料、制作报告、缺失视频说明\n写入文件\n确认后才写入\n确认后导出交付包；也可以继续输入修改意见。\n确认后会\n只写入本地交付资料包\n不会\n确认前再核对：这次只导出 当前项目。\n确认导出\n再改一下\n添加文件\n你说“这个”时，我会理解为：本地交付包；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送"
+    },
+    "delivered": {
+      "currentTaskStep": "idle",
+      "currentTaskSource": "pipeline_plan",
+      "currentTaskLabel": "继续描述想法",
+      "currentTaskCount": 1,
+      "turnPhase": "idle",
+      "focusedTurnCount": 0,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n交付\n项目交付\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n导出已完成 · 最后复核交付内容\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n当前项目\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n交付准备\n交付包\n已生成包\n交付包已生成\n14 个文件 · 项目文件、锁定素材、预览媒体、视频结果、制作报告 · exports/current-project\n14\n文件\n1\n可打包资料\n3\n待处理\n0\n本片参考\n1\n声音参考\n视频结果：0 待确认 · 1 已通过 · 0 缺失；视频素材已确认\n导出包已生成24 步完成 · 交付包已生成\n交付包已生成\n已写入 exports/current-project，可以复核交付内容。\n查看本地包明细\n1 个可打包资料 · 3 个待处理\n正式预览还需复核：\n素材清单还未核对完成。\n正式预览还有检查未完成。\n关键画面对齐还需确认。\n视频结果还没出来或还没确认。\n还有制作检查未完成。\n声音计划：1 个镜头 · 声音参考随视频模型使用，配乐留到后期\n收起\nAI 导演\n导出已完成\n当前任务\n\n已写入当前项目的 exports 文件夹。\n\n范围\n当前项目\n包含\n当前可打包资料、制作报告、缺失视频说明\n写入文件\n已生成\n当前任务\n继续描述想法\n等待你的下一句指令\n可以继续\n导演经验\n全能参考\n点开查看 Skills\n工作方式\n先整理\n和 AI 导演的对话\n前面的记录已保存，这里只显示最近一次推进。\n输入\n你：确认修改提案\n\n纸飞机亮得太早了。让机器人接稳以后再亮，保留女孩递出动作和中远景连续性。；调整为先完成主要动作，再出现这个变化，把它作为情绪转折。\n\n当前选择\n我知道你在说哪里了\n已完成\n\n现在你说“这个”，我会理解为正在看 镜头 P10ES01。已选中 正在看 镜头 P10ES01。直接说这一段怎么改。\n\n这个指向\n正在看 镜头 P10ES01\n位置\n当前段落里的镜头\n镜头\nP10ES01 · 雨夜递出纸飞机\n方式\n全能参考\n直接说改法，或说“继续下一步”。\n正在处理\n执行：导出交付包\n处理中\n\n确认边界已通过，正在执行「导出交付包」。任务状态会写入当前项目。\n\n任务\nagent_video_job_minimal_agent_current_task_export_001\n方式\n真实执行\nProvider\n未调用\n等待或查询真实任务结果。\n完成结果\n导出交付包已完成\n已完成\n\n「导出交付包」已完成，真实返回路径已记录。\n\n任务\nagent_video_job_minimal_agent_current_task_export_001\n方式\n真实执行\nProvider\n未调用\n真实产物\n16 项\n按真实项目状态继续下一步。\n素材识别\n素材已识别\n已完成\n\n1 个素材已进入项目，0 个需要确认用途。\n\n分类\n场景 1\n待确认\n没有\n保护\n确认前不改绑定\n示例\n雨夜便利店门口：建议用于 镜头 P10ES01\n1 个素材已进入项目，0 个需要确认用途。\n素材已可供 Agent 规划使用。\n类型\n场景 1\n等你确认\n没有\n边界\n先确认再写入项目\n处理方式\n可独立 1\n建议绑定\n雨夜便利店门口 → 作为场景参考 / 建议用于 镜头 P10ES01\n我先把建议列出来，不会直接改素材。需要采用时，直接说“确认这些素材用途”。\n雨夜便利店门口 · 作为场景参考\n建议用于 镜头 P10ES01。判断理由：根据素材类型和已有绑定推断，确认后可进入后续规划。\n素材已可供 Agent 规划使用。\n添加文件\n你说“这个”时，我会理解为：导出已完成\n要修改就直接输入；确认在上方消息里。\n发送\n项目已经变化，上次待确认计划已失效。\n已恢复本地项目"
+    },
+    "coldRestore": {
+      "currentTaskStep": "idle",
+      "currentTaskSource": "pipeline_plan",
+      "currentTaskLabel": "继续描述想法",
+      "currentTaskCount": 1,
+      "turnPhase": "idle",
+      "focusedTurnCount": 0,
+      "counts": {
+        "当前导演澄清": 0,
+        "当前导演提案": 0,
+        "当前生成任务确认": 0,
+        "当前运行任务": 0,
+        "当前视频复核": 0,
+        "当前视频修改意图": 0,
+        "版本选择确认": 0,
+        "项目事实晋级确认": 0
+      },
+      "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n交付\n项目交付\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n导出已完成 · 最后复核交付内容\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n当前项目\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n交付准备\n交付包\n已生成包\n交付包已生成\n14 个文件 · 项目文件、锁定素材、预览媒体、视频结果、制作报告 · exports/current-project\n14\n文件\n1\n可打包资料\n3\n待处理\n0\n本片参考\n1\n声音参考\n视频结果：0 待确认 · 1 已通过 · 0 缺失；视频素材已确认\n交付包已生成\n已写入 exports/current-project，可以复核交付内容。\n查看本地包明细\n1 个可打包资料 · 3 个待处理\n正式预览还需复核：\n素材清单还未核对完成。\n正式预览还有检查未完成。\n关键画面对齐还需确认。\n视频结果还没出来或还没确认。\n还有制作检查未完成。\n声音计划：1 个镜头 · 声音参考随视频模型使用，配乐留到后期\n收起\nAI 导演\n导出已完成\n当前任务\n\n已写入当前项目的 exports 文件夹。\n\n范围\n当前项目\n包含\n当前可打包资料、制作报告、缺失视频说明\n写入文件\n已生成\n当前任务\n继续描述想法\n等待你的下一句指令\n可以继续\n导演经验\n全能参考\n点开查看 Skills\n工作方式\n先整理\n和 AI 导演的对话\n前面的记录已保存，这里只显示最近一次推进。\n输入\n你：确认修改提案\n\n纸飞机亮得太早了。让机器人接稳以后再亮，保留女孩递出动作和中远景连续性。；调整为先完成主要动作，再出现这个变化，把它作为情绪转折。\n\n当前选择\n我知道你在说哪里了\n已完成\n\n现在你说“这个”，我会理解为正在看 镜头 P10ES01。已选中 正在看 镜头 P10ES01。直接说这一段怎么改。\n\n这个指向\n正在看 镜头 P10ES01\n位置\n当前段落里的镜头\n镜头\nP10ES01 · 雨夜递出纸飞机\n方式\n全能参考\n直接说改法，或说“继续下一步”。\n正在处理\n执行：导出交付包\n处理中\n\n确认边界已通过，正在执行「导出交付包」。任务状态会写入当前项目。\n\n任务\nagent_video_job_minimal_agent_current_task_export_001\n方式\n真实执行\nProvider\n未调用\n等待或查询真实任务结果。\n完成结果\n导出交付包已完成\n已完成\n\n「导出交付包」已完成，真实返回路径已记录。\n\n任务\nagent_video_job_minimal_agent_current_task_export_001\n方式\n真实执行\nProvider\n未调用\n真实产物\n16 项\n按真实项目状态继续下一步。\n素材识别\n素材已识别\n已完成\n\n1 个素材已进入项目，0 个需要确认用途。\n\n分类\n场景 1\n待确认\n没有\n保护\n确认前不改绑定\n示例\n雨夜便利店门口：建议用于 镜头 P10ES01\n1 个素材已进入项目，0 个需要确认用途。\n素材已可供 Agent 规划使用。\n类型\n场景 1\n等你确认\n没有\n边界\n先确认再写入项目\n处理方式\n可独立 1\n建议绑定\n雨夜便利店门口 → 作为场景参考 / 建议用于 镜头 P10ES01\n我先把建议列出来，不会直接改素材。需要采用时，直接说“确认这些素材用途”。\n雨夜便利店门口 · 作为场景参考\n建议用于 镜头 P10ES01。判断理由：根据素材类型和已有绑定推断，确认后可进入后续规划。\n素材已可供 Agent 规划使用。\n添加文件\n你说“这个”时，我会理解为：导出已完成\n要修改就直接输入；确认在上方消息里。\n发送\n项目已经变化，上次待确认计划已失效。\n已恢复本地项目"
+    },
+    "coldRestoreGeometry": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentScrollWidth": 1440,
+      "panel": {
+        "left": 1073,
+        "top": 48,
+        "right": 1440,
+        "bottom": 900,
+        "width": 367,
+        "height": 852
+      },
+      "task": {
+        "left": 1089,
+        "top": 223.84375,
+        "right": 1424,
+        "bottom": 319.2890625,
+        "width": 335,
+        "height": 95.4453125
+      },
+      "turn": null,
+      "panelInsideViewport": true,
+      "taskBeforeTurn": false,
+      "focusedTurnOverflow": 0,
+      "clippedButtons": [],
+      "buttonsOutsideTurn": [],
+      "footer": {
+        "left": 1089,
+        "top": 798.203125,
+        "right": 1424,
+        "bottom": 850,
+        "width": 335,
+        "height": 51.796875
+      },
+      "footerInsidePanel": true,
+      "footerCopyOverlapsButtons": [],
+      "assetSummaryOverflow": 0,
+      "assetSummaryItemWidths": [
+        325,
+        159.5,
+        159.5,
+        159.5,
+        159.5,
+        159.5
+      ],
+      "activeElementLabel": "和 AI 导演说"
+    }
+  },
+  "runtimeBoundaries": {
+    "beforeRunning": {
+      "tokenRequired": true,
+      "providerCalled": false,
+      "liveSubmitAllowed": false
+    },
+    "running": {
+      "tokenRequired": true,
+      "providerCalled": false,
+      "liveSubmitAllowed": false
+    },
+    "delivery": {
+      "tokenRequired": true,
+      "providerCalled": false,
+      "liveSubmitAllowed": false
+    },
+    "coldRestore": {
+      "tokenRequired": true,
+      "providerCalled": false,
+      "liveSubmitAllowed": false
+    }
+  },
+  "screenshots": [
+    "01-running-desktop.png",
+    "02-version-review-desktop.png",
+    "03-version-review-constrained.png",
+    "04-delivery-confirmation-desktop.png",
+    "05-delivered-cold-restore.png"
+  ],
+  "delivery": {
+    "exportRoot": "exports/current-project",
+    "files": [
+      "Project.vibe",
+      "asset_package_manifest.json",
+      "audio/manifest.json",
+      "export_manifest.json",
+      "final-video/01_P10ES01.mp4",
+      "final-video/composition_manifest.json",
+      "knowledge_references.json",
+      "locked_assets.json",
+      "preview_media.json",
+      "receipts.json",
+      "receipts/video/video_receipts.json",
+      "report.md",
+      "rough_cut_timeline.json",
+      "storyboard_table.tsv",
+      "video-report/summary.md",
+      "videos/video_manifest.json"
+    ],
+    "mediaFiles": [
+      {
+        "kind": "final_video_file",
+        "sourcePath": "video/P10ES01-version-b.mp4",
+        "path": "exports/current-project/final-video/01_P10ES01.mp4",
+        "sourceHash": "sha256:0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+        "shotId": "P10ES01",
+        "copyStatus": "copy_ready"
+      }
+    ],
+    "receipt": {
+      "schemaVersion": "export_delivery_receipt/0.1.0",
+      "receiptId": "export_delivery_footer_project_export_footer_action_export",
+      "status": "succeeded",
+      "projectId": "p10_e_packaged_project",
+      "projectRoot": "/tmp/vibe-director-p10-e-20260719-lqHliu/projects/p10-e-packaged-director-workflow",
+      "projectFactHash": "pv_53bee4bc",
+      "actionId": "footer_project_export",
+      "confirmationId": "footer_action_export",
+      "reviewBindings": [
+        {
+          "reviewReceiptId": "review_promotion_receipt_review_selection_receipt_review_selection_confirmation_review_pair_P10ES01_e7cf315e_b_001",
+          "reviewedAt": "2026-07-18T19:08:11.938Z",
+          "shotId": "P10ES01",
+          "outputPath": "video/P10ES01-version-b.mp4",
+          "sourceReceiptId": "p10e_local_return_receipt_b",
+          "outputHash": "sha256:0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+          "humanReviewed": true,
+          "promotionAuthorized": true
+        }
+      ],
+      "executionMode": "live",
+      "outputs": [
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/export_manifest.json",
+          "outputHash": "30f9fefbfe5075e44f05c681819890226638fe4fc4d7c5b3aec409a927944b55"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/Project.vibe",
+          "outputHash": "4e73ccc565a99218157df3af9b3fc41fd1e1ed719b0fc6bd9cf719fe71ac3024"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/locked_assets.json",
+          "outputHash": "50a943928992ab17796024e517be51bfe4cbd7f50d8993495627ba9f9d31d2e5"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/preview_media.json",
+          "outputHash": "676a8f7f3b87eb6cbd2febc0f01d19be92a2b910a4c0b55447f82e0e90b33332"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/videos/video_manifest.json",
+          "outputHash": "f2349fa2eb369416aef78de9b9e4334cedc9c64d64e8bc5bf6261b18e5472ead"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/receipts/video/video_receipts.json",
+          "outputHash": "c6f29f75fca699f1fbd9cc083e7a59cced07cd6b25f875e609422e7022af8e2f"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/video-report/summary.md",
+          "outputHash": "91e2a52c94e04823e7b80b257bff1ddfcf58bf8582a247ea916af1c32873ac24"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/final-video/composition_manifest.json",
+          "outputHash": "525efb78fc176237bbdbcf7f9f07e325b454dc4498b9bbae2c6872bc08664305"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/audio/manifest.json",
+          "outputHash": "0e148f7c48e6ba8f4607ec81ff92a3f8a4eb7a0638df6b1ead428db1f891ef78"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/receipts.json",
+          "outputHash": "1b6af0a286dc8501a97274cab85347c8835e5e70b7f104f27cad970f4ba5a701"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/knowledge_references.json",
+          "outputHash": "61da70f0944fd28493ef12e2892a6d9301703564d83507501cb01113a03fa8c9"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/report.md",
+          "outputHash": "2b69551606216db1b832a6148b78877c3cc0842a6c7ac6d54bcd781e24e5e30b"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/storyboard_table.tsv",
+          "outputHash": "53941477c126d696be6c665bade43feff2a51b946fae85492365be77781c227d"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/rough_cut_timeline.json",
+          "outputHash": "648a53e36531afdd40f7f5afb24f632c216d20a0b4f729e26bde569d7b5444fc"
+        },
+        {
+          "operation": "write_file",
+          "path": "exports/current-project/asset_package_manifest.json",
+          "outputHash": "bfd8541cbc15d9185c4123557d7ab72a97abf105a2530df64fc4bbd5fb385637"
+        },
+        {
+          "operation": "copy_file",
+          "path": "exports/current-project/final-video/01_P10ES01.mp4",
+          "sourcePath": "video/P10ES01-version-b.mp4",
+          "sourceHash": "sha256:0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+          "outputHash": "sha256:0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+          "size": 8892475
+        }
+      ],
+      "createdAt": "2026-07-18T19:08:13.131Z"
+    }
+  },
+  "hashes": {
+    "candidateA": "44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f",
+    "candidateB": "0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544",
+    "delivered": "0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544"
+  },
+  "stateMatrix": {
+    "candidateA": "needs_review_historical",
+    "candidateB": "needs_review_historical",
+    "winnerSelection": "selected",
+    "projectFact": "promoted",
+    "delivery": "delivered",
+    "dryRunGeneration": true,
+    "providerExecution": "not_verified"
+  },
+  "invariants": {
+    "providerCalls": 0,
+    "oneCurrentTaskAtEveryObservedStage": true,
+    "independentConfirmations": true,
+    "identitiesBoundEndToEnd": true,
+    "candidatesPreserved": true,
+    "onlyWinnerDelivered": true,
+    "portablePaths": true,
+    "atomicPublish": true,
+    "coldRestoreStable": true,
+    "originalUserProjectsTouched": false
+  }
+}

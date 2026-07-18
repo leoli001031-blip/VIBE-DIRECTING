@@ -437,7 +437,7 @@ async function startPackagedAcceptanceControl(win: electron.BrowserWindow) {
       for (const line of lines) {
         if (!line.trim()) continue;
         void (async () => {
-          let request: { id?: number; token?: string; method?: string; expression?: string };
+          let request: { id?: number; token?: string; method?: string; expression?: string; width?: number; height?: number };
           try {
             request = JSON.parse(line);
           } catch {
@@ -453,6 +453,22 @@ async function startPackagedAcceptanceControl(win: electron.BrowserWindow) {
             if (request.method === "evaluate" && typeof request.expression === "string") {
               const value = await win.webContents.executeJavaScript(request.expression, true);
               respond({ id, ok: true, value: value === undefined ? null : value });
+              return;
+            }
+            if (request.method === "set_bounds") {
+              const width = Number(request.width);
+              const height = Number(request.height);
+              if (!Number.isInteger(width) || !Number.isInteger(height) || width < 760 || width > 2400 || height < 600 || height > 1600) {
+                respond({ id, ok: false, error: "invalid_bounds" });
+                return;
+              }
+              win.setContentSize(width, height);
+              respond({ id, ok: true, value: win.getContentBounds() });
+              return;
+            }
+            if (request.method === "capture_page") {
+              const image = await win.webContents.capturePage();
+              respond({ id, ok: true, value: image.toPNG().toString("base64") });
               return;
             }
             if (request.method === "close") {
