@@ -12,7 +12,7 @@ import type {
 } from "./types";
 
 export const AGENT_VIDEO_PROVIDER_REGISTRY_SCHEMA_VERSION = "agent_video_provider_registry/0.1.0";
-export const AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION = "agent_video_generation_job_ledger/0.4.0";
+export const AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION = "agent_video_generation_job_ledger/0.5.0";
 export const AGENT_VIDEO_PIPELINE_PLAN_SCHEMA_VERSION = "agent_video_pipeline_plan/0.1.0";
 
 export type AgentVideoProviderCapabilityKind =
@@ -80,6 +80,20 @@ export interface AgentVideoGenerationJobStatusEvent {
   error?: string;
 }
 
+export interface AgentVideoGenerationReviewResult {
+  status: "needs_review";
+  projectId: string;
+  projectRoot: string;
+  projectFactHash: string;
+  jobId: string;
+  actionId: string;
+  shotId: string;
+  sourceReceiptId: string;
+  outputPath: string;
+  outputHash: string;
+  receivedAt: string;
+}
+
 export type AgentVideoPipelineStepId =
   | "new_video_draft"
   | "confirm_story"
@@ -108,6 +122,7 @@ export interface AgentVideoGenerationJob {
   prompt: string;
   inputAssets: string[];
   outputAssets: string[];
+  reviewResult?: AgentVideoGenerationReviewResult;
   externalTaskId?: string;
   error?: string;
   blockers: string[];
@@ -453,7 +468,132 @@ function appendJob(ledger: AgentVideoGenerationJobLedger, job: AgentVideoGenerat
 }
 
 function normalizeProjectRoot(value?: string) {
-  return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "") || undefined;
+  return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
+}
+
+function normalizedReviewOutputPath(value: unknown) {
+  return typeof value === "string"
+    ? value.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/private\/tmp(?=\/|$)/, "/tmp")
+    : "";
+}
+
+function reviewOutputPathInsideProject(projectRoot: string, outputPath: string) {
+  const root = normalizeProjectRoot(projectRoot);
+  const output = normalizedReviewOutputPath(outputPath);
+  if (!root || !output || /(?:^|\/)\.\.(?:\/|$)/.test(output)) return false;
+  if (/^(?:\/|[A-Za-z]:\/)/.test(output)) return output.startsWith(`${root}/`);
+  return !output.startsWith("~/") && !output.startsWith("//");
+}
+
+function reviewResultIdentity(result: AgentVideoGenerationReviewResult) {
+  return [
+    result.projectId,
+    normalizeProjectRoot(result.projectRoot),
+    result.projectFactHash,
+    result.jobId,
+    result.actionId,
+    result.shotId,
+    result.sourceReceiptId,
+    normalizedReviewOutputPath(result.outputPath),
+    result.outputHash.toLowerCase(),
+    result.status,
+  ].join("::");
+}
+
+export function validateAgentVideoGenerationReviewResult(
+  job: AgentVideoGenerationJob,
+  result: AgentVideoGenerationReviewResult | undefined = job.reviewResult,
+) {
+  if (!result) return ["Video review result is missing."];
+  const blockers = [
+    result.status === "needs_review" ? "" : "Video review result must remain needs_review.",
+    result.projectId === job.projectId ? "" : "Video review result projectId does not match its job.",
+    normalizeProjectRoot(result.projectRoot) === normalizeProjectRoot(job.projectRoot) ? "" : "Video review result projectRoot does not match its job.",
+    result.projectFactHash === job.projectFactHash ? "" : "Video review result projectFactHash does not match its job.",
+    result.jobId === job.jobId ? "" : "Video review result jobId does not match its job.",
+    result.actionId === job.actionId ? "" : "Video review result actionId does not match its job.",
+    typeof result.shotId === "string" && result.shotId.trim() ? "" : "Video review result shotId is required.",
+    typeof result.sourceReceiptId === "string" && result.sourceReceiptId.trim() ? "" : "Video review result sourceReceiptId is required.",
+    reviewOutputPathInsideProject(job.projectRoot, result.outputPath) ? "" : "Video review result outputPath must stay inside the project root.",
+    typeof result.outputHash === "string" && /^sha256:[a-f0-9]{64}$/i.test(result.outputHash.trim()) ? "" : "Video review result outputHash must be a SHA-256 value.",
+    typeof result.receivedAt === "string" && Number.isFinite(Date.parse(result.receivedAt)) ? "" : "Video review result receivedAt is invalid.",
+    typeof result.receivedAt === "string" && Number.isFinite(Date.parse(result.receivedAt)) && Date.parse(result.receivedAt) >= Date.parse(job.updatedAt)
+      ? ""
+      : "Video review result receivedAt cannot precede its job state.",
+  ].filter(Boolean);
+  return blockers;
+}
+
+export function agentVideoGenerationReviewResultMatchesJob(
+  job: AgentVideoGenerationJob | undefined,
+  result: AgentVideoGenerationReviewResult | undefined = job?.reviewResult,
+) {
+  return Boolean(
+    job
+      && job.kind === "video_submit"
+      && job.status === "succeeded"
+      && result
+      && validateAgentVideoGenerationReviewResult(job, result).length === 0
+      && job.outputAssets.some((path) => normalizedReviewOutputPath(path) === normalizedReviewOutputPath(result.outputPath)),
+  );
+}
+
+export function selectLatestAgentVideoGenerationReviewJob(
+  ledger: AgentVideoGenerationJobLedger | undefined,
+  identity?: { projectId: string; projectRoot?: string; projectFactHash: string },
+) {
+  return [...(ledger?.jobs || [])]
+    .filter((job) => (
+      agentVideoGenerationReviewResultMatchesJob(job)
+      && (!identity || (
+        job.projectId === identity.projectId
+        && normalizeProjectRoot(job.projectRoot) === normalizeProjectRoot(identity.projectRoot)
+        && job.projectFactHash === identity.projectFactHash
+      ))
+    ))
+    .sort((left, right) => Date.parse(right.reviewResult!.receivedAt) - Date.parse(left.reviewResult!.receivedAt))[0];
+}
+
+export function recordAgentVideoGenerationJobReviewResult(input: {
+  ledger: AgentVideoGenerationJobLedger;
+  jobId: string;
+  result: AgentVideoGenerationReviewResult;
+}): { ok: boolean; ledger: AgentVideoGenerationJobLedger; job?: AgentVideoGenerationJob; blockers: string[] } {
+  const job = input.ledger.jobs.find((item) => item.jobId === input.jobId);
+  if (!job) return { ok: false, ledger: input.ledger, blockers: [`Job not found: ${input.jobId}`] };
+  const blockers = [
+    jobMatchesLedgerBinding(job, input.ledger) ? "" : "Video review result job does not match its ledger binding.",
+    job.kind === "video_submit" ? "" : "Only a video job can record a video review result.",
+    job.status === "running" || job.status === "succeeded" ? "" : "A video review result requires a running or succeeded job.",
+    ...validateAgentVideoGenerationReviewResult(job, input.result),
+  ].filter(Boolean);
+  if (blockers.length) return { ok: false, ledger: input.ledger, job, blockers };
+  if (job.reviewResult) {
+    if (reviewResultIdentity(job.reviewResult) === reviewResultIdentity(input.result)) {
+      return { ok: true, ledger: input.ledger, job, blockers: [] };
+    }
+    return { ok: false, ledger: input.ledger, job, blockers: ["Video job already has a different review result."] };
+  }
+  const nextJob: AgentVideoGenerationJob = {
+    ...job,
+    status: "succeeded",
+    outputAssets: uniqueInOrder([...job.outputAssets, input.result.outputPath]),
+    reviewResult: input.result,
+    statusHistory: job.status === "running"
+      ? [...job.statusHistory, { status: "succeeded", at: input.result.receivedAt }]
+      : job.statusHistory,
+    updatedAt: input.result.receivedAt,
+  };
+  return {
+    ok: true,
+    ledger: {
+      ...input.ledger,
+      updatedAt: input.result.receivedAt,
+      jobs: input.ledger.jobs.map((item) => item.jobId === job.jobId ? nextJob : item),
+    },
+    job: nextJob,
+    blockers: [],
+  };
 }
 
 function jobMatchesLedgerBinding(job: AgentVideoGenerationJob, ledger: AgentVideoGenerationJobLedger) {

@@ -77,6 +77,15 @@ export interface ProjectAgentStagedPlanRestoreResult {
   errors: string[];
 }
 
+export function projectAgentStagedPlanDraftForProjection(
+  result: ProjectAgentStagedPlanRestoreResult,
+): ProjectAgentStagedPlanDraft | undefined {
+  if (result.ok) return result.draft;
+  return result.status === "cleared" && result.draft?.status === "cleared"
+    ? result.draft
+    : undefined;
+}
+
 export interface SaveProjectAgentStagedPlanDraftInput {
   project: ProjectVibeDocument;
   projectRoot?: string;
@@ -367,14 +376,6 @@ export function restoreProjectAgentStagedPlanDraft(
     return { ok: false, status: "invalid", path, errors: parsed.errors };
   }
   const draft = parsed.draft;
-  if (draft.status === "cleared") {
-    return { ok: false, status: "cleared", path, draft, errors: [] };
-  }
-  const nowMs = input.now instanceof Date ? input.now.getTime() : Date.parse(input.now || new Date().toISOString());
-  const expiresAtMs = Date.parse(draft.expiresAt);
-  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) {
-    return { ok: false, status: "expired", path, draft, errors: ["Agent staged plan has expired."] };
-  }
   if (draft.projectId !== input.project.manifest.projectId) {
     return { ok: false, status: "project_mismatch", path, draft, errors: ["Agent staged plan belongs to another project."] };
   }
@@ -386,6 +387,14 @@ export function restoreProjectAgentStagedPlanDraft(
   const sourceFactHash = hashProjectVibeFacts(input.project);
   if (draft.sourceFactHash !== sourceFactHash) {
     return { ok: false, status: "fact_hash_mismatch", path, draft, errors: ["Project.vibe changed after the Agent staged this plan."] };
+  }
+  if (draft.status === "cleared") {
+    return { ok: false, status: "cleared", path, draft, errors: [] };
+  }
+  const nowMs = input.now instanceof Date ? input.now.getTime() : Date.parse(input.now || new Date().toISOString());
+  const expiresAtMs = Date.parse(draft.expiresAt);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) {
+    return { ok: false, status: "expired", path, draft, errors: ["Agent staged plan has expired."] };
   }
   const actionProjectRoot = normalizeProjectRoot(draft.action?.sourceContext.projectRoot);
   if (expectedProjectRoot !== actionProjectRoot) {

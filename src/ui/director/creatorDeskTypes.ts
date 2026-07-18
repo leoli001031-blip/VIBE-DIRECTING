@@ -52,6 +52,9 @@ export type CreatorReviewTrayItem = {
   mediaPath?: string;
   sourceReceiptId?: string;
   outputHash?: string;
+  jobId?: string;
+  actionId?: string;
+  projectFactHash?: string;
   promptText?: string;
   promptPath?: string;
   promptHash?: string;

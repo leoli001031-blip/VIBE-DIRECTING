@@ -1,8 +1,9 @@
-import type {
-  AgentVideoGenerationJob,
-  AgentVideoGenerationJobLedger,
-  AgentVideoPipelinePlan,
-  AgentVideoPipelineStepId,
+import {
+  selectLatestAgentVideoGenerationReviewJob,
+  type AgentVideoGenerationJob,
+  type AgentVideoGenerationJobLedger,
+  type AgentVideoPipelinePlan,
+  type AgentVideoPipelineStepId,
 } from "./agentVideoProductionContract";
 import type {
   ProjectAgentConfirmationKind,
@@ -488,14 +489,26 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
 
   const videoReviewCount = Math.max(0, Math.floor(input.videoReviewCount || 0));
   if (videoReviewCount > 0) {
+    const reviewJob = selectLatestAgentVideoGenerationReviewJob(input.jobLedger, input.currentProjectId && input.currentProjectFactHash
+      ? {
+        projectId: input.currentProjectId,
+        projectRoot: input.currentProjectRoot,
+        projectFactHash: input.currentProjectFactHash,
+      }
+      : undefined);
     return buildProjection({
       source: "project_observation",
       step: "submit_video",
       label: "复核视频",
       requiresConfirmation: false,
       effect: "none",
+      actionId: reviewJob?.actionId,
+      jobId: reviewJob?.jobId,
       blockers: [],
-      facts: factsForInput(input, [{ label: "待复核", value: `${videoReviewCount} 项` }]),
+      facts: factsForInput(input, [
+        { label: "待复核", value: `${videoReviewCount} 项` },
+        reviewJob ? { label: "任务", value: reviewJob.jobId } : undefined,
+      ].filter((fact): fact is AgentCurrentTaskFact => Boolean(fact))),
     });
   }
 

@@ -1,0 +1,212 @@
+{
+  "schemaVersion": "p10_a_packaged_ux_state_inventory/0.1.0",
+  "capturedAt": "2026-07-16",
+  "status": "blocked",
+  "app": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app",
+  "freshAuditRoot": "/tmp/vibe-director-p10-a-ux.R7YF5o",
+  "captureMethod": "Computer Use against the packaged Electron app",
+  "providerCalls": 0,
+  "states": [
+    {
+      "id": "fresh_start",
+      "screenshot": "01-fresh-start.png",
+      "result": "observed",
+      "projectionObserved": {
+        "step": "choose_save_location",
+        "label": "选择保存位置",
+        "requiresConfirmation": true,
+        "effect": "state_only"
+      },
+      "axMetrics": {
+        "lines": 112,
+        "buttons": 14,
+        "disabledControls": 6,
+        "chooseSaveLocationOccurrences": 8
+      }
+    },
+    {
+      "id": "draft_input_before_send",
+      "screenshot": "02-composer-filled.png",
+      "result": "observed",
+      "projectionObserved": {
+        "source": "new_video_draft",
+        "step": "draft_story",
+        "label": "整理新视频草案",
+        "requiresConfirmation": false,
+        "effect": "none"
+      },
+      "issue": "Typing without sending changes the entire workspace to an active-looking planning state."
+    },
+    {
+      "id": "draft_confirmation",
+      "screenshot": "03-draft-confirmation.png",
+      "result": "observed",
+      "projectionObserved": {
+        "source": "new_video_draft",
+        "step": "confirm_story",
+        "label": "确认这版故事",
+        "requiresConfirmation": true,
+        "effect": "none"
+      },
+      "axMetrics": {
+        "lines": 172,
+        "buttons": 18,
+        "disabledControls": 6,
+        "confirmStoryOccurrences": 9
+      }
+    },
+    {
+      "id": "story_confirmed_unsaved",
+      "screenshot": "04-story-confirmed-save-location.png",
+      "result": "inconsistent",
+      "projectionExpected": {
+        "step": "choose_save_location",
+        "label": "选择保存位置",
+        "requiresConfirmation": true,
+        "effect": "state_only"
+      },
+      "projectionVisibleInRightRail": {
+        "step": "prepare_references",
+        "label": "复核参考",
+        "requiresConfirmation": false,
+        "effect": "none"
+      },
+      "axMetrics": {
+        "lines": 156,
+        "buttons": 16,
+        "chooseSaveLocationOccurrences": 15
+      },
+      "issue": "The center asks for save location while the right rail calls reference review the current task."
+    },
+    {
+      "id": "save_location_phrase",
+      "screenshot": "05-save-location-intent-misrouted.png",
+      "result": "blocked",
+      "issue": "Typing the exact visible task text 选择保存位置 is classified as a current-content edit and selects shot 1-1; the actual folder action is only in the top project menu."
+    },
+    {
+      "id": "save_location_wrong_parent",
+      "screenshot": "06-save-location-state-loss.png",
+      "result": "blocked",
+      "issue": "The picker opens at a remembered unrelated folder and the Open action replaces the confirmed two-shot draft with an empty zero-shot project."
+    },
+    {
+      "id": "preselected_root_confirm_story",
+      "screenshot": "07-confirmation-vanished-state-split.png",
+      "result": "blocked",
+      "projectEvidence": {
+        "projectId": "p10_a_main_flow_1yf1vi",
+        "projectRoot": "/tmp/vibe-director-p10-a-ux.R7YF5o/projects/p10-a-main-flow",
+        "projectFactHash": "pv_a72c3648",
+        "shotCount": 0,
+        "confirmationId": "new_video_confirmation_20260716t095203389z"
+      },
+      "timelineEvidence": {
+        "phase": "draft_confirmed",
+        "claimedShotCount": 2
+      },
+      "issue": "The timeline claims the draft was confirmed and written, but project.vibe remains empty and the confirmation card disappears."
+    },
+    {
+      "id": "cold_restart_after_confirm",
+      "screenshot": "08-cold-restart-empty-after-confirm.png",
+      "result": "blocked",
+      "issue": "Cold start restores the empty project. The old confirmation does not revive, but the right rail says 正在整理 while no work is running."
+    },
+    {
+      "id": "terminal_export_restore",
+      "screenshot": "09-terminal-export-restores-stale-confirmation.png",
+      "result": "blocked",
+      "projectionExpected": {
+        "step": "idle",
+        "requiresConfirmation": false,
+        "effect": "none",
+        "completion": {
+          "step": "export",
+          "executionMode": "live",
+          "actionId": "agent_action_2026_07_15t17_06_13_383z_prepare_export",
+          "completedAt": "2026-07-15T17:09:22.197Z"
+        }
+      },
+      "projectionVisibleInApp": {
+        "source": "timeline_confirmation",
+        "step": "export",
+        "label": "导出交付包",
+        "requiresConfirmation": true,
+        "effect": "local_export"
+      },
+      "projectEvidence": {
+        "projectId": "current_project",
+        "projectRoot": "/tmp/vibe-director-p9-rc-20260716-BgDWNG/projects/p9-fresh-export",
+        "projectFactHash": "pv_17dd191f",
+        "shotCount": 1
+      },
+      "terminalJob": {
+        "jobId": "agent_video_job_minimal_agent_current_task_export_001",
+        "actionId": "agent_action_2026_07_15t17_06_13_383z_prepare_export",
+        "confirmationId": "agent_tool_handoff_2026_07_15t17_09_22_031z_agent_action_2026_07_15t17_06_13_383z_prepare_export",
+        "status": "succeeded",
+        "executionMode": "live",
+        "providerCalled": false,
+        "outputCount": 16
+      },
+      "staleConfirmation": {
+        "id": "agent_confirmation_20260715t170613383z",
+        "status": "waiting",
+        "projectFactHash": "pv_cc4049f3"
+      }
+    },
+    {
+      "id": "delivery_page",
+      "screenshot": "10-delivery-page-stale-confirmation.png",
+      "result": "blocked",
+      "issue": "The local export exists with 16 receipt-bound outputs, but the page says 14 files, package not ready, and asks for another export confirmation."
+    },
+    {
+      "id": "reference_workspace",
+      "screenshot": "11-reference-state-contradictions.png",
+      "result": "inconsistent",
+      "axMetrics": {
+        "lines": 244,
+        "buttons": 24,
+        "containers": 50,
+        "referenceOccurrences": 56
+      },
+      "issue": "The same screen says 缺 3 张, 1/6 张可看, 6 张参考图, 参考已齐, and 已锁定."
+    },
+    {
+      "id": "video_workspace",
+      "screenshot": "12-video-preview-with-stale-task.png",
+      "result": "observed_with_stale_task",
+      "issue": "The real five-second video is visible, but the current task remains a stale export confirmation and no review authority state is obvious."
+    },
+    {
+      "id": "skills_expanded",
+      "screenshot": "13-skills-expanded-density.png",
+      "result": "observed",
+      "axMetrics": {
+        "lines": 178,
+        "buttons": 20,
+        "containers": 39
+      },
+      "issue": "Skill recommendation, save action, current task, work mode, conversation, and composer compete in one narrow rail."
+    },
+    {
+      "id": "constrained_width",
+      "screenshot": "14-constrained-width-skills-and-task.png",
+      "result": "observed",
+      "viewport": {
+        "width": 998,
+        "height": 763
+      },
+      "accessibilityRisk": "The collapsed project navigation exposes four unnamed AX buttons, while long output and task facts are truncated."
+    }
+  ],
+  "unverifiedBecauseOfBlocker": [
+    "fresh-chain reference confirmation and execution",
+    "fresh-chain video confirmation and execution",
+    "needs_review decision controls",
+    "valid export confirmation followed by terminal UI completion",
+    "packaged failure and cancellation screens"
+  ]
+}

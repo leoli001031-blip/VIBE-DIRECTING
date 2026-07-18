@@ -9,6 +9,7 @@ import {
   migrateProjectAgentStagedPlanDraftToProjectRoot,
   openProjectAgentStagedPlanDraft,
   parseProjectVibeText,
+  projectAgentStagedPlanDraftForProjection,
   projectVibeFileName,
   restoreProjectAgentStagedPlanDraft,
   saveProjectAgentStagedPlanDraft,
@@ -299,6 +300,21 @@ try {
     now: "2026-05-31T07:00:01.000Z",
   });
   assert(clearedRestore.status === "cleared", "cleared marker should prevent stale plan recovery");
+  assert(
+    projectAgentStagedPlanDraftForProjection(clearedRestore)?.status === "cleared",
+    "a current-fact cleared marker should remain available to suppress older UI confirmations",
+  );
+  const staleClearedRestore = await openProjectAgentStagedPlanDraft(target, {
+    project: changedProject,
+    projectRoot,
+    now: "2026-05-31T07:00:01.000Z",
+  });
+  assert(staleClearedRestore.status === "fact_hash_mismatch", "a cleared marker from older project facts must not suppress current confirmations");
+  assert(!projectAgentStagedPlanDraftForProjection(staleClearedRestore), "a stale cleared marker must not enter the current-task projection");
+  assert(
+    !projectAgentStagedPlanDraftForProjection({ ...directRestore, ok: false, status: "cleared", draft }),
+    "a synthetic clear result for an active superseded draft must not revive that draft in the UI",
+  );
 } finally {
   delete (globalThis as { window?: unknown }).window;
 }

@@ -11107,7 +11107,8 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .project-status-summary.waiting,
 .project-status-summary.blocked {
   display: grid;
-  grid-template-columns: minmax(132px, 0.72fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(132px, 180px) minmax(0, 1fr);
+  align-items: center;
   gap: 8px 20px;
   border: 0;
   border-radius: 0;
@@ -11155,11 +11156,11 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 }
 
 .project-status-summary-facts {
-  grid-column: 1 / -1;
+  grid-column: auto;
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 16px;
-  padding-top: 5px;
+  padding-top: 0;
 }
 
 .project-status-summary-facts span {
@@ -11535,6 +11536,575 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   color: var(--signal-blocked);
 }
 
+.director-agent-rail .minimal-agent-panel:has(.minimal-agent-focused-turn) .signal-current-task {
+  display: none;
+}
+
+.minimal-agent-focused-turn {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 13px;
+  border-top: 1px solid var(--signal-line);
+  border-bottom: 1px solid var(--signal-line);
+  color: var(--signal-muted);
+  padding: 14px 0 16px;
+}
+
+.minimal-agent-focused-turn-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.minimal-agent-focused-turn-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.minimal-agent-focused-turn-head span,
+.minimal-agent-proposal-meta span,
+.minimal-agent-proposal-changes span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-focused-turn-head strong {
+  color: var(--signal-ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.minimal-agent-focused-turn-head > em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 4px;
+  background: var(--signal-running-soft);
+  color: var(--signal-running);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.minimal-agent-focused-turn > p {
+  margin: 0;
+  color: var(--signal-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.minimal-agent-focused-turn-quote {
+  border-left: 2px solid var(--signal-line-strong);
+  color: var(--signal-ink) !important;
+  padding-left: 10px;
+}
+
+.minimal-agent-clarification-options,
+.minimal-agent-proposal-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.minimal-agent-clarification-options button {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 76px;
+  border: 1px solid var(--signal-line-strong);
+  border-radius: 4px;
+  background: var(--signal-surface);
+  color: var(--signal-ink);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.minimal-agent-clarification-options button:hover,
+.minimal-agent-clarification-options button:focus-visible {
+  border-color: var(--signal-running);
+  background: var(--signal-running-soft);
+}
+
+.minimal-agent-clarification-options button strong {
+  font-size: 13px;
+}
+
+.minimal-agent-clarification-options button small {
+  color: var(--signal-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.minimal-agent-clarification-options button:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
+.minimal-agent-focused-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--signal-running);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.minimal-agent-focused-boundary {
+  color: var(--signal-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.minimal-agent-proposal-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--signal-line);
+  border-bottom: 1px solid var(--signal-line);
+}
+
+.minimal-agent-proposal-meta small {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  padding: 7px 0;
+}
+
+.minimal-agent-proposal-meta small + small {
+  border-left: 1px solid var(--signal-line);
+  padding-left: 9px;
+}
+
+.minimal-agent-proposal-meta strong {
+  overflow: hidden;
+  color: var(--signal-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-agent-proposal-changes {
+  display: grid;
+  border-top: 1px solid var(--signal-line);
+}
+
+.minimal-agent-proposal-changes > small {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 5px 8px;
+  border-bottom: 1px solid var(--signal-line);
+  padding: 8px 0;
+}
+
+.minimal-agent-proposal-changes strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.minimal-agent-proposal-changes em {
+  grid-column: 2;
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.minimal-agent-proposal-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--signal-running);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.minimal-agent-proposal-actions button.secondary {
+  border-color: var(--signal-line-strong);
+  background: var(--signal-surface);
+  color: var(--signal-ink);
+}
+
+.minimal-agent-proposal-actions button:disabled {
+  border-color: var(--signal-line);
+  background: var(--signal-surface-subtle);
+  color: #6e7973;
+  cursor: not-allowed;
+}
+
+.minimal-agent-paid-confirmation-turn.blocked .minimal-agent-focused-turn-head > em {
+  background: var(--signal-blocked-soft);
+  color: var(--signal-blocked);
+}
+
+.minimal-agent-confirmation-identity,
+.minimal-agent-running-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--signal-line);
+  border-bottom: 1px solid var(--signal-line);
+}
+
+.minimal-agent-confirmation-identity small,
+.minimal-agent-running-facts small {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  padding: 7px 0;
+}
+
+.minimal-agent-confirmation-identity small + small,
+.minimal-agent-running-facts small:nth-child(even) {
+  border-left: 1px solid var(--signal-line);
+  padding-left: 9px;
+}
+
+.minimal-agent-running-facts small:nth-child(n + 3) {
+  border-top: 1px solid var(--signal-line);
+}
+
+.minimal-agent-confirmation-identity span,
+.minimal-agent-running-facts span,
+.minimal-agent-confirmation-facts span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-confirmation-identity strong,
+.minimal-agent-running-facts strong,
+.minimal-agent-confirmation-facts strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.minimal-agent-confirmation-facts {
+  display: grid;
+  border-top: 1px solid var(--signal-line);
+}
+
+.minimal-agent-confirmation-facts small {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+  border-bottom: 1px solid var(--signal-line);
+  padding: 8px 0;
+}
+
+.minimal-agent-confirmation-risk,
+.minimal-agent-running-policy {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-left: 3px solid var(--signal-running);
+  background: var(--signal-running-soft);
+  color: var(--signal-running);
+  padding: 9px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.minimal-agent-confirmation-risk.live {
+  border-left-color: var(--signal-warning);
+  background: var(--signal-warning-soft);
+  color: var(--signal-warning);
+}
+
+.minimal-agent-confirmation-risk svg,
+.minimal-agent-running-policy svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.minimal-agent-confirmation-actions,
+.minimal-agent-running-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.minimal-agent-confirmation-actions button,
+.minimal-agent-running-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--signal-running);
+  color: #ffffff;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.minimal-agent-confirmation-actions button.secondary,
+.minimal-agent-running-actions button.secondary {
+  border-color: var(--signal-line-strong);
+  background: var(--signal-surface);
+  color: var(--signal-ink);
+}
+
+.minimal-agent-confirmation-actions button:disabled,
+.minimal-agent-running-actions button:disabled {
+  border-color: var(--signal-line);
+  background: var(--signal-surface-subtle);
+  color: #6e7973;
+  cursor: not-allowed;
+}
+
+.minimal-agent-running-confirmed {
+  overflow: hidden;
+  border-left: 2px solid var(--signal-success);
+  color: var(--signal-muted);
+  padding-left: 9px;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-agent-running-progress {
+  display: grid;
+  gap: 0;
+}
+
+.minimal-agent-running-progress small {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  color: var(--signal-muted);
+  font-size: 12px;
+}
+
+.minimal-agent-running-progress small:not(:last-child)::after {
+  position: absolute;
+  top: 25px;
+  bottom: -9px;
+  left: 7px;
+  width: 1px;
+  background: var(--signal-line-strong);
+  content: "";
+}
+
+.minimal-agent-running-progress small.complete {
+  color: var(--signal-success);
+}
+
+.minimal-agent-running-progress small.current {
+  color: var(--signal-running);
+}
+
+.minimal-agent-running-progress small.pending {
+  color: var(--signal-muted);
+}
+
+.minimal-agent-running-progress strong {
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.minimal-agent-review-turn {
+  color: var(--signal-muted);
+}
+
+.minimal-agent-review-turn-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.minimal-agent-review-turn-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.minimal-agent-review-turn-head span,
+.minimal-agent-review-facts span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-review-turn-head strong {
+  color: var(--signal-ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.minimal-agent-review-turn-head > em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 4px;
+  background: var(--signal-warning-soft);
+  color: var(--signal-warning);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.minimal-agent-review-turn.blocked .minimal-agent-review-turn-head > em {
+  background: var(--signal-blocked-soft);
+  color: var(--signal-blocked);
+}
+
+.minimal-agent-review-turn > p {
+  margin: 0;
+  color: var(--signal-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.minimal-agent-review-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--signal-line);
+}
+
+.minimal-agent-review-facts small {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  border-bottom: 1px solid var(--signal-line);
+  padding: 7px 0;
+}
+
+.minimal-agent-review-facts small:nth-child(odd) {
+  padding-right: 9px;
+}
+
+.minimal-agent-review-facts small:nth-child(even) {
+  border-left: 1px solid var(--signal-line);
+  padding-left: 9px;
+}
+
+.minimal-agent-review-facts strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-agent-review-blocker {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-left: 3px solid var(--signal-blocked);
+  background: var(--signal-blocked-soft);
+  color: var(--signal-blocked);
+  padding: 9px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.minimal-agent-review-blocker svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.minimal-agent-review-skill,
+.minimal-agent-review-boundary,
+.minimal-agent-review-error {
+  color: var(--signal-muted) !important;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.minimal-agent-review-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.minimal-agent-review-actions button,
+.minimal-agent-review-promotion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--signal-running);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.minimal-agent-review-actions button.secondary {
+  border-color: var(--signal-line-strong);
+  background: var(--signal-surface);
+  color: var(--signal-ink);
+}
+
+.minimal-agent-review-actions button:disabled,
+.minimal-agent-review-promotion:disabled {
+  border-color: var(--signal-line);
+  background: var(--signal-surface-subtle);
+  color: #6e7973;
+  cursor: not-allowed;
+}
+
+.minimal-agent-review-promotion {
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.minimal-agent-review-promotion small {
+  min-height: 0;
+  margin-left: auto;
+  color: inherit;
+  font-size: 10px;
+}
+
+.minimal-agent-review-error {
+  color: var(--signal-blocked) !important;
+}
+
 .director-agent-rail .minimal-agent-skill-stack,
 .director-agent-rail .minimal-agent-advanced-controls {
   flex: 0 0 auto;
@@ -11586,6 +12156,55 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   border-bottom: 1px solid var(--signal-line);
   color: var(--signal-muted);
   padding: 8px 0;
+}
+
+.director-agent-rail .minimal-agent-thread.is-focused-history {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.director-agent-rail .minimal-agent-thread.is-focused-history:has(.minimal-agent-thread-history-toggle[aria-expanded="true"]) {
+  flex: 1 1 160px;
+  min-height: 120px;
+  overflow: auto;
+}
+
+.minimal-agent-thread-history-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-bottom: 1px solid var(--signal-line);
+  background: var(--signal-surface);
+  color: var(--signal-muted);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.minimal-agent-thread-history-toggle span {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minimal-agent-thread-history-toggle small {
+  min-height: 0;
+  font-size: 10px;
+}
+
+.minimal-agent-thread-history-toggle svg {
+  transition: transform 160ms ease;
+}
+
+.minimal-agent-thread-history-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
 }
 
 .minimal-agent-message,
@@ -11891,7 +12510,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   .project-status-summary.working,
   .project-status-summary.waiting,
   .project-status-summary.blocked {
-    grid-template-columns: minmax(150px, 0.72fr) minmax(210px, 1fr) auto;
+    grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
     align-items: center;
   }
 
@@ -11902,7 +12521,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   }
 }
 
-@media (max-width: 1099px) {
+@media (max-width: 1180px) {
   .minimal-topbar,
   .preview-shell .minimal-topbar {
     grid-template-columns: minmax(260px, 1fr) auto auto;

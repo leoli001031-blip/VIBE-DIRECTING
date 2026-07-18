@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "p10_a1_state_reliability_acceptance/0.1.0",
+  "capturedAt": "2026-07-16",
+  "status": "passed",
+  "providerCalls": 0,
+  "uiChanges": 0,
+  "frontendDevServerStarted": false,
+  "packagedApp": "release/mac-arm64/Vibe Director Studio.app",
+  "preselectedLocalProject": {
+    "root": "/tmp/vibe-director-p10-a1-bHYlJX",
+    "projectRoot": "/tmp/vibe-director-p10-a1-bHYlJX/projects/p10-a1-main-flow",
+    "initialShotCount": 0,
+    "confirmedShotCount": 2,
+    "coldStartShotCount": 2,
+    "shotOrder": [
+      "shot_storyboard_1-1",
+      "shot_storyboard_1-2"
+    ],
+    "projectVibeSha256": "416ebd87d2f44f8b3c7e39f3b4b8f9c6c9bda6798cecbcdd8ce1fbcefb63827c",
+    "staleStoryConfirmationRestored": false,
+    "result": "passed"
+  },
+  "terminalExportRestore": {
+    "profileRoot": "/tmp/vibe-director-p10-a1-export-RtI28a",
+    "projectRoot": "/tmp/vibe-director-p9-rc-20260716-BgDWNG/projects/p9-fresh-export",
+    "projectId": "current_project",
+    "projectFactHash": "pv_17dd191f",
+    "currentTaskLabel": "继续描述想法",
+    "requiresConfirmation": false,
+    "staleExportConfirmationRestored": false,
+    "deliveryStatus": "交付包已生成",
+    "terminalJobId": "agent_video_job_minimal_agent_current_task_export_001",
+    "terminalJobStatus": "succeeded",
+    "executionMode": "live",
+    "providerCalled": false,
+    "outputCount": 16,
+    "clearedMarker": {
+      "status": "cleared",
+      "clearedAt": "2026-07-15T17:23:13.359Z",
+      "sourceFactHash": "pv_17dd191f",
+      "sha256BeforeLaunch": "49ad73ff4feddc5963b7c35207d50c205307731f721d04c41c9e1390ab185d0f",
+      "sha256AfterLaunch": "49ad73ff4feddc5963b7c35207d50c205307731f721d04c41c9e1390ab185d0f"
+    },
+    "result": "passed"
+  },
+  "remainingP10BObservations": [
+    "delivery summary says 14 files while execution history reports 16 outputs",
+    "reference availability and review vocabulary remain dense"
+  ]
+}

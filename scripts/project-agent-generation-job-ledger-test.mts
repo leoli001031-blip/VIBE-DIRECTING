@@ -7,6 +7,7 @@ import {
   buildAgentVideoPipelinePlan,
   createAgentVideoGenerationJobLedger,
   planAgentVideoProductionAction,
+  recordAgentVideoGenerationJobReviewResult,
   transitionAgentVideoGenerationJob,
 } from "../src/core/agentVideoProductionContract.ts";
 import {
@@ -159,6 +160,59 @@ const running = transitionAgentVideoGenerationJob({
 });
 assert(running.ok && running.job?.status === "running", "confirmed job should reach running before simulated exit");
 
+const reviewOutputPath = `${projectRoot}/video/P6S01.mp4`;
+const reviewOutputHash = `sha256:${"7".repeat(64)}`;
+const returnedForReview = recordAgentVideoGenerationJobReviewResult({
+  ledger: running.ledger,
+  jobId: staged.job.jobId,
+  result: {
+    status: "needs_review",
+    projectId,
+    projectRoot,
+    projectFactHash,
+    jobId: staged.job.jobId,
+    actionId: staged.job.actionId,
+    shotId: "P6S01",
+    sourceReceiptId: "seedance_submit_p10d4_p6s01",
+    outputPath: reviewOutputPath,
+    outputHash: reviewOutputHash,
+    receivedAt: "2026-07-11T00:00:05.000Z",
+  },
+});
+assert(returnedForReview.ok && returnedForReview.job?.status === "succeeded", "a running video job should accept one hash-bound needs_review result");
+assert(returnedForReview.job?.reviewResult?.jobId === staged.job.jobId, "the review result must remain bound to its exact job");
+assert(returnedForReview.job?.reviewResult?.actionId === staged.job.actionId, "the review result must remain bound to its exact action");
+assert(returnedForReview.job?.reviewResult?.projectFactHash === projectFactHash, "the review result must remain bound to current project facts");
+assert(returnedForReview.job?.outputAssets.includes(reviewOutputPath), "the returned output path must be recorded on the terminal job");
+
+const repeatedReviewResult = recordAgentVideoGenerationJobReviewResult({
+  ledger: returnedForReview.ledger,
+  jobId: staged.job.jobId,
+  result: returnedForReview.job!.reviewResult!,
+});
+assert(repeatedReviewResult.ok, "replaying the exact same result should be idempotent");
+assert(repeatedReviewResult.job?.statusHistory.length === returnedForReview.job?.statusHistory.length, "idempotent result recovery must not append another terminal history event");
+
+const conflictingReviewResult = recordAgentVideoGenerationJobReviewResult({
+  ledger: returnedForReview.ledger,
+  jobId: staged.job.jobId,
+  result: {
+    ...returnedForReview.job!.reviewResult!,
+    outputHash: `sha256:${"8".repeat(64)}`,
+  },
+});
+assert(!conflictingReviewResult.ok, "a second result with a different output hash must fail closed");
+
+const escapedReviewResult = recordAgentVideoGenerationJobReviewResult({
+  ledger: running.ledger,
+  jobId: staged.job.jobId,
+  result: {
+    ...returnedForReview.job!.reviewResult!,
+    outputPath: "/tmp/outside-project/P6S01.mp4",
+  },
+});
+assert(!escapedReviewResult.ok, "a returned output outside the bound project root must fail closed");
+
 const browserStorage = createLocalStorageShim();
 installWindowShim({ localStorage: browserStorage.storage });
 
@@ -220,6 +274,18 @@ try {
   assert(terminalProjection.source === "pipeline_plan", "terminal jobs must yield to the pipeline step");
   assert(!terminalProjection.jobId, "terminal jobs must not restore as the current task");
 
+  const reviewProjection = buildAgentCurrentTaskProjection({
+    pipelinePlan: plan,
+    jobLedger: returnedForReview.ledger,
+    currentProjectId: projectId,
+    currentProjectRoot: projectRoot,
+    currentProjectFactHash: projectFactHash,
+    videoReviewCount: 1,
+  });
+  assert(reviewProjection.source === "project_observation" && reviewProjection.label === "复核视频", "a pending video review should outrank a terminal pipeline fallback");
+  assert(reviewProjection.jobId === staged.job.jobId, "review projection must retain the exact result job id");
+  assert(reviewProjection.actionId === staged.job.actionId, "review projection must retain the exact result action id");
+
   const corruptedKey = `test:agent-generation-job-ledger:${projectAgentGenerationJobLedgerPath}`;
   browserStorage.values.set(corruptedKey, "{not-json");
   const corrupted = await openProjectAgentGenerationJobLedger(target, identity);
@@ -253,6 +319,15 @@ try {
   }, identity);
   assert(malformedExternalTaskId.status === "invalid" && !malformedExternalTaskId.ok, "non-string external task ids must fail sidecar validation");
 
+  const malformedReviewResult = restoreProjectAgentGenerationJobLedger({
+    ...returnedForReview.ledger,
+    jobs: returnedForReview.ledger.jobs.map((job) => ({
+      ...job,
+      reviewResult: job.reviewResult ? { ...job.reviewResult, projectFactHash: "older-facts" } : undefined,
+    })),
+  }, identity);
+  assert(malformedReviewResult.status === "invalid" && !malformedReviewResult.ok, "a persisted review result with stale fact identity must fail schema validation");
+
   const legacy = restoreProjectAgentGenerationJobLedger({
     ...running.ledger,
     schemaVersion: "agent_video_generation_job_ledger/0.2.0",
@@ -262,7 +337,7 @@ try {
       providerCalled: undefined,
     })),
   }, identity);
-  assert(legacy.ok && legacy.ledger?.schemaVersion === "agent_video_generation_job_ledger/0.4.0", "0.2 ledgers must migrate to the operation-aware P3 schema");
+  assert(legacy.ok && legacy.ledger?.schemaVersion === "agent_video_generation_job_ledger/0.5.0", "0.2 ledgers must migrate to the review-result-aware schema");
   assert(legacy.ledger?.jobs.every((job) => job.executionMode === "dry_run" && job.providerCalled === false && job.operation === "execute"), "legacy P2 jobs must migrate conservatively as provider-free execute dry runs");
 
   const legacyQuery = restoreProjectAgentGenerationJobLedger({
@@ -275,6 +350,12 @@ try {
     })),
   }, identity);
   assert(legacyQuery.ok && legacyQuery.ledger?.jobs.every((job) => job.operation === "query"), "0.3 query jobs must migrate without becoming submit jobs");
+
+  const legacyP3 = restoreProjectAgentGenerationJobLedger({
+    ...running.ledger,
+    schemaVersion: "agent_video_generation_job_ledger/0.4.0",
+  }, identity);
+  assert(legacyP3.ok && legacyP3.ledger?.schemaVersion === "agent_video_generation_job_ledger/0.5.0", "0.4 ledgers without review results must restore conservatively");
 } finally {
   delete (globalThis as { window?: unknown }).window;
 }

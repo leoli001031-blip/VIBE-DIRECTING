@@ -6,6 +6,7 @@ import type { ExportWorkerState } from "../../core/exportWorker";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { AgentVideoGenerationJobLedger } from "../../core/agentVideoProductionContract";
 import type { AgentCurrentTaskProjection } from "../../core/agentCurrentTaskProjection";
+import { agentNewVideoProjectTargetMode } from "../../core/agentNewVideoProjectTarget";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
 import {
   buildVibeAgentTimelineStatusView,
@@ -175,28 +176,21 @@ function ProjectStatusSummary({
   status: ProjectStatusViewModel;
   currentTask?: AgentCurrentTaskProjection;
 }) {
-  const videoQueryActive = status.stage === "视频待查询";
+  const preferredFacts = status.facts.filter((fact) => ["镜头", "参考", "视频", "交付"].includes(fact.label));
+  const visibleFacts = (preferredFacts.length ? preferredFacts : status.facts).slice(0, 4);
   return (
     <section
       className={`project-status-summary ${status.tone}`}
-      aria-label="当前工作对象"
+      aria-label="项目事实概览"
       data-current-task-step={currentTask?.step || "idle"}
     >
       <div className="project-status-summary-main">
-        <span>工作对象</span>
+        <span>当前对象</span>
         <strong>{currentTaskObjectLabel(currentTask?.step)}</strong>
-        <small>{status.doing}</small>
-      </div>
-      <div className="project-status-summary-next">
-        <span>{videoQueryActive ? "操作" : "当前阶段"}</span>
-        <strong>{currentTask?.label || (videoQueryActive ? "确认查询" : status.nextAction)}</strong>
-        <small>等待：{status.waitingFor}</small>
-        {videoQueryActive
-          ? <small className="project-status-summary-boundary">查询只取回结果，不会重复提交</small>
-          : status.issue && <small className="project-status-summary-boundary">{status.issue}</small>}
+        <small>{status.issue || "状态来自当前项目事实"}</small>
       </div>
       <div className="project-status-summary-facts" aria-label="项目概览">
-        {status.facts.map((fact, index) => (
+        {visibleFacts.map((fact, index) => (
           <span key={`${fact.label}:${fact.value}:${index}`}>
             <small>{fact.label}</small>
             <strong>{fact.value}</strong>
@@ -247,6 +241,7 @@ function DirectorProjectRail({
           className={directorView === "story" ? "active" : ""}
           onClick={() => onOpenDirectorView?.("story")}
           disabled={!projectReady}
+          aria-label={`故事，${totalShots} 镜头`}
           aria-current={directorView === "story" ? "page" : undefined}
         >
           <span className="director-project-rail-nav-label"><Clapperboard size={17} aria-hidden="true" /><b>故事</b></span>
@@ -257,6 +252,7 @@ function DirectorProjectRail({
           className={directorView === "assets" ? "active" : ""}
           onClick={() => onOpenDirectorView?.("assets")}
           disabled={!projectReady}
+          aria-label={`参考，${referenceLabel}`}
           aria-current={directorView === "assets" ? "page" : undefined}
         >
           <span className="director-project-rail-nav-label"><Images size={17} aria-hidden="true" /><b>参考</b></span>
@@ -267,6 +263,7 @@ function DirectorProjectRail({
           className={directorView === "preview" ? "active" : ""}
           onClick={() => onOpenDirectorView?.("preview")}
           disabled={!projectReady}
+          aria-label={`视频，${videoLabel}`}
           aria-current={directorView === "preview" ? "page" : undefined}
         >
           <span className="director-project-rail-nav-label"><PlaySquare size={17} aria-hidden="true" /><b>视频</b></span>
@@ -277,6 +274,7 @@ function DirectorProjectRail({
           className={directorView === "export" ? "active" : ""}
           onClick={() => onOpenDirectorView?.("export")}
           disabled={!projectReady}
+          aria-label="交付，展示包"
           aria-current={directorView === "export" ? "page" : undefined}
         >
           <span className="director-project-rail-nav-label"><PackageCheck size={17} aria-hidden="true" /><b>交付</b></span>
@@ -743,6 +741,7 @@ export function DirectorMode({
   const [agentReferencePlanningFocus, setAgentReferencePlanningFocus] = useState(false);
   const [agentEditingPendingConfirmation, setAgentEditingPendingConfirmation] = useState(false);
   const [agentCurrentTaskProjection, setAgentCurrentTaskProjection] = useState<AgentCurrentTaskProjection>();
+  const [activePreviewReviewTarget, setActivePreviewReviewTarget] = useState<CreatorReviewTrayItem>();
   const activeNewVideoResetKey = newVideoResetKey || 0;
   const activeNewVideoResetKeyRef = useRef(activeNewVideoResetKey);
   activeNewVideoResetKeyRef.current = activeNewVideoResetKey;
@@ -761,6 +760,21 @@ export function DirectorMode({
   const handleAgentCurrentTaskProjectionChange = useCallback((projection: AgentCurrentTaskProjection | undefined) => {
     setAgentCurrentTaskProjection((current) => current === projection ? current : projection);
   }, []);
+  const handleActivePreviewReviewTargetChange = useCallback((target: CreatorReviewTrayItem | undefined) => {
+    setActivePreviewReviewTarget((current) => {
+      if (
+        current?.id === target?.id
+        && current?.sourceReceiptId === target?.sourceReceiptId
+        && current?.outputHash === target?.outputHash
+        && current?.status === target?.status
+      ) return current;
+      return target;
+    });
+  }, []);
+  useEffect(() => {
+    if (directorView === "preview") return;
+    setActivePreviewReviewTarget(undefined);
+  }, [directorView]);
   useEffect(() => {
     if (!newVideoResetKey) return;
     setNewVideoStatus(undefined);
@@ -1053,7 +1067,10 @@ export function DirectorMode({
     setAgentIntakeCommand({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text,
-      projectTargetMode: "new_project",
+      projectTargetMode: agentNewVideoProjectTargetMode({
+        localProjectReady: folderReady,
+        currentProjectShotCount: runtimeState.storyFlow.shots.length,
+      }),
       sessionResetKey: activeNewVideoResetKey,
     });
   }
@@ -1137,7 +1154,7 @@ export function DirectorMode({
             onOpenView={onOpenDirectorView}
           />
         )}
-        {!showCreatorDeskPanel && !showNewVideoStart && (
+        {!showCreatorDeskPanel && !showNewVideoStart && directorView === "story" && (
           <DirectorDetailDisclosure
             title="流程详情"
             detail={pendingAgentConfirmationForSurfaces
@@ -1218,7 +1235,7 @@ export function DirectorMode({
               shots={audit.shots}
               selectedShotId={selectedShotId}
               onSelectShot={onSelectShot}
-              onApprovePreviewItem={onApproveReviewItem}
+              onActiveReviewTargetChange={handleActivePreviewReviewTargetChange}
             />
             <MinimalAudioPlan
               audioPlanning={runtimeState.audioPlanning}
@@ -1313,6 +1330,8 @@ export function DirectorMode({
             onRunExport={onRunExport}
             onOpenResultView={onOpenDirectorView}
             onRetryMissingBatch={onRetryMissingBatch}
+            reviewTarget={directorView === "preview" ? activePreviewReviewTarget : undefined}
+            onApproveReviewItem={onApproveReviewItem}
             videoPermissionContract={videoPermissionContract}
             onVideoPermissionContractChange={setVideoPermissionContract}
             onPendingAgentActionChange={handleAgentPendingActionChange}

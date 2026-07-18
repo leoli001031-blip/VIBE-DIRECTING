@@ -19,6 +19,7 @@ import {
   hashProjectVibeFacts,
   validateProjectVibe,
 } from "../src/project/index.ts";
+import { agentNewVideoProjectTargetMode } from "../src/core/agentNewVideoProjectTarget.ts";
 
 function readText(path: string) {
   return fs.readFileSync(path, "utf8");
@@ -173,6 +174,19 @@ const restoredNewVideoDraftSummary = findFunctionBody(directorModeSource, "resto
 const directorTimelineDetailText = findFunctionBody(directorModeSource, "timelineDetailText");
 const visibleCopy = extractStringLiterals(newVideoStart);
 const failures: string[] = [];
+
+assert(
+  agentNewVideoProjectTargetMode({ localProjectReady: true, currentProjectShotCount: 0 }) === "current_project",
+  "Agent new-video intake should commit into an explicitly connected empty local project",
+);
+assert(
+  agentNewVideoProjectTargetMode({ localProjectReady: true, currentProjectShotCount: 2 }) === "new_project",
+  "Agent new-video intake must not overwrite a connected project that already has story shots",
+);
+assert(
+  agentNewVideoProjectTargetMode({ localProjectReady: false, currentProjectShotCount: 0 }) === "new_project",
+  "Agent new-video intake without a connected local project should keep a new-project target",
+);
 
 const scriptImportInput = jsxInputBlocks(newVideoStart)
   .find((input) => hasFileTypeAttribute(input) && acceptsScriptImportExtensions(input));

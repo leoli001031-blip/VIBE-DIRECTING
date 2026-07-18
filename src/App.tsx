@@ -121,6 +121,7 @@ import {
   openProjectAgentActionLog,
   openProjectAgentTimeline,
   openProjectAgentStagedPlanDraft,
+  projectAgentStagedPlanDraftForProjection,
   refreshProjectVibeSourceIndex,
   saveProjectAgentStagedPlanDraft,
   saveProjectAgentGenerationJobLedger,
@@ -2308,6 +2309,7 @@ function App() {
   const [mode, setMode] = useState<UiMode>("director");
   const [showInspector, setShowInspector] = useState(false);
   const [directorView, setDirectorView] = useState<DirectorView>("story");
+  const pendingVideoReviewFocusIdentityRef = useRef("");
   const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
   const [selectedShotId, setSelectedShotId] = useState("");
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>([]);
@@ -2866,6 +2868,33 @@ function App() {
   ]);
   const returnedVideoPreviewCount = currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.returned).length;
   const pendingVideoReviewCount = currentProjectPreviewProjection.items.filter((item) => item.kind === "video_clip" && item.reviewRequired).length;
+  const pendingVideoReviewFocusIdentity = useMemo(() => {
+    const returnedReviewItems = currentProjectPreviewProjection.items
+      .filter((item) => item.kind === "video_clip" && item.returned && item.reviewRequired)
+      .map((item) => [
+        item.id,
+        item.shotId || "",
+        item.sourceReceiptId || "",
+        item.outputHash || "",
+        item.mediaPath || "",
+      ].join(":"))
+      .sort();
+    if (returnedReviewItems.length === 0) return "";
+    return [
+      currentProjectPreviewProjection.projectId || "",
+      currentProjectPreviewProjection.projectRoot || "",
+      ...returnedReviewItems,
+    ].join("|");
+  }, [currentProjectPreviewProjection]);
+  useEffect(() => {
+    if (!pendingVideoReviewFocusIdentity) {
+      pendingVideoReviewFocusIdentityRef.current = "";
+      return;
+    }
+    if (pendingVideoReviewFocusIdentityRef.current === pendingVideoReviewFocusIdentity) return;
+    pendingVideoReviewFocusIdentityRef.current = pendingVideoReviewFocusIdentity;
+    if (directorView !== "preview") setDirectorView("preview");
+  }, [directorView, pendingVideoReviewFocusIdentity]);
   const currentProjectPreviewQueue = useMemo(() => {
     const base = effectiveRuntimeProjectBinding.status === "bound"
       ? currentProjectPreviewProjection.queue
@@ -3224,14 +3253,14 @@ function App() {
         );
         if (cancelled) return;
         const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
-        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft) {
+        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
             project: browserDraftProject,
             projectRoot: undefined,
           });
           if (cancelled) return;
         }
-        setRestoredAgentStagedPlanDraft(stagedPlanRestore.ok ? stagedPlanRestore.draft : undefined);
+        setRestoredAgentStagedPlanDraft(projectAgentStagedPlanDraftForProjection(stagedPlanRestore));
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
@@ -3285,7 +3314,7 @@ function App() {
         );
         if (cancelled) return;
         const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
-        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft) {
+        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
             project: result.project,
             projectRoot: prototypeProjectDraftTarget.projectRoot,
@@ -3293,7 +3322,7 @@ function App() {
           });
           if (cancelled) return;
         }
-        setRestoredAgentStagedPlanDraft(stagedPlanRestore.ok ? stagedPlanRestore.draft : undefined);
+        setRestoredAgentStagedPlanDraft(projectAgentStagedPlanDraftForProjection(stagedPlanRestore));
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
@@ -3477,7 +3506,7 @@ function App() {
         );
         if (cancelled) return;
         const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
-        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft) {
+        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(runtimeDraftTarget, {
             project: projectForRestore,
             projectRoot: runtimeProjectBinding.projectRoot,
@@ -3486,7 +3515,7 @@ function App() {
           if (cancelled) return;
         }
         runtimeAgentTimelineRestoreKeyRef.current = restoreKey;
-        setRestoredAgentStagedPlanDraft(stagedPlanRestore.ok ? stagedPlanRestore.draft : undefined);
+        setRestoredAgentStagedPlanDraft(projectAgentStagedPlanDraftForProjection(stagedPlanRestore));
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.ok ? timelineOpen.timeline.entries : []);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);

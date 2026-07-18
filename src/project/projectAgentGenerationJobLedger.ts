@@ -1,5 +1,6 @@
 import {
   AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION,
+  validateAgentVideoGenerationReviewResult,
   type AgentVideoGenerationJob,
   type AgentVideoGenerationJobLedger,
 } from "../core/agentVideoProductionContract";
@@ -48,6 +49,7 @@ const pipelineSteps = new Set(["new_video_draft", "confirm_story", "choose_save_
 const legacyGenerationJobLedgerSchemaVersions = new Set([
   "agent_video_generation_job_ledger/0.2.0",
   "agent_video_generation_job_ledger/0.3.0",
+  "agent_video_generation_job_ledger/0.4.0",
 ]);
 
 export async function saveProjectAgentGenerationJobLedger(
@@ -273,6 +275,22 @@ function validateJob(job: unknown, ledger: Record<string, unknown>) {
   if (!Array.isArray(job.inputAssets) || job.inputAssets.some((item) => typeof item !== "string")) errors.push("Generation job inputAssets must be a string array.");
   if (!Array.isArray(job.outputAssets) || job.outputAssets.some((item) => typeof item !== "string")) errors.push("Generation job outputAssets must be a string array.");
   if (job.externalTaskId != null && !textValue(job.externalTaskId)) errors.push("Generation job externalTaskId must be a non-empty string.");
+  if (job.reviewResult != null) {
+    if (!isRecord(job.reviewResult)) {
+      errors.push("Generation job reviewResult must be an object.");
+    } else {
+      const reviewResult = job.reviewResult;
+      const typedJob = job as unknown as AgentVideoGenerationJob;
+      errors.push(...validateAgentVideoGenerationReviewResult(
+        typedJob,
+        reviewResult as unknown as AgentVideoGenerationJob["reviewResult"],
+      ));
+      if (textValue(job.status) !== "succeeded") errors.push("Generation job reviewResult requires a succeeded job.");
+      if (!Array.isArray(job.outputAssets) || !job.outputAssets.some((path) => (
+        typeof path === "string" && normalizeMediaPath(path) === normalizeMediaPath(textValue(reviewResult.outputPath))
+      ))) errors.push("Generation job outputAssets must include its review result outputPath.");
+    }
+  }
   if (!Array.isArray(job.blockers) || job.blockers.some((item) => typeof item !== "string")) errors.push("Generation job blockers must be a string array.");
   const statusHistory = Array.isArray(job.statusHistory) ? job.statusHistory : [];
   if (!statusHistory.length) {
@@ -316,6 +334,10 @@ function textValue(value: unknown) {
 
 function normalizeProjectRoot(value?: string) {
   return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
+}
+
+function normalizeMediaPath(value?: string) {
+  return value?.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/private\/tmp(?=\/|$)/, "/tmp") || undefined;
 }
 
 function timeValue(value?: string) {

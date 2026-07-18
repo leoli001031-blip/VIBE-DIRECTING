@@ -1,54 +1,130 @@
-# Signal Desk P5-B Design QA
+# Vibe Director Studio P10-D Director Turn Design QA
 
-## Comparison Target
+Date: 2026-07-17
 
-- Source visual truth: `docs/product-design/p5-a-20260712/directions/option-1-signal-desk.png`
-- Desktop implementation: `docs/product-design/p5-b-20260713/evidence/12-draft-confirmation-primary-visible-1195x768.png`
-- Save-location implementation: `docs/product-design/p5-b-20260713/evidence/13-save-location-primary-visible-1195x768.png`
-- Tight implementation: `docs/product-design/p5-b-20260713/evidence/16-tight-three-column-order-fixed-860x768.png`
-- Minimum-window implementation: `docs/product-design/p5-b-20260713/evidence/17-minimum-window-agent-overlay-765x900.png`
-- State: two-shot story draft confirmation, then confirmed story waiting for save-location confirmation
-- Theme: packaged App, light theme, local dry-run only
+Scope: **P10-D Review first slice, Clarify/Proposal second slice, Paid
+Confirmation/Running third slice, and Running-to-Review recovery fourth slice
+only**. This is not acceptance of a real paid Provider task, A/B comparison,
+project-fact promotion, or P10-E Delivery.
 
-## Evidence
+## Comparison targets
 
-The source board and each final packaged-App capture were opened together in the same comparison input. The desktop comparison used the matching story-confirmation state at `1195x768`; the save-location capture checks the next projected task. The full-resolution desktop captures make the right-rail typography, confirmation facts, primary action, secondary action, and composer readable, so a separate crop was not required.
+- Clarify ImageGen reference:
+  `/Users/lichenhao/.codex/generated_images/019f0313-3dbe-7c12-a8e0-28af0b7a1f06/exec-42781c1a-d1db-43e3-9b76-7fd65881e70c.png`
+- Proposal ImageGen reference:
+  `/Users/lichenhao/.codex/generated_images/019f0313-3dbe-7c12-a8e0-28af0b7a1f06/exec-9f154c11-8257-4a30-b19f-378420c4add2.png`
+- Review ImageGen reference:
+  `/Users/lichenhao/.codex/generated_images/019f0313-3dbe-7c12-a8e0-28af0b7a1f06/exec-9156026d-a5ec-4a78-955b-2bf24f3694de.png`
+- Paid Confirmation ImageGen reference:
+  `/Users/lichenhao/.codex/generated_images/019f0313-3dbe-7c12-a8e0-28af0b7a1f06/exec-29fa5770-5531-44e9-8e86-532fbbb5b06f.png`
+- Running ImageGen reference:
+  `/Users/lichenhao/.codex/generated_images/019f0313-3dbe-7c12-a8e0-28af0b7a1f06/exec-346683eb-418b-4680-9e23-75200a157b2a.png`
+- Packaged Clarify evidence:
+  `docs/evidence/p10-d-clarification-proposal-20260717/01-packaged-clarification.png`
+- Packaged Proposal evidence:
+  `docs/evidence/p10-d-clarification-proposal-20260717/02-packaged-proposal.png`
+- Packaged Review evidence:
+  `docs/evidence/p10-d-review-turn-20260717/01-desktop-review.jpeg`
+- Packaged Paid Confirmation evidence:
+  `docs/evidence/p10-d-paid-confirmation-running-20260717/01-packaged-paid-confirmation.png`
+- Packaged Running evidence:
+  `docs/evidence/p10-d-paid-confirmation-running-20260717/02-packaged-running.png`
+- Packaged returned Review evidence:
+  `docs/evidence/p10-d-running-review-recovery-20260718/02-packaged-review-returned.png`
+- Packaged cold-restart Review evidence:
+  `docs/evidence/p10-d-running-review-recovery-20260718/03-packaged-review-cold-restart.png`
 
-Primary interactions tested through Computer Use:
+Each Clarify, Proposal, Paid Confirmation, and Running reference was opened
+together with its corresponding packaged capture for final pairwise comparison.
+The Review reference and the packaged returned-result capture were also opened
+together in one comparison input.
+The generated references and packaged window have different native canvas
+dimensions, so this check judges the selected product hierarchy and interaction
+contract rather than claiming a pixel clone.
 
-- Entered and sent the two-shot story prompt.
-- Waited for the local fallback draft without calling an image or video provider.
-- Confirmed the story and observed the projected task change to `选择保存位置`.
-- Resized the packaged window through desktop, tight three-column, and minimum-window overlay layouts.
-- Closed and relaunched the packaged App to inspect recovery behavior.
+## Visible result
 
-Packaged process stderr was checked during each run. No renderer exception was emitted; the only recurring message was the macOS `IMKCFRunLoopWakeUpReliable` input-method warning.
+No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 
-## Findings
+- The center keeps the real P6S01 artifact while the right rail owns one
+  focused Director turn.
+- Clarify shows the original feedback, one concrete question, exactly two
+  bounded choices, and a visible `conversation_only` boundary.
+- Proposal replaces Clarify after a choice and shows one staged action, its
+  target, proposed change, and explicit `确认写入项目` / `继续调整` actions.
+- Current task, Skills, work-mode controls, and history no longer compete with
+  Clarify, Proposal, Paid Confirmation, Running, or Review; earlier conversation
+  stays behind disclosure.
+- The composer remains visible and changes its scope copy for each focused
+  turn without overlapping the primary actions.
+- Paid Confirmation presents one exact task identity, its external-cost and
+  irreversible boundaries, one submit-once action, and one return action.
+- Running presents one exact job, structured execution facts, three progress
+  steps, and only background/history actions; retry, approval, promotion, and
+  export are absent.
+- A newly returned exact job replaces Running with one Review turn, opens the
+  single returned artifact, and keeps `needs_review`, target, receipt, hash, and
+  no-retry/no-promotion/no-export boundaries visible.
+- Cold restart restores the same Review hierarchy without an old confirmation
+  or passive export task taking priority.
+- The existing restrained shell, spacing, borders, typography, and project
+  navigation remain consistent across all six accepted turn states.
 
-No actionable P0, P1, or P2 visual mismatch remains in the tested packaged-App viewports.
+## Interaction QA
 
-- Typography: system sans-serif hierarchy, zero letter spacing, task title weight, body line height, wrapping, and truncation preserve the restrained Signal Desk hierarchy.
-- Spacing and layout: desktop uses the intended project rail, object canvas, and Agent rail; confirmation and composer stay independently contained. Tight mode preserves the three regions, and the minimum window uses an Agent overlay without overlap or vertical text collapse.
-- Colors and tokens: neutral canvas/surfaces, green navigation accent, amber waiting state, brick-red confirmation action, and teal execution semantics map to the source direction without a one-hue palette.
-- Images and assets: this comparison state intentionally has no generated media. The implementation uses Lucide controls and does not substitute target imagery with CSS drawings, emoji, or hand-built SVGs.
-- Copy and content: current task, target, effect, boundary, mode, primary action, secondary action, and composer copy remain creator-facing and projection-driven.
-- Accessibility: native buttons and text areas remain exposed in the AX tree, current confirmation uses `aria-current`, focus indicators are present, reduced motion is covered, and the primary and secondary actions are visible at desktop height.
+- `需要修改` focuses and pre-fills the composer without changing the project.
+- `纸飞机亮得太早了` stops at Clarify and cannot directly stage a write.
+- Choosing `情绪转折` forms a Proposal and does not call an external generation
+  service, export, promote project facts, or mutate `project.vibe`.
+- `继续调整` restores the resolved intent to the composer and disables project
+  confirmation while text is being edited.
+- Proposal confirmation is enabled only when the staged action identity matches
+  the exact structured project-edit confirmation.
+- Paid confirmation is enabled only when confirmation id, action id, and current
+  project fact hash all match. The packaged QA did not click this live action.
+- An exact dry-run non-terminal job restores as Running; terminal, stale-fact,
+  and missing-identity jobs fail closed.
+- `后台运行` initially exposed React error #300 because a collapsed early return
+  preceded later hooks. The return was moved below all hooks; the rebuilt
+  packaged App now collapses, reopens, and preserves the exact job safely.
+- `查看任务记录` opens existing history without submitting or retrying a job.
+- An exact local result identity transitions the current dry-run job from
+  Running to `needs_review`; stale or mismatched identities fail closed.
+- The returned video workspace opens once for a new Review identity, while a
+  stable identity does not repeatedly force the user back after navigation.
+- The packaged returned-result and cold-restart captures are byte-identical;
+  the project file, media, ledger, and preview plan also remain unchanged.
+- `project.vibe` remained at SHA-256
+  `cef0da97eb08b309fecb438ee08b879841fb6653af60eef6ba9a4af8b49064a3`
+  through Clarify, Proposal, and Continue Adjusting.
+- The separate Paid Confirmation/Running fixture remained at SHA-256
+  `47e5280209fa508c96ba36ce804fd370da4f62a04a06952cf9dbe7633177d5af`.
+- No provider submission, paid request, retry, project-fact promotion, or export
+  was triggered during this QA pass.
 
-## Comparison History
+## Deliberate differences
 
-1. P1: the root grid expanded to max-content height, pushing the composer outside the visible rail. The main grid row was constrained with `minmax(0, 1fr)`, and the current confirmation was ordered first by structured confirmation ID. Post-fix evidence: `07-draft-confirmation-grid-contained-1195x768.png`.
-2. P1: duplicate current-selection and confirmation summaries pushed the exact action below the first Agent viewport. Duplicate facts are now suppressed only when a structured confirmation strip exists, confirmation actions share one row, and the redundant selection block is hidden while a current confirmation is active. Post-fix evidence: `12-draft-confirmation-primary-visible-1195x768.png` and `13-save-location-primary-visible-1195x768.png`.
-3. P0: the tight layout inherited `order: -3` from an older media query and rendered the Agent as a vertical sliver. The tight breakpoint now resets Agent order, while narrower breakpoints use explicit grid areas and a fixed overlay. Pre-fix evidence: `14-save-location-compact-860x768.png`; post-fix evidence: `16-tight-three-column-order-fixed-860x768.png` and `17-minimum-window-agent-overlay-765x900.png`.
+- The references illustrate a two-shot project and timeline timing controls;
+  the real QA project has one durable P6S01 result, so this slice does not invent
+  another shot, media version, or timing editor.
+- The packaged Proposal exposes durable action identity and the actual staged
+  text instead of the mock's illustrative A/B recommendation card.
+- The production rail remains denser than the direction images because this
+  slice changes the focused turns, not the whole application shell.
+- The Paid Confirmation and Running references include illustrative video
+  media. The real third-slice fixture intentionally has no output media because
+  no Provider task was submitted; the center keeps the real project state.
+- The Review reference illustrates an A/B version pair. The fourth-slice
+  fixture intentionally presents one returned P6S01 result because durable
+  version-pair comparison remains outside this acceptance.
 
-## Open Questions
+## Remaining work
 
-- macOS would not resize this packaged window below approximately `765x900`; CSS below the minimum reachable width remains contract-covered but was not visually exercised on this machine.
-- The source board's media-rich query-result canvas was not treated as a fidelity requirement for the save-location state. Its hierarchy should be rechecked when the real query-result state is accepted in a later packaged flow.
-- Packaged recovery of a confirmed but not-yet-saved story is a separate business-state blocker, not a remaining design mismatch.
-
-## Follow-up Polish
-
-- P3: compare the final video-query and execution-history states against the media-rich section of the source board after the packaged recovery blocker is fixed.
+- A real paid Provider transition remains outside this slice.
+- Real Provider polling and result recovery remain outside this slice; the
+  accepted recovery is local/dry-run only.
+- A/B compare requires a durable version-pair contract and two real results.
+- Project-fact promotion, Provider execution, Delivery, and export retain their
+  independent boundaries and were not exercised.
 
 final result: passed

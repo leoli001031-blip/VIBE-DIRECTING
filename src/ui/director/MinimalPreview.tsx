@@ -131,7 +131,7 @@ export function MinimalPreview({
   shots,
   selectedShotId,
   onSelectShot,
-  onApprovePreviewItem,
+  onActiveReviewTargetChange,
 }: {
   previewExport: ProjectPreviewExportState;
   currentProjectPreviewItems?: PreviewQueueItem[];
@@ -142,7 +142,7 @@ export function MinimalPreview({
   shots: ShotRecord[];
   selectedShotId: string;
   onSelectShot: (id: string) => void;
-  onApprovePreviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
+  onActiveReviewTargetChange?: (item: CreatorReviewTrayItem | undefined) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -158,7 +158,10 @@ export function MinimalPreview({
   const activeItem = getPreviewPlayerActiveItem(queue, currentTime) as DisplayItem | undefined;
   const activeLabel = previewItemLabel(activeItem);
   const activeNeedsReview = previewNeedsReview(activeItem);
-  const activeReviewTarget = previewReviewTarget(activeItem, activeLabel);
+  const activeReviewTarget = useMemo(
+    () => previewReviewTarget(activeItem, activeLabel),
+    [activeItem, activeLabel],
+  );
   const activeVideoStatusLabel = previewVideoStatusLabel(activeItem);
   const progress = total > 0 ? Math.min(100, Math.max(0, (currentTime / total) * 100)) : 0;
   const reviewCount = queue.filter((item) => previewNeedsReview(item as DisplayItem)).length;
@@ -254,6 +257,16 @@ export function MinimalPreview({
   useEffect(() => {
     if (playing && activeItem?.shotId && activeItem.shotId !== selectedShotId) onSelectShot(activeItem.shotId);
   }, [activeItem?.shotId, onSelectShot, playing, selectedShotId]);
+
+  useEffect(() => {
+    onActiveReviewTargetChange?.(activeReviewTarget);
+  }, [
+    activeReviewTarget?.id,
+    activeReviewTarget?.outputHash,
+    activeReviewTarget?.sourceReceiptId,
+    activeReviewTarget?.status,
+    onActiveReviewTargetChange,
+  ]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -357,17 +370,6 @@ export function MinimalPreview({
         {activeNeedsReview && (
           <div className="preview-review-actions">
             <b className="preview-review-badge">待复核</b>
-            {activeReviewTarget && (
-              <button
-                className="preview-review-action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void onApprovePreviewItem?.(activeReviewTarget);
-                }}
-              >
-                通过
-              </button>
-            )}
           </div>
         )}
         <button
