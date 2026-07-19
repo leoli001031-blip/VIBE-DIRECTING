@@ -88,6 +88,22 @@ assert(pairResult.pair.originalCandidatesPreserved && !pairResult.pair.providerC
 const repeatedPairResult = buildAgentDirectorReviewVersionPair({ ledger: ledger([job("a"), job("b")]), identity });
 assert(repeatedPairResult.status === "ready" && repeatedPairResult.pair?.pairId === pairResult.pair.pairId, "repeated recovery must derive the same pair id without duplicating state");
 
+const verifiedMediaPair = buildAgentDirectorReviewVersionPair({
+  ledger: ledger([job("a"), job("b")]),
+  identity,
+  availableJobIds: ["job-a", "job-b"],
+});
+assert(verifiedMediaPair.status === "ready", "two locally verified media candidates should retain A/B Review");
+const missingMediaPair = buildAgentDirectorReviewVersionPair({
+  ledger: ledger([job("a"), job("b")]),
+  identity,
+  availableJobIds: ["job-a"],
+});
+assert(
+  missingMediaPair.status === "blocked" && missingMediaPair.blockers.includes("review_version_pair_candidate_media_unavailable"),
+  "a missing local candidate must fail closed before version selection",
+);
+
 const canonicalRoot = buildAgentDirectorReviewVersionPair({
   ledger: {
     ...ledger([job("a"), job("b")]),

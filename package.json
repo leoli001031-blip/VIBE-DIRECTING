@@ -32,6 +32,8 @@
     "p10-d8-packaged-acceptance:test": "tsx scripts/agent-director-review-selection-packaged-acceptance.mts",
     "p10-d9-packaged-acceptance:test": "tsx scripts/agent-director-delivery-packaged-acceptance.mts",
     "p10-e-packaged-acceptance:test": "tsx scripts/agent-director-workflow-packaged-acceptance.mts",
+    "p11-a-packaged-reliability:test": "tsx scripts/p11-packaged-reliability-acceptance.mts",
+    "p11-a-packaged-soak:test": "tsx scripts/p11-packaged-soak-acceptance.mts",
     "agent-video-dry-run-adapter:test": "tsx scripts/agent-video-dry-run-adapter-test.mts",
     "agent-video-execution-adapter:test": "tsx scripts/agent-video-execution-adapter-test.mts",
     "agent-video-execution-controller:test": "tsx scripts/agent-video-execution-controller-test.mts",

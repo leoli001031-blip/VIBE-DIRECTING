@@ -1,5 +1,6 @@
 import {
   AGENT_VIDEO_GENERATION_JOB_LEDGER_SCHEMA_VERSION,
+  transitionAgentVideoGenerationJob,
   validateAgentVideoGenerationReviewResult,
   type AgentVideoGenerationJob,
   type AgentVideoGenerationJobLedger,
@@ -16,6 +17,23 @@ import {
 } from "./projectVibeDraftStore";
 
 export const projectAgentGenerationJobLedgerPath = ".vibe-runtime/agent-generation-job-ledger.json";
+export const interruptedLocalExportError = "Local export was interrupted before atomic publish. Confirm export again to retry.";
+
+export function interruptedLocalExportStagingPaths(job: AgentVideoGenerationJob): string[] {
+  if (
+    job.kind !== "export"
+    || job.operation !== "execute"
+    || job.executionMode !== "live"
+    || job.providerId !== "local-exporter"
+    || job.providerCalled
+    || job.externalTaskId
+    || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/.test(job.jobId)
+  ) return [];
+  return [
+    `exports/.vibe-staging/${job.jobId}`,
+    `reports/exports/.vibe-staging/${job.jobId}`,
+  ];
+}
 
 export type ProjectAgentGenerationJobLedgerOpenStatus =
   | "restored"
@@ -39,6 +57,48 @@ export interface ProjectAgentGenerationJobLedgerOpenResult {
   path: string;
   ledger?: AgentVideoGenerationJobLedger;
   errors: string[];
+}
+
+export function recoverInterruptedLocalExportJobs(
+  ledger: AgentVideoGenerationJobLedger,
+  options: { updatedBefore?: string } = {},
+): {
+  changed: boolean;
+  ledger: AgentVideoGenerationJobLedger;
+  jobs: AgentVideoGenerationJob[];
+} {
+  const updatedBefore = options.updatedBefore ? Date.parse(options.updatedBefore) : Number.POSITIVE_INFINITY;
+  let nextLedger = ledger;
+  const recoveredJobs: AgentVideoGenerationJob[] = [];
+  for (const job of ledger.jobs) {
+    if (
+      job.kind !== "export"
+      || job.operation !== "execute"
+      || job.executionMode !== "live"
+      || job.providerId !== "local-exporter"
+      || job.status !== "running"
+      || job.providerCalled
+      || job.externalTaskId
+      || Date.parse(job.updatedAt) >= updatedBefore
+    ) continue;
+    const updatedAt = new Date(Math.max(Date.parse(job.updatedAt) + 1, Date.parse(job.createdAt) + 1)).toISOString();
+    const transitioned = transitionAgentVideoGenerationJob({
+      ledger: nextLedger,
+      jobId: job.jobId,
+      status: "failed",
+      generatedAt: updatedAt,
+      providerCalled: false,
+      error: interruptedLocalExportError,
+    });
+    if (!transitioned.ok || !transitioned.job) continue;
+    nextLedger = transitioned.ledger;
+    recoveredJobs.push(transitioned.job);
+  }
+  return {
+    changed: recoveredJobs.length > 0,
+    ledger: nextLedger,
+    jobs: recoveredJobs,
+  };
 }
 
 const jobKinds = new Set(["reference_generation", "video_submit", "export"]);

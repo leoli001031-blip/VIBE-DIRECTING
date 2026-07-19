@@ -109,6 +109,16 @@ function directorProjectRailVideoLabel(videoStage?: CreatorVideoStageProjection)
   return "处理中";
 }
 
+function directorReviewMediaPath(projectRoot: string, outputPath: string) {
+  const normalizedOutputPath = outputPath.trim().replace(/\\/g, "/");
+  if (normalizedOutputPath.startsWith("/") || /^[a-zA-Z]:\//.test(normalizedOutputPath)) return normalizedOutputPath;
+  return `${projectRoot.replace(/[\\/]+$/g, "")}/${normalizedOutputPath.replace(/^\/+/, "")}`;
+}
+
+function directorReviewOutputHash(outputHash: string) {
+  return outputHash.trim().toLowerCase().replace(/^sha256:/, "");
+}
+
 function directorProjectRailReferenceLabel(
   creatorDesk: CreatorDeskProjection | undefined,
   assetCount: number,
@@ -763,6 +773,63 @@ export function DirectorMode({
   const [agentEditingPendingConfirmation, setAgentEditingPendingConfirmation] = useState(false);
   const [agentCurrentTaskProjection, setAgentCurrentTaskProjection] = useState<AgentCurrentTaskProjection>();
   const [activePreviewReviewTarget, setActivePreviewReviewTarget] = useState<CreatorReviewTrayItem>();
+  const reviewMediaValidationKey = [
+    restoredAgentGenerationJobLedger?.ledgerId || "",
+    restoredAgentGenerationJobLedger?.updatedAt || "",
+    folderReady ? runtimeState.project.root : "",
+    projectFactHash || "",
+  ].join("::");
+  const reviewMediaVerificationAvailable = typeof window !== "undefined"
+    && Boolean(window.vibeRuntime?.sandboxFileExists && window.vibeRuntime?.sandboxHashFile);
+  const [reviewMediaValidation, setReviewMediaValidation] = useState<{
+    key: string;
+    availableJobIds: string[];
+  }>();
+  useEffect(() => {
+    const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
+    if (!reviewMediaVerificationAvailable || !bridge?.sandboxFileExists || !bridge.sandboxHashFile || !restoredAgentGenerationJobLedger) {
+      setReviewMediaValidation(undefined);
+      return;
+    }
+    const candidates = restoredAgentGenerationJobLedger.jobs.filter((job) => (
+      job.kind === "video_submit"
+      && job.status === "succeeded"
+      && Boolean(job.reviewResult?.outputPath && job.reviewResult.outputHash)
+    ));
+    let cancelled = false;
+    setReviewMediaValidation({ key: reviewMediaValidationKey, availableJobIds: [] });
+    void Promise.all(candidates.map(async (job) => {
+      const outputPath = directorReviewMediaPath(runtimeState.project.root, job.reviewResult!.outputPath);
+      try {
+        const exists = await bridge.sandboxFileExists!(outputPath);
+        if (!exists.exists) return undefined;
+        const hashed = await bridge.sandboxHashFile!(outputPath);
+        return hashed.hash.toLowerCase() === directorReviewOutputHash(job.reviewResult!.outputHash)
+          ? job.jobId
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    })).then((jobIds) => {
+      if (!cancelled) {
+        setReviewMediaValidation({
+          key: reviewMediaValidationKey,
+          availableJobIds: jobIds.filter((jobId): jobId is string => Boolean(jobId)),
+        });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [
+    restoredAgentGenerationJobLedger,
+    reviewMediaValidationKey,
+    reviewMediaVerificationAvailable,
+    runtimeState.project.root,
+  ]);
+  const availableReviewJobIds = reviewMediaVerificationAvailable
+    ? reviewMediaValidation?.key === reviewMediaValidationKey
+      ? reviewMediaValidation.availableJobIds
+      : []
+    : undefined;
   const reviewVersionPairResult = useMemo(() => buildAgentDirectorReviewVersionPair({
     ledger: restoredAgentGenerationJobLedger,
     identity: {
@@ -770,7 +837,9 @@ export function DirectorMode({
       projectRoot: folderReady ? runtimeState.project.root : undefined,
       projectFactHash: projectFactHash || "",
     },
+    availableJobIds: availableReviewJobIds,
   }), [
+    availableReviewJobIds,
     folderReady,
     projectFactHash,
     restoredAgentGenerationJobLedger,

@@ -77,6 +77,51 @@ const sandboxWatchers = new Map<string, ReturnType<typeof fs.watch>>();
 const rootToWatchers = new Map<string, Set<string>>();
 let sandboxWatchCounter = 0;
 
+type PackagedAcceptanceExportFault = "write_enospc" | "publish_enospc";
+
+function packagedAcceptanceExportFault(): PackagedAcceptanceExportFault | undefined {
+  if (!packagedAcceptanceControlEnabled) return undefined;
+  const value = process.env.VIBE_ELECTRON_ACCEPTANCE_EXPORT_FAULT;
+  return value === "write_enospc" || value === "publish_enospc" ? value : undefined;
+}
+
+function packagedAcceptanceExportPublishDelayMs(): number {
+  if (!packagedAcceptanceControlEnabled) return 0;
+  const value = Number(process.env.VIBE_ELECTRON_ACCEPTANCE_EXPORT_PUBLISH_DELAY_MS || "0");
+  return Number.isFinite(value) ? Math.max(0, Math.min(30_000, Math.floor(value))) : 0;
+}
+
+function isStagedExportPath(filePath: string): boolean {
+  const projectRoot = projectRootScope.findRoot(filePath);
+  if (!projectRoot) return false;
+  const relativePath = path.relative(projectRoot, filePath).replace(/\\/g, "/");
+  return relativePath.startsWith("exports/.vibe-staging/")
+    || relativePath.startsWith("reports/exports/.vibe-staging/");
+}
+
+function throwPackagedAcceptanceDiskFull(): never {
+  const error = new Error("packaged acceptance simulated disk write failure");
+  Object.assign(error, { code: "ENOSPC" });
+  throw error;
+}
+
+async function applyPackagedAcceptanceExportWriteFault(filePath: string): Promise<void> {
+  if (packagedAcceptanceExportFault() === "write_enospc" && isStagedExportPath(filePath)) {
+    throwPackagedAcceptanceDiskFull();
+  }
+}
+
+async function applyPackagedAcceptanceExportPublishFault(stagingPath: string): Promise<void> {
+  if (!isStagedExportPath(stagingPath)) return;
+  const delayMs = packagedAcceptanceExportPublishDelayMs();
+  if (delayMs > 0) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+  }
+  if (packagedAcceptanceExportFault() === "publish_enospc") {
+    throwPackagedAcceptanceDiskFull();
+  }
+}
+
 function sha256File(filePath: string): Promise<{ hash: string; size: number }> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash("sha256");
@@ -342,6 +387,7 @@ async function startRuntimeServer() {
         VIBE_DIRECTOR_RUNTIME_API_HOST: runtimeHost,
         VIBE_DIRECTOR_RUNTIME_API_PORT: String(runtimePort),
         VIBE_DIRECTOR_RUNTIME_WORKDIR: runtimeWorkdir,
+        VIBE_DIRECTOR_RUNTIME_PARENT_PID: String(process.pid),
         VIBE_DIRECTOR_RUNTIME_API_TOKEN: runtimeSessionToken,
         VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH: runtimeCurrentProjectBindingPath,
         VIBE_DIRECTOR_REMEMBERED_PROJECT_SELECTION_PATH: rememberedProjectPath,
@@ -685,6 +731,7 @@ function registerIpcHandlers() {
       throw new Error("sandbox:writeFile requires a filePath");
     }
     const resolved = projectRootScope.resolveOpenedProjectPath(filePath, "sandbox:writeFile");
+    await applyPackagedAcceptanceExportWriteFault(resolved);
     const dir = path.dirname(resolved);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -706,6 +753,7 @@ function registerIpcHandlers() {
     if (!fs.existsSync(source)) {
       throw new Error(`file not found: ${source}`);
     }
+    await applyPackagedAcceptanceExportWriteFault(destination);
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
     await fs.promises.copyFile(source, destination);
     const { hash, size } = await sha256File(destination);
@@ -751,6 +799,7 @@ function registerIpcHandlers() {
         throw new Error("sandbox:publishDirectory destinationPath must be a real directory.");
       }
     }
+    await applyPackagedAcceptanceExportPublishFault(staging);
 
     const previousRoot = projectRootScope.resolveOpenedProjectPath(
       path.join(projectRoot, exportBase, ".vibe-previous"),
@@ -780,6 +829,28 @@ function registerIpcHandlers() {
       destinationPath: destination,
       ...(previousMoved ? { previousPath } : {}),
     };
+  });
+
+  handleTrustedIpc("sandbox:discardStagedExport", async (_event, stagingPath: string) => {
+    if (!stagingPath || typeof stagingPath !== "string") {
+      throw new Error("sandbox:discardStagedExport requires a stagingPath");
+    }
+    const staging = projectRootScope.resolveOpenedProjectPath(stagingPath, "sandbox:discardStagedExport staging");
+    const projectRoot = projectRootScope.findRoot(staging);
+    if (!projectRoot) {
+      throw new Error("sandbox:discardStagedExport requires an opened project folder.");
+    }
+    const relativePath = path.relative(projectRoot, staging).replace(/\\/g, "/");
+    if (!/^(?:exports|reports\/exports)\/\.vibe-staging\/[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/.test(relativePath)) {
+      throw new Error("sandbox:discardStagedExport is limited to one bound export staging transaction.");
+    }
+    if (!fs.existsSync(staging)) return { discarded: false, stagingPath: staging };
+    const stagingStat = await fs.promises.lstat(staging);
+    if (!stagingStat.isDirectory() || stagingStat.isSymbolicLink()) {
+      throw new Error("sandbox:discardStagedExport stagingPath must be a real directory.");
+    }
+    await fs.promises.rm(staging, { recursive: true, force: false, maxRetries: 3, retryDelay: 50 });
+    return { discarded: true, stagingPath: staging };
   });
 
   handleTrustedIpc("sandbox:spawn", async (_event, command: string, args: string[]) => {

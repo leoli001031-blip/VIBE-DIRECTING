@@ -122,7 +122,10 @@ import {
   openProjectAgentActionLog,
   openProjectAgentTimeline,
   openProjectAgentStagedPlanDraft,
+  interruptedLocalExportError,
+  interruptedLocalExportStagingPaths,
   projectAgentStagedPlanDraftForProjection,
+  recoverInterruptedLocalExportJobs,
   refreshProjectVibeSourceIndex,
   saveProjectAgentStagedPlanDraft,
   saveProjectAgentGenerationJobLedger,
@@ -137,7 +140,7 @@ import {
   type ProjectVibeAssetKind,
   type ProjectVibeDocument,
 } from "./project";
-import type { AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
+import type { AgentVideoGenerationJob, AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
 import {
   agentDirectorReviewSelectionLedgerMatchesProject,
   buildAgentDirectorReviewPromotionTransaction,
@@ -2300,8 +2303,95 @@ export function ShotVideoGateInspector({
   );
 }
 
+const rendererStartedAt = new Date().toISOString();
 
+function interruptedLocalExportTimelineEntry(job: AgentVideoGenerationJob): VibeAgentTimelineEntry {
+  const receipt: AgentVideoExecutionReceipt = {
+    schemaVersion: "agent_video_execution_receipt/0.1.0",
+    receiptId: `agent_video_execution_receipt_${job.sourceConfirmationId}_interrupted_${job.jobId}`,
+    confirmationReceiptId: job.sourceConfirmationId,
+    actionId: job.actionId,
+    jobId: job.jobId,
+    projectId: job.projectId,
+    projectRoot: job.projectRoot,
+    projectFactHash: job.projectFactHash,
+    action: "export",
+    operation: "execute",
+    executionMode: "live",
+    status: "failed",
+    providerId: job.providerId,
+    modelId: job.modelId,
+    providerCalled: false,
+    liveSubmitAllowed: true,
+    outputAssets: [],
+    attempt: 1,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    errors: [interruptedLocalExportError],
+  };
+  return {
+    id: `agent_video_execution_interrupted_${job.jobId}_${job.updatedAt.replace(/[^a-z0-9]+/gi, "_")}`,
+    type: "tool_result",
+    createdAt: job.updatedAt,
+    title: "导出交付包未完成",
+    body: "本地导出在原子发布前中断。项目事实和已有交付内容未改变；需要重新确认后才能重试。",
+    lifecycle: "failed",
+    status: "blocked",
+    toolName: "export_project",
+    actionKind: "prepare_export",
+    actionId: job.actionId,
+    confirmationToken: job.sourceConfirmationId,
+    facts: [
+      { label: "任务", value: job.jobId },
+      { label: "Provider", value: "未调用" },
+      { label: "最终包", value: "未发布" },
+    ],
+    details: {
+      dryRun: false,
+      executionReceipt: receipt,
+      jobId: job.jobId,
+      sourceConfirmationId: job.sourceConfirmationId,
+      sourceFactHash: job.projectFactHash,
+      outputAssets: [],
+      next: "重新检查本地路径后，由用户明确确认导出。",
+    },
+  };
+}
 
+async function recoverInterruptedLocalExportState(input: {
+  target: ProjectVibeDraftTarget;
+  ledger: AgentVideoGenerationJobLedger;
+  timeline: VibeAgentTimelineDocument;
+}) {
+  const recovery = recoverInterruptedLocalExportJobs(input.ledger, { updatedBefore: rendererStartedAt });
+  if (!recovery.changed) return { ledger: input.ledger, timeline: input.timeline };
+  const recoveryEntries = recovery.jobs.map(interruptedLocalExportTimelineEntry);
+  const recoveredTimeline = appendVibeAgentTimelineEntries(
+    input.timeline,
+    recoveryEntries,
+    recoveryEntries.at(-1)?.createdAt,
+  );
+  const [ledgerWrite, timelineWrite] = await Promise.all([
+    saveProjectAgentGenerationJobLedger(input.target, recovery.ledger),
+    saveProjectAgentTimeline(input.target, recoveredTimeline),
+  ]);
+  if (!ledgerWrite.ok) console.warn("Failed to persist interrupted local export recovery", ledgerWrite.errors[0]);
+  if (!timelineWrite.ok) console.warn("Failed to persist interrupted local export timeline", timelineWrite.errors[0]);
+  const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
+  const projectRoot = input.target.projectRoot?.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (projectRoot && bridge?.sandboxDiscardStagedExport) {
+    for (const job of recovery.jobs) {
+      for (const relativePath of interruptedLocalExportStagingPaths(job)) {
+        try {
+          await bridge.sandboxDiscardStagedExport(`${projectRoot}/${relativePath}`);
+        } catch (error) {
+          console.warn("Failed to discard interrupted local export staging", error);
+        }
+      }
+    }
+  }
+  return { ledger: recovery.ledger, timeline: recoveredTimeline };
+}
 
 function App() {
   const [runtimeState, setRuntimeState] = useState<ProjectRuntimeState>(fallbackRuntimeState);
@@ -3368,12 +3458,22 @@ function App() {
           projectAgentGenerationLedgerIdentity(result.project, prototypeProjectDraftTarget.projectRoot),
         );
         if (cancelled) return;
+        const interruptedExportRecovery = generationLedgerOpen.ok && generationLedgerOpen.ledger
+          ? await recoverInterruptedLocalExportState({
+              target: prototypeProjectDraftTarget,
+              ledger: generationLedgerOpen.ledger,
+              timeline: timelineOpen.timeline,
+            })
+          : undefined;
+        if (cancelled) return;
+        const agentTimelineForRestore = interruptedExportRecovery?.timeline || timelineOpen.timeline;
+        const generationLedgerForRestore = interruptedExportRecovery?.ledger || generationLedgerOpen.ledger;
         const reviewSelectionLedgerOpen = await openProjectAgentReviewSelectionLedger(
           prototypeProjectDraftTarget,
           projectAgentReviewSelectionIdentity(result.project, prototypeProjectDraftTarget.projectRoot),
         );
         if (cancelled) return;
-        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
+        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, agentTimelineForRestore.entries);
         if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
             project: result.project,
@@ -3384,8 +3484,8 @@ function App() {
         }
         setRestoredAgentStagedPlanDraft(projectAgentStagedPlanDraftForProjection(stagedPlanRestore));
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
-        setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
-        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
+        setRestoredAgentTimelineEntries(agentTimelineForRestore.entries);
+        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerForRestore : undefined);
         setRestoredAgentReviewSelectionLedger(reviewSelectionLedgerOpen.ok ? reviewSelectionLedgerOpen.ledger : undefined);
         applyProjectVibeProjectState(result.project, prototypeProjectDraftTarget, {
           projectLocalKnowledgePacks: knowledgeOpen.packs,
@@ -3566,12 +3666,22 @@ function App() {
           projectAgentGenerationLedgerIdentity(projectForRestore, runtimeProjectBinding.projectRoot),
         );
         if (cancelled) return;
+        const interruptedExportRecovery = generationLedgerOpen.ok && generationLedgerOpen.ledger
+          ? await recoverInterruptedLocalExportState({
+              target: runtimeDraftTarget,
+              ledger: generationLedgerOpen.ledger,
+              timeline: timelineOpen.timeline,
+            })
+          : undefined;
+        if (cancelled) return;
+        const agentTimelineForRestore = interruptedExportRecovery?.timeline || timelineOpen.timeline;
+        const generationLedgerForRestore = interruptedExportRecovery?.ledger || generationLedgerOpen.ledger;
         const reviewSelectionLedgerOpen = await openProjectAgentReviewSelectionLedger(
           runtimeDraftTarget,
           projectAgentReviewSelectionIdentity(projectForRestore, runtimeProjectBinding.projectRoot),
         );
         if (cancelled) return;
-        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
+        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, agentTimelineForRestore.entries);
         if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft?.status === "active") {
           await clearProjectAgentStagedPlanDraft(runtimeDraftTarget, {
             project: projectForRestore,
@@ -3583,8 +3693,8 @@ function App() {
         runtimeAgentTimelineRestoreKeyRef.current = restoreKey;
         setRestoredAgentStagedPlanDraft(projectAgentStagedPlanDraftForProjection(stagedPlanRestore));
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
-        setRestoredAgentTimelineEntries(timelineOpen.ok ? timelineOpen.timeline.entries : []);
-        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
+        setRestoredAgentTimelineEntries(timelineOpen.ok ? agentTimelineForRestore.entries : []);
+        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerForRestore : undefined);
         setRestoredAgentReviewSelectionLedger(reviewSelectionLedgerOpen.ok ? reviewSelectionLedgerOpen.ledger : undefined);
       } catch (error) {
         console.warn("Failed to restore runtime Agent timeline", error);
@@ -4278,6 +4388,7 @@ function App() {
         worker: projection.exportWorker,
         projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
         bridge,
+        stagingTransactionId: exportConfirmationReceipt?.jobId,
         signal: input?.signal,
         agentToolTrace: input?.agentToolTrace,
         deliveryConfirmation: exportConfirmationReceipt ? {
@@ -5037,6 +5148,7 @@ function App() {
         entries,
         generatedAt,
       );
+      if (nextTimeline === existingAgentTimeline.timeline) return;
       if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, nextTimeline);
       if (writeEpoch !== agentTimelineWriteEpochRef.current) return;

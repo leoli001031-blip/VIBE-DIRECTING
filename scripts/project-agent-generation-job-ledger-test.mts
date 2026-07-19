@@ -9,10 +9,13 @@ import {
   planAgentVideoProductionAction,
   recordAgentVideoGenerationJobReviewResult,
   transitionAgentVideoGenerationJob,
+  type AgentVideoGenerationJobLedger,
 } from "../src/core/agentVideoProductionContract.ts";
 import {
   openProjectAgentGenerationJobLedger,
+  interruptedLocalExportStagingPaths,
   projectAgentGenerationJobLedgerPath,
+  recoverInterruptedLocalExportJobs,
   restoreProjectAgentGenerationJobLedger,
   saveProjectAgentGenerationJobLedger,
 } from "../src/project/projectAgentGenerationJobLedger.ts";
@@ -159,6 +162,47 @@ const running = transitionAgentVideoGenerationJob({
   generatedAt: "2026-07-11T00:00:04.000Z",
 });
 assert(running.ok && running.job?.status === "running", "confirmed job should reach running before simulated exit");
+
+const interruptedExportLedger: AgentVideoGenerationJobLedger = {
+  ...running.ledger,
+  jobs: [{
+    ...running.job!,
+    kind: "export",
+    providerId: "local-exporter",
+    modelId: "project-export-v1",
+    capability: "export",
+    pipelineStep: "export",
+    actionId: "footer_project_export",
+    sourceConfirmationId: "footer_action_export",
+    executionMode: "live",
+    providerCalled: false,
+    outputAssets: [],
+  }],
+};
+const interruptedExportRecovery = recoverInterruptedLocalExportJobs(interruptedExportLedger);
+assert(interruptedExportRecovery.changed, "a running synchronous local export must be recovered after process restart");
+assert(interruptedExportRecovery.jobs[0]?.status === "failed", "an interrupted local export must become terminal failed");
+assert(interruptedExportRecovery.jobs[0]?.statusHistory.at(-1)?.error?.includes("interrupted before atomic publish"), "interrupted local export recovery must preserve an actionable error");
+assert(
+  interruptedLocalExportStagingPaths(interruptedExportRecovery.jobs[0]!).join("|")
+    === `exports/.vibe-staging/${interruptedExportRecovery.jobs[0]!.jobId}|reports/exports/.vibe-staging/${interruptedExportRecovery.jobs[0]!.jobId}`,
+  "interrupted local export recovery must target only staging directories bound to the exact job id",
+);
+assert(
+  interruptedLocalExportStagingPaths({ ...interruptedExportRecovery.jobs[0]!, jobId: "../outside" }).length === 0,
+  "interrupted local export staging cleanup must reject unsafe job ids",
+);
+const sameProcessExportRecovery = recoverInterruptedLocalExportJobs(interruptedExportLedger, {
+  updatedBefore: running.job!.updatedAt,
+});
+assert(!sameProcessExportRecovery.changed, "restore effects must not recover a local export started by the current renderer process");
+const priorProcessExportRecovery = recoverInterruptedLocalExportJobs(interruptedExportLedger, {
+  updatedBefore: "2026-07-11T00:00:05.000Z",
+});
+assert(priorProcessExportRecovery.changed, "a local export from a prior renderer process must recover on cold start");
+const repeatedInterruptedExportRecovery = recoverInterruptedLocalExportJobs(interruptedExportRecovery.ledger);
+assert(!repeatedInterruptedExportRecovery.changed, "interrupted local export recovery must be idempotent");
+assert(repeatedInterruptedExportRecovery.ledger.updatedAt === interruptedExportRecovery.ledger.updatedAt, "idempotent interrupted export recovery must not rewrite the ledger");
 
 const reviewOutputPath = `${projectRoot}/video/P6S01.mp4`;
 const reviewOutputHash = `sha256:${"7".repeat(64)}`;

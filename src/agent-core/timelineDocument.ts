@@ -28,14 +28,40 @@ export function appendVibeAgentTimelineEntries(
   entries: VibeAgentTimelineEntry[],
   generatedAt?: string,
 ): VibeAgentTimelineDocument {
-  const updatedAt = generatedAt || entries[entries.length - 1]?.createdAt || new Date().toISOString();
   const existing = new Map(timeline.entries.map((entry) => [entry.id, entry]));
-  for (const entry of entries) existing.set(entry.id, entry);
+  let changed = false;
+  for (const entry of entries) {
+    const current = existing.get(entry.id);
+    if (current && timelineEntriesMatchIgnoringCreatedAt(current, entry)) continue;
+    existing.set(entry.id, entry);
+    changed = true;
+  }
+  if (!changed) return timeline;
+  const updatedAt = generatedAt || entries[entries.length - 1]?.createdAt || new Date().toISOString();
   return {
     ...timeline,
     updatedAt,
     entries: Array.from(existing.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
   };
+}
+
+function timelineEntriesMatchIgnoringCreatedAt(
+  left: VibeAgentTimelineEntry,
+  right: VibeAgentTimelineEntry,
+) {
+  return left.id === right.id
+    && left.type === right.type
+    && left.title === right.title
+    && left.body === right.body
+    && left.lifecycle === right.lifecycle
+    && left.toolName === right.toolName
+    && left.actionKind === right.actionKind
+    && left.actionId === right.actionId
+    && left.confirmationRequired === right.confirmationRequired
+    && left.confirmationToken === right.confirmationToken
+    && left.status === right.status
+    && JSON.stringify(left.facts || []) === JSON.stringify(right.facts || [])
+    && JSON.stringify(left.details || {}) === JSON.stringify(right.details || {});
 }
 
 export function parseVibeAgentTimelineDocument(value: unknown): {

@@ -41,6 +41,7 @@ export interface ElectronBridge {
     destinationPath: string;
     previousPath?: string;
   }>;
+  sandboxDiscardStagedExport?(stagingPath: string): Promise<{ discarded: boolean; stagingPath: string }>;
   sandboxSpawn(command: string, args: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }>;
 }
 

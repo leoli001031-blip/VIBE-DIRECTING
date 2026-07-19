@@ -60,6 +60,7 @@ function runtimeEnv(primaryName, legacyName) {
 const runtimeWritableRoot = path.resolve(runtimeEnv("VIBE_DIRECTOR_RUNTIME_WORKDIR", "VIBE_CORE_RUNTIME_WORKDIR") || process.cwd());
 const host = runtimeEnv("VIBE_DIRECTOR_RUNTIME_API_HOST", "VIBE_CORE_RUNTIME_API_HOST") || "127.0.0.1";
 const port = Number(runtimeEnv("VIBE_DIRECTOR_RUNTIME_API_PORT", "VIBE_CORE_RUNTIME_API_PORT") || 8790);
+const runtimeParentPid = Number(process.env.VIBE_DIRECTOR_RUNTIME_PARENT_PID || "0");
 const defaultSandboxRunRootRelativePath = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames";
 const sandboxRunRootRelativePath = runtimeEnv("VIBE_DIRECTOR_REAL_DEMO_005_ROOT", "VIBE_CORE_REAL_DEMO_005_ROOT") || defaultSandboxRunRootRelativePath;
 const sandboxProjectVibeRelativePath = `${sandboxRunRootRelativePath}/project/project.vibe`;
@@ -1456,6 +1457,22 @@ const server = createServer((req, res) => {
   });
 });
 
+let shuttingDown = false;
+const runtimeParentWatchdog = Number.isInteger(runtimeParentPid) && runtimeParentPid > 1
+  ? setInterval(() => {
+      try {
+        if (process.ppid !== runtimeParentPid) {
+          shutdown();
+          return;
+        }
+        process.kill(runtimeParentPid, 0);
+      } catch {
+        shutdown();
+      }
+    }, 1000)
+  : undefined;
+runtimeParentWatchdog?.unref();
+
 server.listen(port, host, () => {
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
@@ -1470,6 +1487,9 @@ server.listen(port, host, () => {
 });
 
 function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (runtimeParentWatchdog) clearInterval(runtimeParentWatchdog);
   server.close(() => process.exit(0));
 }
 

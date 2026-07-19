@@ -44,6 +44,7 @@ export interface ExportActionBridge {
   sandboxHashFile?(filePath: string): Promise<{ path: string; hash: string; size: number }>;
   sandboxWriteFile(filePath: string, data: string): Promise<{ written: boolean; path: string; hash: string }>;
   sandboxCopyFile?(sourcePath: string, destinationPath: string): Promise<{ copied: boolean; sourcePath: string; path: string; hash: string; size: number }>;
+  sandboxDiscardStagedExport?(stagingPath: string): Promise<{ discarded: boolean; stagingPath: string }>;
   sandboxPublishDirectory?(stagingPath: string, destinationPath: string): Promise<{
     published: boolean;
     stagingPath: string;
@@ -56,6 +57,7 @@ export interface RunExportActionInput {
   worker: ExportWorkerState;
   projectRoot?: string;
   bridge?: ExportActionBridge;
+  stagingTransactionId?: string;
   signal?: AbortSignal;
   onProgress?: (progress: { current: number; total: number; label: string }) => void;
   agentToolTrace?: ExportActionToolTrace;
@@ -145,6 +147,11 @@ class BridgeExportAdapter implements ExportWorkerAdapter {
     if (!result.published) throw new Error("Electron export bridge did not publish the staged directory.");
     return result;
   }
+
+  async discard() {
+    if (!this.bridge.sandboxDiscardStagedExport) return;
+    await this.bridge.sandboxDiscardStagedExport(this.projectPath(this.stagingRoot));
+  }
 }
 
 function stableStringify(value: unknown): string {
@@ -184,6 +191,14 @@ function exportTransactionId(worker: ExportWorkerState, deliveryGate: ExportDeli
     actionId: deliveryGate.authorization?.actionId,
     confirmationId: deliveryGate.authorization?.confirmationId,
   })}`;
+}
+
+function normalizeExportTransactionId(value: string) {
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/.test(normalized)) {
+    throw new Error("Export staging transaction id is invalid.");
+  }
+  return normalized;
 }
 
 function executableWorker(worker: ExportWorkerState, deliveryGate: ExportDeliveryGateState, agentToolTrace?: ExportActionToolTrace): ExportWorkerState {
@@ -281,7 +296,7 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
     ? new BridgeExportAdapter(
       input.projectRoot,
       worker.exportRoot,
-      exportTransactionId(worker, deliveryGate),
+      normalizeExportTransactionId(input.stagingTransactionId || exportTransactionId(worker, deliveryGate)),
       input.bridge,
     )
     : undefined;
@@ -338,6 +353,11 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
   const result: ExportWorkerExecutionResult = await executeExportWorkerPlan(worker, adapter, input.signal, input.onProgress);
 
   if (!result.ok) {
+    try {
+      await bridgeAdapter?.discard();
+    } catch (error) {
+      result.errors.push(`[delivery_staging_cleanup_failed] ${error instanceof Error ? error.message : String(error)}`);
+    }
     return {
       status: worker.blockers.length ? "blocked" : "failed",
       label: worker.blockers.length ? "导出还未就绪" : "导出失败",
@@ -358,6 +378,12 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
     try {
       await bridgeAdapter.publish();
     } catch (error) {
+      const errors = [`[delivery_atomic_publish_failed] ${error instanceof Error ? error.message : String(error)}`];
+      try {
+        await bridgeAdapter.discard();
+      } catch (cleanupError) {
+        errors.push(`[delivery_staging_cleanup_failed] ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+      }
       return {
         status: "failed",
         label: "导出失败",
@@ -367,7 +393,7 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
         executedCount: result.executed.length,
         plannedWriteCount,
         writes: [],
-        errors: [`[delivery_atomic_publish_failed] ${error instanceof Error ? error.message : String(error)}`],
+        errors,
         agentToolTrace: input.agentToolTrace,
         deliveryGate,
         outputAssets: [],

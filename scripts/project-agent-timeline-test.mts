@@ -124,6 +124,45 @@ assert.equal(restored.timeline.entries.some((entry) => entry.toolName === "inspe
 assert.equal(restored.timeline.entries.some((entry) => entry.type === "tool_result" && entry.toolName === "run_confirmed_action"), true);
 assert.equal(restored.timeline.entries.some((entry) => entry.type === "action_result" && entry.toolName === "write_project"), true);
 
+const selectionContextEntry: VibeAgentTimelineEntry = {
+  id: "selection_context_P10ES01_P10ES01",
+  type: "state_change",
+  createdAt: "2026-06-18T08:01:00.000Z",
+  title: "我知道你在说哪里了",
+  body: "现在你说“这个”，我会理解为镜头 P10ES01。",
+  lifecycle: "succeeded",
+  status: "done",
+  facts: [{ label: "这个指向", value: "镜头 P10ES01" }],
+  details: {
+    deicticCue: "镜头 P10ES01",
+    projectId: project.manifest.projectId,
+    projectFactHash: "current-project-facts",
+  },
+};
+const timelineWithSelection = appendVibeAgentTimelineEntries(timeline, [selectionContextEntry], selectionContextEntry.createdAt);
+const repeatedSelection = appendVibeAgentTimelineEntries(timelineWithSelection, [{
+  ...selectionContextEntry,
+  createdAt: "2026-06-18T08:02:00.000Z",
+}], "2026-06-18T08:02:00.000Z");
+assert.equal(repeatedSelection, timelineWithSelection, "an identical selection-context replay must preserve the timeline document");
+assert.equal(repeatedSelection.updatedAt, selectionContextEntry.createdAt);
+assert.equal(
+  repeatedSelection.entries.find((entry) => entry.id === selectionContextEntry.id)?.createdAt,
+  selectionContextEntry.createdAt,
+);
+
+const changedSelection = appendVibeAgentTimelineEntries(timelineWithSelection, [{
+  ...selectionContextEntry,
+  createdAt: "2026-06-18T08:03:00.000Z",
+  body: "现在你说“这个”，我会理解为已更新的镜头 P10ES01。",
+}], "2026-06-18T08:03:00.000Z");
+assert.notEqual(changedSelection, timelineWithSelection, "a changed selection context must still update the timeline");
+assert.equal(changedSelection.updatedAt, "2026-06-18T08:03:00.000Z");
+assert.equal(
+  changedSelection.entries.find((entry) => entry.id === selectionContextEntry.id)?.body,
+  "现在你说“这个”，我会理解为已更新的镜头 P10ES01。",
+);
+
 const otherProject = createProjectVibe({
   projectId: "other-project",
   title: "Other Project",

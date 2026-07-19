@@ -60,5 +60,6 @@ contextBridge.exposeInMainWorld("vibeRuntime", {
   sandboxWriteFile: (filePath: string, data: string) => ipcRenderer.invoke("sandbox:writeFile", filePath, data),
   sandboxCopyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke("sandbox:copyFile", sourcePath, destinationPath),
   sandboxPublishDirectory: (stagingPath: string, destinationPath: string) => ipcRenderer.invoke("sandbox:publishDirectory", stagingPath, destinationPath),
+  sandboxDiscardStagedExport: (stagingPath: string) => ipcRenderer.invoke("sandbox:discardStagedExport", stagingPath),
   sandboxSpawn: (command: string, args: string[]) => ipcRenderer.invoke("sandbox:spawn", command, args),
 });

@@ -383,11 +383,22 @@ assert(mainSource.includes("VIBE_DIRECTOR_RUNTIME_API_PORT"), "built Electron ma
 assert(mainSource.includes("VIBE_CORE_RUNTIME_API_PORT"), "built Electron main must keep legacy runtime env compatibility isolated");
 assert(mainSource.includes("VIBE_ELECTRON_PACKAGED_ACCEPTANCE"), "built Electron main must gate packaged control acceptance behind an explicit test-only flag");
 assert(mainSource.includes("VIBE_ELECTRON_ACCEPTANCE_CONTROL_TOKEN"), "packaged acceptance control must require an ephemeral token");
+assert(
+  mainSource.includes("VIBE_ELECTRON_ACCEPTANCE_EXPORT_FAULT")
+    && mainSource.includes("VIBE_ELECTRON_ACCEPTANCE_EXPORT_PUBLISH_DELAY_MS"),
+  "built Electron main must retain the P11 packaged export fault controls",
+);
+assert(
+  /function packagedAcceptanceExportFault\(\)[\s\S]*?if \(!packagedAcceptanceControlEnabled\) return (?:undefined|void 0)/.test(mainSource)
+    && /function packagedAcceptanceExportPublishDelayMs\(\)[\s\S]*?if \(!packagedAcceptanceControlEnabled\) return 0/.test(mainSource),
+  "packaged export fault controls must fail closed outside authenticated packaged acceptance",
+);
 assert(mainSource.includes('server.listen(packagedAcceptanceControlPort, "127.0.0.1"'), "packaged acceptance control must bind to loopback only");
 assert(mainSource.includes('request.method === "set_bounds"'), "packaged acceptance control must support authenticated responsive-window checks");
 assert(mainSource.includes('request.method === "capture_page"'), "packaged acceptance control must support authenticated visual evidence capture");
 assert(preloadSource.includes("contextBridge"), "built preload must expose a context-isolated bridge");
 assert(preloadSource.includes("vibeRuntime"), "built preload must expose vibeRuntime");
+assert(preloadSource.includes("sandboxDiscardStagedExport"), "built preload must expose exact interrupted-export staging cleanup");
 assert(preloadSource.includes("ensureRuntimeApiBaseUrl"), "built preload must expose lazy runtime startup");
 assert(preloadSource.includes("currentProjectBinding"), "built preload must expose current project binding restore helper");
 assert(preloadSource.includes("__VIBE_CURRENT_PROJECT_BINDING__"), "built preload must expose current project bootstrap binding");
@@ -395,6 +406,12 @@ assert(preloadSource.includes("--vibe-current-project-binding="), "built preload
 assert(indexHtml.includes("<script") && indexHtml.includes("./assets/"), "packaged dist/index.html must reference relative built assets for file:// loading");
 assert(runtimeSource.includes("vibe-director-runtime-api-listening"), "packaged runtime must publish the Vibe Director listen event");
 assert(runtimeSource.includes("VIBE_DIRECTOR_RUNTIME_WORKDIR"), "packaged runtime must prefer Vibe Director writable-root env");
+assert(
+  mainSource.includes("VIBE_DIRECTOR_RUNTIME_PARENT_PID")
+    && runtimeSource.includes("VIBE_DIRECTOR_RUNTIME_PARENT_PID")
+    && runtimeSource.includes("process.ppid"),
+  "packaged Runtime must exit when its Electron parent is force-terminated",
+);
 assert(runtimeSource.includes("/audio/local-index-tts/generate"), "packaged runtime must include the local IndexTTS route");
 assert(runtimeSource.includes("/audio/local-qwen3-tts-clone/generate"), "packaged runtime must include the local Qwen3 TTS clone route");
 assert(!runtimeSource.includes("tsx/esm/api"), "packaged runtime bundle must not depend on tsx register");

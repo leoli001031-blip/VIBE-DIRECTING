@@ -140,6 +140,7 @@ export function buildAgentDirectorReviewVersionPair(input: {
   ledger?: AgentVideoGenerationJobLedger;
   identity: AgentDirectorReviewVersionPairProjectIdentity;
   shotId?: string;
+  availableJobIds?: readonly string[];
 }): AgentDirectorReviewVersionPairResult {
   const projectId = text(input.identity.projectId);
   const projectRoot = normalizeAgentDirectorReviewProjectRoot(input.identity.projectRoot || "");
@@ -167,9 +168,13 @@ export function buildAgentDirectorReviewVersionPair(input: {
   if (invalidRelevantJobs.length) {
     return { status: "blocked", blockers: ["review_version_pair_candidate_identity_invalid"] };
   }
+  const availableJobIds = input.availableJobIds ? new Set(input.availableJobIds) : undefined;
+  const availableRelevantJobs = availableJobIds
+    ? relevantJobs.filter((job) => availableJobIds.has(job.jobId))
+    : relevantJobs;
 
   const groups = new Map<string, AgentVideoGenerationJob[]>();
-  for (const job of relevantJobs) {
+  for (const job of availableRelevantJobs) {
     const shotId = text(job.reviewResult?.shotId);
     if (!shotId) continue;
     const current = groups.get(shotId) || [];
@@ -191,7 +196,11 @@ export function buildAgentDirectorReviewVersionPair(input: {
       return timeValue(rightLatest) - timeValue(leftLatest) || left.shotId.localeCompare(right.shotId);
     });
   const selectedGroup = eligibleGroups[0];
-  if (!selectedGroup) return { status: "missing", blockers: [] };
+  if (!selectedGroup) {
+    return availableJobIds && relevantJobs.length >= 2
+      ? { status: "blocked", blockers: ["review_version_pair_candidate_media_unavailable"] }
+      : { status: "missing", blockers: [] };
+  }
 
   const pairJobs = selectedGroup.jobs.slice(-2);
   const candidateA = versionCandidate("A", pairJobs[0]!);

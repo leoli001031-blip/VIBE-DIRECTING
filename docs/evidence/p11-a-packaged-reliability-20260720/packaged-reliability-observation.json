@@ -1,0 +1,158 @@
+{
+  "schemaVersion": "p11_a_packaged_reliability/1.0.0",
+  "status": "pass",
+  "acceptedAt": "2026-07-19T20:06:36.496Z",
+  "root": "/tmp/vibe-director-p11-a-tlFmhc",
+  "appPath": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app",
+  "freshChain": {
+    "status": "pass",
+    "projectRoot": "/tmp/vibe-director-p10-e-20260719-4p0Tc4/projects/p10-e-packaged-director-workflow",
+    "stageSnapshotRoot": "/tmp/vibe-director-p11-a-tlFmhc/stage-snapshots",
+    "forcedStageRestarts": true,
+    "providerCalls": 0,
+    "stdoutTail": "{\n  \"status\": \"pass\",\n  \"root\": \"/tmp/vibe-director-p10-e-20260719-4p0Tc4\",\n  \"evidencePath\": \"/tmp/vibe-director-p11-a-tlFmhc/fresh-chain-evidence/packaged-observation.json\",\n  \"sourceProjectFactHash\": \"pv_efadc4ac\",\n  \"promotedProjectFactHash\": \"pv_921df7ef\",\n  \"outputHashA\": \"44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f\",\n  \"outputHashB\": \"0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544\",\n  \"providerCalls\": 0\n}\n"
+  },
+  "results": {
+    "migratedOldProject": {
+      "status": "pass",
+      "sourceProjectRoot": "/Users/lichenhao/Desktop/new vibe directing/real-test-sandbox/fresh-storyboard-seedance720-20260522-03",
+      "copiedProjectRoot": "/tmp/vibe-director-p11-a-tlFmhc/scenarios/migrated-old-project/projects/fresh-storyboard-seedance720-20260522-03",
+      "observation": {
+        "currentTaskStep": "prepare_references",
+        "currentTaskSource": "project_observation",
+        "currentTaskLabel": "复核参考",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 0,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [],
+        "bodyText": "Vibe Director / 导演台\n雨后纸飞机\n本地\n查看\n故事\n3 个镜头\n交付\n设置\n项目\n雨后纸飞机\n正在处理 · 等待当前动作完成\n故事\n3 镜头\n参考\n7 张\n视频\n未生成\n交付\n展示包\n段落\n雨后纸飞机\n3 镜头\n当前对象\n参考素材\n状态来自当前项目事实\n镜头\n3 个\n参考\n待看 · 7/7 张可看\nAI 导演建议\n完成后继续在右侧输入框描述下一步\n项目正在保存或同步\n等待当前动作完成\n消息流会接着这个状态处理。\n理解\n我看到《雨后纸飞机》已有 3 个镜头。\n1 个段落 · 当前选中 1 个镜头\n缺口\n7 项参考需要复核。\n参考状态：参考待复核\n准备\n先复核参考和素材用途，再继续生成视频。\n现在在做：整理素材\n确认\n需要复核素材\n先复核参考和素材用途，再继续生成视频。\n项目素材\n7 个素材已进入项目，7 个需要确认用途。\n先确认这些素材分别怎么用。\n故事板 · 项目素材\n葵角色参考\n建议用于 镜头 AO01、镜头 AO02、镜头 AO03\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO01、镜头 AO02 等 3 个镜头\n故事板 · 项目素材\n悠真角色参考\n建议用于 镜头 AO02、镜头 AO03\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO02、镜头 AO03\n故事板 · 项目素材\n雨后学校天台场景参考\n这是局部细节、动作或状态参考，建议并入主体资产或镜头说明，不单独生成参考。\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO01、镜头 AO02 等 3 个镜头\n故事板 · 项目素材\n发光纸飞机道具参考\n建议用于 镜头 AO01、镜头 AO02、镜头 AO03\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO01、镜头 AO02 等 3 个镜头\n故事板 · 项目素材\nAO01 分镜参考图\n建议用于 镜头 AO01\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO01\n故事板 · 项目素材\nAO02 分镜参考图\n建议用于 镜头 AO02\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO02\n故事板 · 项目素材\nAO03 分镜参考图\n建议用于 镜头 AO03\n点选后可说：这张故事板给哪一段用，已关联 镜头 AO03\n素材匹配\n素材会由 AI 自动判断用途\n继续整理\nAI 导演怎么判断\n待判断 3\n参考待看\n故事和镜头\n1 个段落 · 点击查看分镜、模式和画面状态\n收起\nAI 导演\n正在看 镜头 AO01\n当前选择\n\n正在看 镜头 AO01。直接说这一段怎么改。\n\n位置\n当前段落里的镜头\n镜头\nAO01 · 葵在雨后天台发现发光纸飞机\n方式\n待判断\n时长\n4s\nAO01\n葵在雨后天台发现发光纸飞机\nAO02\n悠真从门口入画，葵把纸飞机递给他\nAO03\n纸飞机飞向广播塔，两人并肩抬头\n当前任务\n复核参考\n检查生成结果并决定是否采用\n等待复核\n导演经验\n全能参考\n点开查看 Skills\n工作方式\n先整理\n和 AI 导演的对话\n项目状态\n故事流已准备\n已完成\n\n当前项目已有 3 个镜头。你可以点选镜头后直接说“这个”哪里不对，也可以让 Agent 继续安排下一步。\n\n镜头\n3 个\n直接说要改哪里，或让 Agent 继续安排参考和视频。\n当前选择\n我知道你在说哪里了\n已完成\n\n现在你说“这个”，我会理解为正在看 镜头 AO01。已选中 正在看 镜头 AO01。直接说这一段怎么改。\n\n这个指向\n正在看 镜头 AO01\n位置\n当前段落里的镜头\n镜头\nAO01 · 葵在雨后天台发现发光纸飞机\n方式\n待判断\n直接说改法，或说“继续下一步”。\n回复\nAI 导演：正在处理\n\n项目正在保存或同步。现在等你：等待当前动作完成\n\n项目\n已连接\n镜头\n3 个\n参考\n待看 · 7/7 张可看\n完成后继续在右侧输入框描述下一步\n添加文件\n你说“这个”时，我会理解为：正在看 镜头 AO01\n脚本、图片、声音或视频会先进入素材收件箱，AI 导演先分类；采用前等你确认。\n先写一句，或拖入文件。\n动作完成：去参考页复核。\n发送"
+      },
+      "copyChangedDuringOpen": false
+    },
+    "corruptGenerationLedger": {
+      "status": "pass",
+      "observation": {
+        "currentTaskStep": "submit_video",
+        "currentTaskSource": "project_observation",
+        "currentTaskLabel": "复核视频",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 1,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [],
+        "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP10ES01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n本轮 · Review\n新版本已返回\nneeds_review\n\n结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。\n\n对象\nP10ES01\n范围\nP10ES01\n回执\np10e_local_r\n输出\nsha256:44f30\n当前复核结果缺少回执或输出哈希，不能写入 Review Receipt。\n审查依据：全能参考\n通过预览\n需要修改\n只写入 Review Receipt，不会晋级项目事实，不会导出。\n晋级为项目事实\n需要另行确认\n更早的对话\n2 条\n添加文件\nP10ES01 · needs_review\n补充修改意图不会自动重试或提交。\n发送\n已恢复待确认计划\n已恢复本地项目"
+      }
+    },
+    "corruptSelectionLedger": {
+      "status": "pass",
+      "observation": {
+        "currentTaskStep": "compare_versions",
+        "currentTaskSource": "project_observation",
+        "currentTaskLabel": "比较 P10ES01 两个版本",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 1,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [],
+        "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n版本复核\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01 · 版本 B\n1 段\n5s\n1 个待复核\nA\nB\n版本 B · 待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP10ES01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n本轮 · Review\n比较两个返回版本\nneeds_review\n\n当前查看版本 B。比较动作完成点、情绪转折与连续性后，再进入独立选择确认。\n\n对象\nP10ES01 · 版本 B\n范围\nP10ES01\n回执\np10e_local_r\n输出\nsha256:0a858\n版本对\nS01_1620d359\n审查依据：全能参考\n查看 A\n查看 B\n选择版本 B\n需要修改\n只进入独立版本选择确认；不会晋级项目事实或导出。\n晋级为项目事实\n需要另行确认\n更早的对话\n4 条\n添加文件\nP10ES01 · 版本 B · needs_review\n补充修改意图不会自动重试或提交。\n发送\n已恢复待确认计划\n已恢复本地项目"
+      }
+    },
+    "corruptTimeline": {
+      "status": "pass",
+      "observation": {
+        "currentTaskStep": "export",
+        "currentTaskSource": "pipeline_plan",
+        "currentTaskLabel": "导出交付包",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 0,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [
+          "确认导出"
+        ],
+        "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n交付\n项目交付\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n交付资料\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n交付准备\n交付包\n先处理确认\n生成交付包\n先处理右侧消息里的「导出交付包」，确认前不会导出文件。\n14\n文件\n1\n可打包资料\n3\n待处理\n0\n本片参考\n1\n声音参考\n视频结果：0 待确认 · 1 已通过 · 0 缺失；视频素材已确认\n资料包还没准备好\n素材清单还未核对完成。\n查看本地包明细\n1 个可打包资料 · 3 个待处理\n正式预览还需复核：\n素材清单还未核对完成。\n正式预览还有检查未完成。\n关键画面对齐还需确认。\n视频结果还没出来或还没确认。\n还有制作检查未完成。\n声音计划：1 个镜头 · 声音参考随视频模型使用，配乐留到后期\n收起\nAI 导演\n本地交付包\n当前任务\n导出交付包\n只写入本地交付资料包\n等待确认\n工作方式\n确认卡接管\n和 AI 导演的对话\n需要确认\n建议行动：导出交付包\n等你确认\n\n我准备导出，范围是当前项目。确认后才会写入本地导出文件。\n\n目标\n当前项目\n包含\n当前可打包资料、制作报告、缺失视频说明\n写入文件\n确认后才写入\n确认后导出交付包；也可以继续输入修改意见。\n确认后会\n只写入本地交付资料包\n不会\n确认前再核对：这次只导出 当前项目。\n确认导出\n再改一下\n添加文件\n你说“这个”时，我会理解为：本地交付包；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送"
+      }
+    },
+    "missingMedia": {
+      "status": "pass",
+      "observation": {
+        "currentTaskStep": "submit_video",
+        "currentTaskSource": "project_observation",
+        "currentTaskLabel": "复核视频",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 1,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [],
+        "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n1 张\n视频\n1 待看\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n视频\nP10ES01\n1 段\n5s\n视频已完成\n待复核\n雨夜递出\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP10ES01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n本轮 · Review\n新版本已返回\nneeds_review\n\n结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。\n\n对象\nP10ES01\n范围\nP10ES01\n回执\np10e_local_r\n输出\nsha256:0a858\n审查依据：全能参考\n通过预览\n需要修改\n只写入 Review Receipt，不会晋级项目事实，不会导出。\n晋级为项目事实\n需要另行确认\n更早的对话\n4 条\n添加文件\nP10ES01 · needs_review\n补充修改意图不会自动重试或提交。\n发送\n已恢复待确认计划\n已恢复本地项目"
+      }
+    },
+    "readOnlyProject": {
+      "status": "pass",
+      "confirmationCount": 1,
+      "failure": "write refused; confirmation restored",
+      "observation": {
+        "currentTaskStep": "export",
+        "currentTaskSource": "pipeline_plan",
+        "currentTaskLabel": "导出交付包",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 0,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [
+          "确认导出"
+        ],
+        "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n交付\n项目交付\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n交付资料\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n交付准备\n交付包\n先处理确认\n生成交付包\n先处理右侧消息里的「导出交付包」，确认前不会导出文件。\n14\n文件\n1\n可打包资料\n3\n待处理\n0\n本片参考\n1\n声音参考\n视频结果：0 待确认 · 1 已通过 · 0 缺失；视频素材已确认\n资料包还没准备好\n素材清单还未核对完成。\n查看本地包明细\n1 个可打包资料 · 3 个待处理\n正式预览还需复核：\n素材清单还未核对完成。\n正式预览还有检查未完成。\n关键画面对齐还需确认。\n视频结果还没出来或还没确认。\n还有制作检查未完成。\n声音计划：1 个镜头 · 声音参考随视频模型使用，配乐留到后期\n收起\nAI 导演\n本地交付包\n当前任务\n导出交付包\n只写入本地交付资料包\n等待确认\n工作方式\n确认卡接管\n和 AI 导演的对话\n前面的记录已保存，这里只显示最近一次推进。\n需要确认\n建议行动：导出交付包\n等你确认\n\n我准备导出，范围是当前项目。确认后才会写入本地导出文件。\n\n目标\n当前项目\n包含\n当前可打包资料、制作报告、缺失视频说明\n写入文件\n确认后才写入\n确认后导出交付包；也可以继续输入修改意见。\n确认后会\n只写入本地交付资料包\n不会\n确认前再核对：这次只导出 当前项目。\n确认导出\n再改一下\n添加文件\n你说“这个”时，我会理解为：本地交付包；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送"
+      }
+    },
+    "diskWriteFailure": {
+      "status": "pass",
+      "failure": "导出失败先处理待确认内容。",
+      "jobStatus": "failed",
+      "stagingFiles": []
+    },
+    "publishFailure": {
+      "status": "pass",
+      "failure": "导出失败先处理待确认内容。",
+      "stagingFiles": []
+    },
+    "interruptedExport": {
+      "status": "pass",
+      "restored": {
+        "currentTaskStep": "export",
+        "currentTaskSource": "pipeline_plan",
+        "currentTaskLabel": "导出交付包",
+        "currentTaskCount": 1,
+        "runningTurnCount": 0,
+        "reviewTurnCount": 0,
+        "selectionTurnCount": 0,
+        "promotionTurnCount": 0,
+        "enabledConfirmations": [
+          "确认导出"
+        ],
+        "bodyText": "Vibe Director / 导演台\nP10-E Packaged Director Workflow Acceptance\n本地\n查看\n交付\n项目交付\n交付\n设置\n项目\nP10-E Packaged Director Workflow Acceptance\n等待你确认 · 先处理消息里的确认，或继续说明怎么改\n故事\n1 镜头\n参考\n1 张\n视频\n1 可预览\n交付\n展示包\n段落\n雨夜递出\n1 镜头\n当前对象\n交付资料\n状态来自当前项目事实\n镜头\n1 个\n参考\n已可用\n视频\n已完成\n交付准备\n交付包\n先处理确认\n生成交付包\n先处理右侧消息里的「导出交付包」，确认前不会导出文件。\n14\n文件\n1\n可打包资料\n3\n待处理\n0\n本片参考\n1\n声音参考\n视频结果：0 待确认 · 1 已通过 · 0 缺失；视频素材已确认\n资料包还没准备好\n素材清单还未核对完成。\n查看本地包明细\n1 个可打包资料 · 3 个待处理\n正式预览还需复核：\n素材清单还未核对完成。\n正式预览还有检查未完成。\n关键画面对齐还需确认。\n视频结果还没出来或还没确认。\n还有制作检查未完成。\n声音计划：1 个镜头 · 声音参考随视频模型使用，配乐留到后期\n收起\nAI 导演\n本地交付包\n当前任务\n导出交付包\n只写入本地交付资料包\n等待确认\n工作方式\n确认卡接管\n和 AI 导演的对话\n前面的记录已保存，这里只显示最近一次推进。\n需要确认\n建议行动：导出交付包\n等你确认\n\n我准备导出，范围是当前项目。确认后才会写入本地导出文件。\n\n目标\n当前项目\n包含\n当前可打包资料、制作报告、缺失视频说明\n写入文件\n确认后才写入\n确认后导出交付包；也可以继续输入修改意见。\n确认后会\n只写入本地交付资料包\n不会\n确认前再核对：这次只导出 当前项目。\n确认导出\n再改一下\n添加文件\n你说“这个”时，我会理解为：本地交付包；消息里的确认只会做它写明的事。\n要修改就直接输入；确认在上方消息里。\n发送"
+      },
+      "stagingFiles": []
+    }
+  },
+  "invariants": {
+    "providerCalls": 0,
+    "originalOldProjectUnchanged": true,
+    "freshProjectCovered": true,
+    "oldProjectCopyCovered": true,
+    "forcedWorkflowRestarts": 5,
+    "corruptSidecarsFailClosed": true,
+    "missingMediaFailsClosed": true,
+    "readOnlyPathFailsClosed": true,
+    "diskWriteFailureFailsClosed": true,
+    "interruptedExportRequiresExplicitRecovery": true,
+    "noPartialFinalPackage": true
+  }
+}

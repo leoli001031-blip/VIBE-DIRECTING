@@ -2,11 +2,13 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   access,
+  cp,
   copyFile,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
@@ -131,10 +133,10 @@ interface RunningPackagedApp {
   darwinLaunchMarker?: string;
 }
 
-async function terminateDarwinLaunch(marker: string | undefined): Promise<void> {
+async function terminateDarwinLaunch(marker: string | undefined, signal: "TERM" | "KILL" = "TERM"): Promise<void> {
   if (!marker) return;
   await new Promise<void>((resolveStop) => {
-    const stop = spawn("pkill", ["-TERM", "-f", marker], { stdio: "ignore" });
+    const stop = spawn("pkill", [`-${signal}`, "-f", marker], { stdio: "ignore" });
     stop.once("error", resolveStop);
     stop.once("exit", resolveStop);
   });
@@ -232,6 +234,13 @@ async function closePackagedApp(app: RunningPackagedApp): Promise<void> {
       resolveTimeout();
     }, 3000)),
   ]);
+}
+
+async function forceClosePackagedApp(app: RunningPackagedApp): Promise<void> {
+  app.client.close();
+  await terminateDarwinLaunch(app.darwinLaunchMarker, "KILL");
+  if (app.child.exitCode === null && app.child.signalCode === null) app.child.kill("SIGKILL");
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
 }
 
 async function sha256(path: string): Promise<string> {
@@ -533,6 +542,10 @@ const evidencePath = join(evidenceRoot, "packaged-observation.json");
 const sourceMediaA = resolve("showcase-package/vibe-director-4shot-seedance-showcase-2026-06-18T13-00/04-generated-videos/shot_1_rainy_ticket.mp4");
 const sourceMediaB = resolve("showcase-package/vibe-director-4shot-seedance-showcase-2026-06-18T13-00/04-generated-videos/shot_2_follow_blue_light.mp4");
 const sourceReference = resolve("showcase-package/promo-page-ai-ladies-op-2026-06-18/hero/hero-poster.png");
+const forceRestartStages = process.env.VIBE_P11_FORCE_RESTARTS === "1";
+const stageSnapshotRoot = process.env.VIBE_P11_STAGE_SNAPSHOT_ROOT
+  ? resolve(process.env.VIBE_P11_STAGE_SNAPSHOT_ROOT)
+  : undefined;
 assert(await exists(executablePath), `packaged App executable is missing: ${executablePath}`);
 assert(await exists(sourceMediaA) && await exists(sourceMediaB) && await exists(sourceReference), "local deterministic fixtures are missing");
 
@@ -671,6 +684,15 @@ const baseline = {
   candidateBHash: outputHashB,
   referenceHash: await sha256(referencePath),
 };
+async function snapshotProjectStage(stage: string): Promise<void> {
+  if (!stageSnapshotRoot) return;
+  const destination = join(stageSnapshotRoot, stage);
+  await rm(destination, { recursive: true, force: true });
+  await mkdir(stageSnapshotRoot, { recursive: true });
+  await cp(projectRoot, destination, { recursive: true, force: true });
+}
+
+await snapshotProjectStage("review");
 const stages: Record<string, unknown> = {};
 const runtimeBoundaries: Record<string, unknown> = {};
 let launch: RunningPackagedApp | undefined;
@@ -701,6 +723,18 @@ try {
     const enabled = await launch!.client.evaluate<boolean>(`[...document.querySelectorAll('[aria-label="当前视频复核"] button')].some((item) => item.textContent?.trim() === "需要修改" && !item.disabled)`);
     return enabled ? true : undefined;
   }, `initial Review never enabled the needs-change action: ${JSON.stringify(stages.reviewActions)}`);
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+    launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+    await setBounds(launch.client, 1440, 900);
+    await openVideoView(launch.client);
+    await waitFor(async () => {
+      const visible = await launch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="当前视频复核"]'))`);
+      return visible ? true : undefined;
+    }, "forced restart did not restore initial Review");
+    stages.reviewForcedRestore = await observeTurns(launch.client);
+    assertSingleFocusedTurn(stages.reviewForcedRestore as Record<string, any>, "当前视频复核");
+  }
   await clickButton(launch.client, "当前视频复核", "需要修改");
   await waitFor(async () => {
     const visible = await launch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="当前视频修改意图"]'))`);
@@ -779,6 +813,7 @@ try {
   });
   assert(runningB.ok && runningB.job?.providerCalled === false, "local candidate B did not enter dry-run Running");
   await writeFile(generationLedgerPath, `${JSON.stringify(runningB.ledger, null, 2)}\n`, "utf8");
+  await snapshotProjectStage("running");
 
   launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
   await setBounds(launch.client, 1440, 900);
@@ -794,6 +829,18 @@ try {
   await capturePage(launch.client, join(evidenceRoot, "01-running-desktop.png"));
   runtimeBoundaries.running = await runtimeBoundary(launch.client);
   assert(!(runtimeBoundaries.running as any).providerCalled, "local Running must not call Provider");
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+    launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+    await setBounds(launch.client, 1440, 900);
+    await openVideoView(launch.client);
+    await waitFor(async () => {
+      const jobId = await launch!.client.evaluate<string>(`document.querySelector('[aria-label="当前运行任务"]')?.getAttribute("data-job-id") || ""`);
+      return jobId === candidateBJobId ? jobId : undefined;
+    }, "forced restart did not restore the exact local Running job");
+    stages.runningForcedRestore = await observeTurns(launch.client);
+    assertSingleFocusedTurn(stages.runningForcedRestore as Record<string, any>, "当前运行任务");
+  }
   await closePackagedApp(launch);
   launch = undefined;
 
@@ -826,6 +873,7 @@ try {
       generatedAt: new Date(Date.now() + 2000).toISOString(),
     }), null, 2)}\n`, "utf8"),
   ]);
+  await snapshotProjectStage("version-review");
 
   launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
   await setBounds(launch.client, 1440, 900);
@@ -865,6 +913,20 @@ try {
   stages.selectionConfirmation = await observeTurns(launch.client);
   assertSingleFocusedTurn(stages.selectionConfirmation as Record<string, any>, "版本选择确认");
   assert(await sha256(projectPath) === baseline.projectFileHash, "staging winner selection must not change Project.vibe");
+  await snapshotProjectStage("selection-confirmation");
+
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+    launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+    await setBounds(launch.client, 1440, 900);
+    await openVideoView(launch.client);
+    await waitFor(async () => {
+      const visible = await launch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="版本选择确认"]'))`);
+      return visible ? true : undefined;
+    }, "forced restart did not restore version selection confirmation");
+    stages.selectionForcedRestore = await observeTurns(launch.client);
+    assertSingleFocusedTurn(stages.selectionForcedRestore as Record<string, any>, "版本选择确认");
+  }
 
   await clickButton(launch.client, "版本选择确认", "确认选择版本 B");
   await waitFor(async () => {
@@ -877,8 +939,13 @@ try {
   const selectedLedger = JSON.parse(await readFile(selectionLedgerPath, "utf8"));
   assert(selectedLedger.selectionReceipts?.length === 1 && selectedLedger.selectionReceipts[0]?.winnerVersion === "B", "selection must persist one exact winner-B receipt");
   assert(selectedLedger.selectionReceipts[0]?.promotionAuthorized === false, "selection receipt must not authorize promotion");
+  await snapshotProjectStage("promotion-confirmation");
 
-  await closePackagedApp(launch);
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+  } else {
+    await closePackagedApp(launch);
+  }
   launch = undefined;
   launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
   await setBounds(launch.client, 1440, 900);
@@ -892,6 +959,9 @@ try {
   }, "cold restore did not recover the exact promotion confirmation");
   stages.promotionColdRestore = await observeTurns(launch.client);
   assertSingleFocusedTurn(stages.promotionColdRestore as Record<string, any>, "项目事实晋级确认");
+  if (forceRestartStages) {
+    stages.promotionForcedRestore = stages.promotionColdRestore;
+  }
   await clickButton(launch.client, "项目事实晋级确认", "确认晋级项目事实");
   await waitFor(async () => {
     const state = await launch!.client.evaluate<{ promotion: number; step: string }>(`({
@@ -925,7 +995,25 @@ try {
   assert((stages.deliveryConfirmation as any).currentTaskCount === 1, "Delivery must remain the only current task");
   assert((stages.deliveryConfirmation as any).focusedTurnCount === 0, "old Review turns must not compete with Delivery");
   assert(!await exists(exportRoot), "Delivery must not publish before explicit confirmation");
+  await snapshotProjectStage("delivery-confirmation");
   await capturePage(launch.client, join(evidenceRoot, "04-delivery-confirmation-desktop.png"));
+
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+    launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+    await setBounds(launch.client, 1440, 900);
+    await openExportView(launch.client);
+    await waitFor(async () => {
+      const state = await launch!.client.evaluate<{ step: string; buttons: number }>(`({
+        step: document.querySelector('[aria-label="AI 导演当前任务"]')?.getAttribute("data-current-task-step") || "",
+        buttons: [...document.querySelectorAll("button")].filter((item) => item.textContent?.trim() === "确认导出" && !item.disabled).length
+      })`);
+      return state.step === "export" && state.buttons === 1 ? state : undefined;
+    }, "forced restart did not restore Delivery confirmation");
+    stages.deliveryForcedRestore = await observeTurns(launch.client);
+    assert((stages.deliveryForcedRestore as any).currentTaskCount === 1, "forced Delivery restore must retain one current task");
+    assert(!await exists(exportRoot), "forced Delivery restore must not publish without confirmation");
+  }
 
   const exportClicked = await launch.client.evaluate<boolean>(`(() => {
     const buttons = [...document.querySelectorAll("button")].filter((item) => item.textContent?.trim() === "确认导出" && !item.disabled);
@@ -939,6 +1027,7 @@ try {
     return status.includes("导出包已生成") ? status : undefined;
   }, "packaged local export did not finish", 60_000);
   await waitFor(async () => await exists(join(exportRoot, "export_manifest.json")) ? true : undefined, "atomic export package did not publish", 30_000);
+  await snapshotProjectStage("delivered");
   stages.delivered = await observeTurns(launch.client);
   assert((stages.delivered as any).currentTaskCount === 1, "completed Delivery must retain one terminal current task");
   runtimeBoundaries.delivery = await runtimeBoundary(launch.client);
@@ -1031,6 +1120,8 @@ const evidence = {
     promotedProjectFactHash,
     shotId,
     appPath,
+    forceRestartStages,
+    stageSnapshotRoot,
   },
   chain: [
     "review",
@@ -1095,6 +1186,7 @@ const evidence = {
     portablePaths: true,
     atomicPublish: true,
     coldRestoreStable: true,
+    forcedStageRestarts: forceRestartStages,
     originalUserProjectsTouched: false,
   },
 };
