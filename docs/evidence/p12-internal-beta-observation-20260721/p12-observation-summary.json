@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "p12_internal_beta_observation/1.0.0",
+  "observedAt": "2026-07-20T19:57:00Z",
+  "status": "pass_local_packaged_internal_beta_preflight",
+  "release": {
+    "artifact": "release/Vibe Director Studio-0.0.1-arm64-mac.zip",
+    "sha256": "a9f02e61b6aee9e7af3fc7c441b0f3914bfbe851b5066db52bc558493437ec2c",
+    "manifestSha256Matched": true,
+    "sourceCommit": "94fe0834aff46f2d950fc505e877c5416a7add46",
+    "sourceState": "clean",
+    "signature": "ad_hoc",
+    "extractedAppCodesignVerified": true,
+    "notarized": false,
+    "publicDistributionClaimed": false
+  },
+  "scenarios": [
+    {
+      "id": "p12_story_first_use",
+      "operator": "computer_use",
+      "result": "pass",
+      "input": "我要拍一个 8 秒短片：清晨旧车站，男孩把一张褪色明信片递给售票机器人，第一缕阳光穿过明信片上的小孔，在墙上投出海浪。整理成 2 个镜头，不生成参考图，不提交视频。",
+      "currentTaskCount": 1,
+      "currentTaskLabel": "确认这版故事",
+      "storyShotCount": 2,
+      "referenceStatus": "未开始",
+      "videoStatus": "未生成",
+      "confirmationExecuted": false,
+      "projectFiles": [],
+      "runtimeFiles": [],
+      "providerCalls": 0,
+      "screenshot": {
+        "fileName": "00-fresh-story-confirmation-computer-use.png",
+        "sha256": "ea7007fd5704a84de697d60153f202bb80f85a445527741738c5dcf964ceb223"
+      }
+    },
+    {
+      "id": "p12_reference_confirmation",
+      "operator": "packaged_acceptance_control",
+      "result": "pass",
+      "input": "开始补参考。只形成确认，不执行生成。",
+      "actionKind": "prepare_reference_generation",
+      "currentTaskCount": 1,
+      "currentTaskLabel": "确认生成参考",
+      "confirmationRestored": true,
+      "confirmationExecuted": false,
+      "mediaCreated": 0,
+      "providerCalls": 0
+    },
+    {
+      "id": "p12_review_revision",
+      "operator": "packaged_acceptance_control",
+      "result": "pass",
+      "input": "P11ES01 需要修改：纸飞机亮起得太晚。让女孩递出后 1 秒内亮起，机器人先低头看纸飞机再抬眼，保持雨夜灯箱、女孩和机器人外观连续。",
+      "visibleClarifyTurns": 0,
+      "proposalCount": 1,
+      "projectFactsChanged": false,
+      "mediaChanged": false,
+      "newJobStatus": "staged",
+      "newJobExecutionMode": "dry_run",
+      "finalExecutionConfirmed": false,
+      "coldRestoreCurrentTaskCount": 1,
+      "coldRestoreCurrentTaskLabel": "确认验证视频流程",
+      "coldRestoreCurrentTaskSource": "timeline_confirmation",
+      "oldReviewVisibleAfterRestore": false,
+      "providerCalls": 0
+    },
+    {
+      "id": "p12_diagnostic_support",
+      "operator": "packaged_settings_ui",
+      "result": "pass",
+      "interaction": "设置 -> 导出诊断日志",
+      "diagnosticZipSha256": "af7a4f50fd02413cf760a3cdc2c59a61042e746e7f983fb7cd3309a41996fc6d",
+      "credentialsIncluded": false,
+      "tokensIncluded": false,
+      "fullProjectFilesIncluded": false,
+      "mediaIncluded": false,
+      "absolutePathsIncluded": false,
+      "projectStateDrift": false,
+      "runtimeOrphanPids": [],
+      "providerCalls": 0
+    }
+  ],
+  "productFindings": [
+    {
+      "severity": "P2",
+      "id": "confirmation_explanation_repetition",
+      "finding": "故事或参考确认同时在中区和右侧重复解释，边界正确但阅读成本仍偏高。"
+    },
+    {
+      "severity": "P2",
+      "id": "proposal_action_below_fold",
+      "finding": "Proposal 内容较长时，较矮窗口可能需要在右栏滚动后才能看到完整主按钮。"
+    },
+    {
+      "severity": "P2",
+      "id": "first_use_character_candidate_duplication",
+      "finding": "首用故事的素材候选同时出现“男生”和“男孩”，角色归一化仍可改善。"
+    }
+  ],
+  "productBlockers": [],
+  "acceptanceHarnessFixes": [
+    "Proposal 证据等待唯一当前任务、可见 Proposal 和不可见旧 Review 后再截图。",
+    "诊断验收从 packaged Settings 的按钮触发，并等待导出完成状态。"
+  ],
+  "boundaries": {
+    "providerCalls": 0,
+    "providerFees": 0,
+    "generationExecuted": false,
+    "automaticRetry": false,
+    "projectFactPromotion": false,
+    "deliveryExport": false,
+    "visualRedesign": false,
+    "realProviderExecutionVerified": false,
+    "externalCreatorUsabilityObserved": false
+  }
+}

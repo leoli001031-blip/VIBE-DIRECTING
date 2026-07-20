@@ -435,12 +435,35 @@ try {
   await setComposer(runningApp.client, concreteFeedback);
   await sendComposer(runningApp.client);
   await waitForAcceptance(async () => {
-    const state = await runningApp!.client.evaluate<{ proposal: boolean; clarification: boolean; phase: string }>(`({
-      proposal: Boolean(document.querySelector('[aria-label="当前导演提案"]')),
-      clarification: Boolean(document.querySelector('[aria-label="当前导演澄清"]')),
-      phase: document.querySelector(".minimal-agent-panel")?.getAttribute("data-director-turn-phase") || ""
-    })`);
-    return state.proposal && !state.clarification && state.phase === "proposal" ? state : undefined;
+    const state = await runningApp!.client.evaluate<{
+      proposalVisible: boolean;
+      reviewVisible: boolean;
+      clarificationVisible: boolean;
+      phase: string;
+      currentTaskCount: number;
+      currentTaskLabel: string;
+    }>(`(() => {
+      const proposal = document.querySelector('[aria-label="当前导演提案"]');
+      const review = document.querySelector('[aria-label="当前视频复核"]');
+      const clarification = document.querySelector('[aria-label="当前导演澄清"]');
+      const currentTasks = document.querySelectorAll('[aria-label="AI 导演当前任务"]');
+      return {
+        proposalVisible: Boolean(proposal && proposal.getClientRects().length),
+        reviewVisible: Boolean(review && review.getClientRects().length),
+        clarificationVisible: Boolean(clarification && clarification.getClientRects().length),
+        phase: document.querySelector(".minimal-agent-panel")?.getAttribute("data-director-turn-phase") || "",
+        currentTaskCount: currentTasks.length,
+        currentTaskLabel: currentTasks[0]?.querySelector("strong")?.textContent?.trim() || ""
+      };
+    })()`);
+    return state.proposalVisible
+      && !state.reviewVisible
+      && !state.clarificationVisible
+      && state.phase === "proposal"
+      && state.currentTaskCount === 1
+      && state.currentTaskLabel === "确认重新生成提案"
+      ? state
+      : undefined;
   }, "concrete Review feedback did not form Proposal directly", 40_000);
   const ledgerBeforeProposalConfirmation = JSON.parse(await readFile(reviewLedgerPath, "utf8"));
   assertAcceptance(ledgerBeforeProposalConfirmation.jobs.length === 1, "forming Proposal created a generation job");

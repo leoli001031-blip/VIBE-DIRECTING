@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "p11_e_interaction_simplification/1.0.0",
+  "observedAt": "2026-07-20T19:50:35.614Z",
+  "packagedApp": "/tmp/vibe-director-p12-beta-XaVmM5/Vibe Director Studio.app",
+  "fixtureRoot": "/tmp/vibe-director-p11-e-20260720-7uxqHc",
+  "providerCalls": 0,
+  "providerFees": 0,
+  "reference": {
+    "result": "pass",
+    "intent": "开始补参考。只形成确认，不执行生成。",
+    "actionKind": "prepare_reference_generation",
+    "confirmationRestored": true,
+    "confirmationEnabledAfterRestore": false,
+    "confirmationButtonLabel": "",
+    "restoredCurrentTask": "我看到《Agent Loop Minimal Fixture》已有 2 个镜头。",
+    "mediaCreated": 0
+  },
+  "review": {
+    "result": "pass",
+    "feedback": "P11ES01 需要修改：纸飞机亮起得太晚。让女孩递出后 1 秒内亮起，机器人先低头看纸飞机再抬眼，保持雨夜灯箱、女孩和机器人外观连续。",
+    "visibleClarifyTurns": 0,
+    "proposalCount": 1,
+    "jobsBeforeProposalConfirmation": 1,
+    "jobsAfterProposalConfirmation": 2,
+    "finalJobStatus": "staged",
+    "finalExecutionMode": "dry_run",
+    "providerCalled": false,
+    "stagedActionKind": "prepare_video_submit",
+    "projectFactsChanged": false,
+    "mediaChanged": false,
+    "exportPerformed": false,
+    "finalExecutionConfirmed": false,
+    "coldRestore": true,
+    "coldRestoreCurrentTask": "确认验证视频流程",
+    "coldRestoreTaskSource": "timeline_confirmation",
+    "oldReviewVisibleAfterNavigation": false
+  },
+  "status": "pass_local_packaged",
+  "realProviderExecutionVerified": false,
+  "evidence": [
+    "01-qualified-reference-confirmation.png",
+    "02-direct-review-proposal.png",
+    "03-execution-confirmation-cold-restore.png"
+  ],
+  "evidenceHashes": {
+    "01-qualified-reference-confirmation.png": "30494ab8b6e14d14037973125ee04f4def1b5fc52f2ef86ca8954d3f9b15a097",
+    "02-direct-review-proposal.png": "574927275956aa297e809ba1e88be035d066ef88f6ae221bb3a37adc820e6c78",
+    "03-execution-confirmation-cold-restore.png": "e79e574d19409d808b083bc2663f280cec7c2aa0d9177ffd851cdd9043c545d9"
+  }
+}

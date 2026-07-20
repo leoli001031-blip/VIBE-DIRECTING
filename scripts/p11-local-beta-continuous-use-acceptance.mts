@@ -75,6 +75,7 @@ const bindingPath = join(profileRoot, "current-project.local.json");
 const diagnosticOutputPath = join(root, "Vibe-Director-Diagnostics.zip");
 const diagnosticExtractRoot = join(root, "diagnostic-extracted");
 const screenshotPath = join(evidenceRoot, "01-post-soak-confirmation-and-diagnostics.png");
+const diagnosticSettingsScreenshotPath = join(evidenceRoot, "02-diagnostic-exported-from-settings.png");
 await Promise.all([
   mkdir(profileRoot, { recursive: true }),
   mkdir(runtimeRoot, { recursive: true }),
@@ -91,7 +92,6 @@ await writeFile(bindingPath, `${JSON.stringify({
 const projectHashesBefore = await hashSnapshot(projectRoot);
 let app: RunningPackagedApp | undefined;
 let currentTask: Awaited<ReturnType<typeof observePackagedTask>> | undefined;
-let diagnosticResult: Record<string, unknown> | undefined;
 try {
   app = await launchPackagedAcceptanceApp({
     appPath,
@@ -154,9 +154,34 @@ try {
   assertAcceptance(typeof screenshot === "string" && screenshot.length > 1000, "P11-F packaged screenshot is empty");
   await writeFile(screenshotPath, Buffer.from(screenshot, "base64"));
 
-  diagnosticResult = await app.client.evaluate<Record<string, unknown>>("window.vibeRuntime.exportDiagnostics()");
-  assertAcceptance(diagnosticResult?.cancelled === false, "P11-F diagnostic export was cancelled");
+  const settingsOpened = await app.client.evaluate<boolean>(`(() => {
+    const button = document.querySelector('button[aria-label="设置"]');
+    button?.click();
+    return Boolean(button);
+  })()`);
+  assertAcceptance(settingsOpened, "P11-F could not open packaged Settings");
+  await waitForAcceptance(async () => {
+    const visible = await app!.client.evaluate<boolean>(`Boolean(document.querySelector('[role="dialog"][aria-label="设置"]'))`);
+    return visible ? true : undefined;
+  }, "P11-F packaged Settings did not become visible");
+  await waitForAcceptance(async () => {
+    const clicked = await app!.client.evaluate<boolean>(`(() => {
+      const dialog = document.querySelector('[role="dialog"][aria-label="设置"]');
+      const button = [...(dialog?.querySelectorAll("button") || [])].find((item) => item.textContent?.trim() === "导出诊断日志" && !item.disabled);
+      button?.click();
+      return Boolean(button);
+    })()`);
+    return clicked ? true : undefined;
+  }, "P11-F packaged diagnostic export button was unavailable");
+  const diagnosticStatus = await waitForAcceptance(async () => {
+    const status = await app!.client.evaluate<string>(`document.querySelector('[role="dialog"][aria-label="设置"] [role="status"]')?.textContent?.trim() || ""`);
+    return status.endsWith("已导出。") ? status : undefined;
+  }, "P11-F packaged diagnostic export did not complete");
+  assertAcceptance(diagnosticStatus.length > 0, "P11-F packaged diagnostic export did not report completion");
   assertAcceptance(await pathExists(diagnosticOutputPath), "P11-F diagnostic ZIP was not created");
+  const diagnosticSettingsScreenshot = await app.client.send("capture_page");
+  assertAcceptance(typeof diagnosticSettingsScreenshot === "string" && diagnosticSettingsScreenshot.length > 1000, "P11-F packaged Settings screenshot is empty");
+  await writeFile(diagnosticSettingsScreenshotPath, Buffer.from(diagnosticSettingsScreenshot, "base64"));
 } finally {
   if (app) await closePackagedAcceptanceApp(app).catch(() => undefined);
 }
@@ -242,6 +267,10 @@ const observation = {
   screenshot: {
     fileName: basename(screenshotPath),
     sha256: await sha256(screenshotPath),
+  },
+  diagnosticSettingsScreenshot: {
+    fileName: basename(diagnosticSettingsScreenshotPath),
+    sha256: await sha256(diagnosticSettingsScreenshotPath),
   },
 };
 await writeFile(join(evidenceRoot, "diagnostic-observation.json"), `${JSON.stringify(observation, null, 2)}\n`, "utf8");
