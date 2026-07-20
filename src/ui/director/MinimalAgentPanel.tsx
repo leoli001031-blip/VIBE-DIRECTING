@@ -48,6 +48,7 @@ import {
   type VibeAgentConfirmedToolRunOutcome,
 } from "../../agent-core";
 import {
+  agentCurrentTaskReferenceReviewCount,
   buildAgentCurrentTaskProjection,
   type AgentCurrentTaskCompletedStep,
   type AgentCurrentTaskConfirmation,
@@ -6508,11 +6509,11 @@ export function MinimalAgentPanel({
       ?? (timelineShowsVideoReady || videoSendAction?.status === "needs_review" ? 1 : 0),
   ));
   const referenceMissingCountForAgent = referenceExecutionSatisfiedForAgent ? 0 : referenceMissingCount;
-  const referenceReviewCountForAgent = referenceHasReviewableOutput
-    ? referenceReviewableCount
-    : referencesUsableForAgent
-      ? 0
-      : referenceReviewableCount;
+  const referenceReviewCountForAgent = agentCurrentTaskReferenceReviewCount({
+    needsReviewCount: referenceReviewableCount,
+    displayableCount: referenceDisplayableCount,
+    explicitReviewableOutput: realSampleAction?.reviewableOutput,
+  });
   const referenceReadyCountForAgent = referencesUsableForAgent ? Math.max(referenceLockedCount, 1) : referenceLockedCount;
   const videoSubmittedForAgent = Boolean(videoAlreadySent || videoBusy || videoCanResume || videoReturnedCountForAgent > 0 || timelineHasVideoValidation);
   const realSampleLabel = realSampleBusy
@@ -11256,9 +11257,16 @@ export function MinimalAgentPanel({
     && Boolean(agentDirectorTurnProjection.clarification);
   const proposalTurnVisible = agentDirectorTurnProjection.phase === "proposal"
     && Boolean(agentDirectorTurnProjection.proposal || agentDirectorTurnProjection.reviewRegenerationProposal);
+  const paidConfirmationIdentityMatches = Boolean(
+    agentDirectorTurnProjection.confirmation
+      && activeConfirmationMessage
+      && activeConfirmationMessage.id === agentDirectorTurnProjection.confirmation.confirmationId
+      && activeConfirmationMessage.actionId === agentDirectorTurnProjection.confirmation.actionId,
+  );
   const paidConfirmationTurnVisible = agentDirectorTurnProjection.phase === "confirmation"
     && agentCurrentTaskProjection.effect === "generation_job"
-    && agentCurrentTaskProjection.source !== "pipeline_job";
+    && agentCurrentTaskProjection.source !== "pipeline_job"
+    && paidConfirmationIdentityMatches;
   const runningTurnVisible = agentDirectorTurnProjection.phase === "running"
     && Boolean(agentDirectorTurnProjection.running);
   const reviewTurnVisible = currentView === "preview"

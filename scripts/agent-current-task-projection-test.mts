@@ -1,4 +1,5 @@
 import {
+  agentCurrentTaskReferenceReviewCount,
   buildAgentCurrentTaskProjection,
   type AgentCurrentTaskConfirmation,
   type AgentCurrentTaskIntentRouteLike,
@@ -84,6 +85,35 @@ function plan(input: {
     videoNeedsQuery: input.videoNeedsQuery,
   });
 }
+
+assert(agentCurrentTaskReferenceReviewCount({
+  needsReviewCount: 2,
+  displayableCount: 0,
+}) === 0, "missing reference media must not be presented as reviewable output");
+assert(agentCurrentTaskReferenceReviewCount({
+  needsReviewCount: 2,
+  displayableCount: 1,
+}) === 2, "displayable reference media should retain its review count");
+assert(agentCurrentTaskReferenceReviewCount({
+  needsReviewCount: 0,
+  displayableCount: 0,
+  explicitReviewableOutput: true,
+}) === 1, "an explicit returned reference output should create one review item");
+
+const unsavedStoryProjection = buildAgentCurrentTaskProjection({
+  newVideoDraft: { status: "confirmed", draftShotCount: 2 },
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: true,
+    localProjectReady: false,
+    referenceMissingCount: 2,
+    videoSubmitted: false,
+  }),
+  referenceReviewCount: 2,
+});
+assert(unsavedStoryProjection.step === "choose_save_location", "an unsaved confirmed story must choose its save location before passive reference review");
+assert(unsavedStoryProjection.source === "pipeline_plan", "the save-location prerequisite should come from the structured pipeline plan");
+assert(unsavedStoryProjection.requiresConfirmation, "choosing a save location must retain its own confirmation boundary");
 
 const versionPairProjection = buildAgentCurrentTaskProjection({
   reviewVersionPair: {

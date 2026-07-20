@@ -187,6 +187,18 @@ function compactFacts(values: Array<AgentCurrentTaskFact | undefined>): AgentCur
   return facts;
 }
 
+export function agentCurrentTaskReferenceReviewCount(input: {
+  needsReviewCount: number;
+  displayableCount: number;
+  explicitReviewableOutput?: boolean;
+}) {
+  const needsReviewCount = Math.max(0, Math.floor(input.needsReviewCount || 0));
+  const hasReviewableOutput = input.displayableCount > 0 || input.explicitReviewableOutput === true;
+  return hasReviewableOutput
+    ? Math.max(needsReviewCount, input.explicitReviewableOutput ? 1 : 0)
+    : 0;
+}
+
 function timeValue(value: string | undefined) {
   const parsed = Date.parse(value || "");
   return Number.isFinite(parsed) ? parsed : 0;
@@ -614,6 +626,16 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
     });
   }
 
+  const planStep = input.pipelinePlan ? pipelineStepToCurrentTaskStep(input.pipelinePlan.currentStep) : undefined;
+  if (planStep === "choose_save_location") {
+    return buildProjection({
+      source: "pipeline_plan",
+      step: planStep,
+      blockers: currentPipelineBlockers(input.pipelinePlan, planStep),
+      facts: factsForInput(input),
+    });
+  }
+
   const referenceReviewCount = Math.max(0, Math.floor(input.referenceReviewCount || 0));
   if (referenceReviewCount > 0) {
     return buildProjection({
@@ -652,7 +674,6 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
     });
   }
 
-  const planStep = input.pipelinePlan ? pipelineStepToCurrentTaskStep(input.pipelinePlan.currentStep) : undefined;
   const routeStep = intentRouteStep(input.intentRoute, input.pipelinePlan);
   const observedStep = observationStep(input.projectObservation);
   const step = routeStep || planStep || observedStep || "idle";
