@@ -188,6 +188,7 @@ import type { ProjectStatusViewModel } from "../app/projectStatusViewModel";
 import type { CreatorAgentCommand, CreatorReviewTrayItem } from "./creatorDeskTypes";
 import {
   activeAgentDirectorClarificationFromTimeline,
+  agentDirectorReviewRevisionCanFormProposalDirectly,
   agentDirectorClarificationReplyIntent,
   buildAgentDirectorClarificationFreeformResolutionTimelineEntry,
   buildAgentDirectorClarificationResolutionTimelineEntry,
@@ -203,6 +204,7 @@ import {
 import {
   activeAgentDirectorReviewRegenerationConfirmationFromTimeline,
   activeAgentDirectorReviewRegenerationProposalFromTimeline,
+  agentDirectorReviewRegenerationConfirmationMatchesSourceReview,
   agentDirectorReviewRegenerationConfirmationMatchesJob,
   buildAgentDirectorReviewRegenerationConfirmationTimelineEntries,
   buildAgentDirectorReviewRegenerationProposal,
@@ -5392,17 +5394,26 @@ export function MinimalAgentPanel({
     ? restoredAgentStagedPlanDraft.action.actionId
     : timelineReferenceGenerationActionId;
   const activeDirectorReviewRegenerationConfirmation = useMemo(
-    () => activeAgentDirectorReviewRegenerationConfirmationFromTimeline(agentTimelineEntries, effectiveReviewIdentity),
+    () => {
+      const confirmation = activeAgentDirectorReviewRegenerationConfirmationFromTimeline(agentTimelineEntries);
+      if (!confirmation || !agentGenerationProjectIdentity.projectRoot) return undefined;
+      const sourceJob = agentVideoDryRunLedger.jobs.find((job) => job.jobId === confirmation.sourceIdentity.jobId);
+      return agentDirectorReviewRegenerationConfirmationMatchesSourceReview({
+        confirmation,
+        currentProject: {
+          projectId: agentGenerationProjectIdentity.projectId,
+          projectRoot: agentGenerationProjectIdentity.projectRoot,
+          projectFactHash: agentGenerationProjectIdentity.projectFactHash,
+        },
+        sourceJob,
+      }) ? confirmation : undefined;
+    },
     [
       agentTimelineEntries,
-      effectiveReviewIdentity?.actionId,
-      effectiveReviewIdentity?.jobId,
-      effectiveReviewIdentity?.outputHash,
-      effectiveReviewIdentity?.projectFactHash,
-      effectiveReviewIdentity?.projectId,
-      effectiveReviewIdentity?.projectRoot,
-      effectiveReviewIdentity?.shotId,
-      effectiveReviewIdentity?.sourceReceiptId,
+      agentGenerationProjectIdentity.projectFactHash,
+      agentGenerationProjectIdentity.projectId,
+      agentGenerationProjectIdentity.projectRoot,
+      agentVideoDryRunLedger,
     ],
   );
   const visibleAgentTimelineEntries = useMemo(() => {
@@ -7438,6 +7449,16 @@ export function MinimalAgentPanel({
             : undefined,
         });
         if (clarificationTurn) {
+          if (
+            clarificationTurn.reviewRevision
+            && agentDirectorReviewRevisionCanFormProposalDirectly(userIntent)
+          ) {
+            return await formReviewRegenerationProposal({
+              clarificationTurn,
+              resolvedIntent: userIntent,
+              directionLabel: "按此修改",
+            });
+          }
           resetPreparedComposerState("需要确认导演意图");
           setActiveComposerTurnIntent(userIntent);
           rememberAgentTimelineEntries(buildAgentDirectorClarificationTimelineEntries(clarificationTurn));
@@ -11580,6 +11601,7 @@ export function MinimalAgentPanel({
     clarificationTurn: NonNullable<typeof activeDirectorClarificationTurn>;
     resolvedIntent: string;
     option?: NonNullable<typeof activeDirectorClarificationTurn>["options"][number];
+    directionLabel?: string;
   }) {
     const binding = input.clarificationTurn.reviewRevision;
     if (!binding || !onRememberAgentTimelineEntries) {
@@ -11595,7 +11617,7 @@ export function MinimalAgentPanel({
       },
       clarification: input.clarificationTurn,
       resolvedIntent: input.resolvedIntent,
-      directionLabel: input.option?.label,
+      directionLabel: input.option?.label || input.directionLabel,
       createdAt,
     });
     if (!result.ok || !result.proposal) {

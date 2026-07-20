@@ -6,6 +6,7 @@ import {
 } from "../src/core/directorAgentAction.ts";
 import {
   detectDirectorAgentPermissionIntent,
+  isDirectorAgentExplainOnlyIntent,
   isDirectorAgentPermissionControlOnlyIntent,
   stripDirectorAgentPermissionControlPhrases,
 } from "../src/core/directorAgentPermissionIntent.ts";
@@ -694,6 +695,8 @@ assert(detectDirectorAgentPermissionIntent("可生成参考") === "reference_all
 assert(isDirectorAgentPermissionControlOnlyIntent("可生成参考") === true, "visible reference-generation wording should be treated as a control-only Agent command");
 assert(detectDirectorAgentPermissionIntent("开始补参考") === "reference_allowed", "start-reference wording should infer reference-only");
 assert(stripDirectorAgentPermissionControlPhrases("开始补参考") === "开始补参考", "start-reference wording must not be stripped as a pure boundary command");
+assert(detectDirectorAgentPermissionIntent("开始补参考。只形成确认，不执行生成。") === "reference_allowed", "confirmation-only reference wording should allow staging the reference confirmation");
+assert(isDirectorAgentExplainOnlyIntent("开始补参考。只形成确认，不执行生成。") === false, "an explicit reference confirmation boundary must not collapse into status inspection");
 assert(!stripDirectorAgentPermissionControlPhrases("整理成 2 个镜头，不生成参考图，不提交视频。").includes("图"), "control stripping must remove the longest no-reference phrase before shorter overlaps");
 assert(isDirectorAgentPermissionControlOnlyIntent("可提交视频") === true, "pure video permission wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("提交视频") === false, "bare submit-video wording must remain an Agent action");
@@ -701,6 +704,15 @@ assert(isDirectorAgentPermissionControlOnlyIntent("发送视频") === false, "ba
 assert(isDirectorAgentPermissionControlOnlyIntent("先补参考") === false, "bare reference-generation wording must remain an Agent action");
 assert(isDirectorAgentPermissionControlOnlyIntent("开始补参考") === false, "start-reference wording must remain an Agent action");
 assert(isDirectorAgentPermissionControlOnlyIntent("把镜头 1-2 改成故事板叙事，只看规划") === false, "permission wording attached to a creative edit must still stage the creative edit");
+
+const confirmationOnlyReference = buildDirectorAgentActionEnvelope({
+  userIntent: "开始补参考。只形成确认，不执行生成。",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.325Z",
+});
+assert(confirmationOnlyReference.kind === "prepare_reference_generation", "confirmation-only reference wording must stage the reference action instead of inspecting status");
+assert(confirmationOnlyReference.executionContract.mode === "reference_allowed", "confirmation-only reference wording must carry the reference-only execution boundary");
+assert(confirmationOnlyReference.requiresUserConfirmation === true, "confirmation-only reference wording must still stop before execution");
 
 const planOnlyStrategyChange = buildDirectorAgentActionEnvelope({
   userIntent: "把这个镜头改成故事板叙事，只做计划，不生图不提交视频。",

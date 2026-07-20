@@ -60,6 +60,19 @@ function alreadyContainsDirection(value: string) {
   return /(?:情绪转折|提前预兆|延后|推迟|提前到|保留(?:当前)?时机|减弱|降低|加强|拉长|改成|改为|调整为|设置为|设为|换成|先[^，。；\n]+再)/u.test(value);
 }
 
+export function agentDirectorReviewRevisionCanFormProposalDirectly(value: string) {
+  const sourceIntent = clean(value);
+  if (sourceIntent.length < 12) return false;
+  const concreteSignals = [
+    /(?:\d+(?:\.\d+)?\s*(?:秒|帧)|以内|之前|之后|提前到|延后到|推迟到|拉长到|缩短到)/u,
+    /(?:让[^，。；\n]{2,24}|先[^，。；\n]+再|[^，。；\n]{2,16}前先|[^，。；\n]{2,16}后再)/u,
+    /(?:保持|保留)[^，。；\n]{2,24}(?:连续|一致|外观|位置|方向|灯光|场景)/u,
+    /(?:镜头|机位|构图|焦点|运镜)[^，。；\n]{0,16}(?:改|调整|保持|推进|拉开|切换)/u,
+  ].filter((pattern) => pattern.test(sourceIntent)).length;
+  return concreteSignals >= 2
+    || (concreteSignals >= 1 && sourceIntent.length >= 20 && alreadyContainsDirection(sourceIntent));
+}
+
 function clarificationOptions(
   concern: "early" | "late" | "fast",
   sourceIntent: string,

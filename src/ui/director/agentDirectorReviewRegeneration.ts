@@ -505,6 +505,25 @@ export function activeAgentDirectorReviewRegenerationConfirmationFromTimeline(
   return undefined;
 }
 
+export function agentDirectorReviewRegenerationConfirmationMatchesSourceReview(input: {
+  confirmation?: AgentDirectorReviewRegenerationConfirmation;
+  currentProject: Pick<AgentDirectorReviewIdentity, "projectId" | "projectRoot" | "projectFactHash">;
+  sourceJob?: AgentVideoGenerationJob;
+}) {
+  const { confirmation, currentProject, sourceJob } = input;
+  return Boolean(
+    confirmation
+      && sourceJob?.status === "succeeded"
+      && sourceJob.reviewResult
+      && confirmation.sourceIdentity.projectId === currentProject.projectId
+      && normalizeAgentDirectorReviewProjectRoot(confirmation.sourceIdentity.projectRoot)
+        === normalizeAgentDirectorReviewProjectRoot(currentProject.projectRoot)
+      && confirmation.sourceIdentity.projectFactHash === currentProject.projectFactHash
+      && sourceJob.jobId === confirmation.sourceIdentity.jobId
+      && agentDirectorReviewIdentityMatches(confirmation.sourceIdentity, sourceJob.reviewResult),
+  );
+}
+
 export function agentDirectorReviewRegenerationConfirmationMatchesJob(
   confirmation: AgentDirectorReviewRegenerationConfirmation | undefined,
   input: {

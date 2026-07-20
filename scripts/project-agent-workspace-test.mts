@@ -448,6 +448,16 @@ const startReferenceRoute = routeProjectAgentIntent({
 assert(startReferenceRoute.kind === "reference", "start-reference wording should not become a selected-shot revision");
 assert(startReferenceRoute.confirmation === "reference_generation", "start-reference wording should keep a reference-generation confirmation");
 
+const referenceConfirmationBoundaryRoute = routeProjectAgentIntent({
+  text: "开始补参考。只形成确认，不执行生成。",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(referenceConfirmationBoundaryRoute.kind === "reference", "confirmation-only reference wording should stay in the reference lane");
+assert(referenceConfirmationBoundaryRoute.label === "生成参考", "confirmation-only reference wording should prepare the real reference action");
+assert(referenceConfirmationBoundaryRoute.confirmation === "reference_generation", "deferring execution until confirmation must not erase the reference confirmation boundary");
+
 const referenceRangePlanRoute = routeProjectAgentIntent({
   text: "开始补参考。先确认范围，别直接生成。",
   hasSelection: true,

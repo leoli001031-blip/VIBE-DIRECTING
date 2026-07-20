@@ -276,6 +276,14 @@ export function normalizedDirectorAgentPermissionIntent(value: string) {
     .replace(/[，。！？、,.!?;；:："'“”‘’`~\s_-]/g, "");
 }
 
+export function isDirectorAgentReferenceConfirmationBoundaryIntent(value: string) {
+  const normalizedIntent = normalizedDirectorAgentPermissionIntent(value);
+  if (!normalizedIntent || !hasPhrase(normalizedIntent, referenceAllowedPhrases)) return false;
+  const confirmationIsTheRequestedEnd = /(?:只|先)?(?:形成|给出|生成|进入|做到|停在)(?:确认|确认卡)|(?:只到|停在)(?:确认|确认卡)/.test(normalizedIntent);
+  const executionIsDeferred = /(?:不|不要|别|先不|先不要|先别)(?:直接|立即|马上|实际|真实)?(?:执行|生成|生图|调用)/.test(normalizedIntent);
+  return confirmationIsTheRequestedEnd && executionIsDeferred;
+}
+
 function hasPhrase(normalizedIntent: string, phrases: string[]) {
   return phrases.some((phrase) => normalizedIntent.includes(normalizedDirectorAgentPermissionIntent(phrase)));
 }
@@ -295,6 +303,7 @@ function hasNoImageGenerationPhrase(normalizedIntent: string) {
 export function detectDirectorAgentPermissionIntent(userIntent: string): DirectorAgentPermissionIntentMode | undefined {
   const normalizedIntent = normalizedDirectorAgentPermissionIntent(userIntent);
   if (!normalizedIntent) return undefined;
+  if (isDirectorAgentReferenceConfirmationBoundaryIntent(userIntent)) return "reference_allowed";
   if (hasNoImageGenerationPhrase(normalizedIntent)) return "plan_only";
   if (hasPhrase(normalizedIntent, noVideoSubmitPhrases) || hasPhrase(normalizedIntent, referenceAllowedPhrases)) return "reference_allowed";
   if (hasPhrase(normalizedIntent, videoAllowedPhrases)) return "video_allowed";
@@ -310,6 +319,7 @@ export function directorAgentPermissionIntentDisallowsVideoSubmit(userIntent: st
 export function isDirectorAgentExplainOnlyIntent(value: string) {
   const normalizedIntent = normalizedDirectorAgentPermissionIntent(value);
   if (!normalizedIntent) return false;
+  if (isDirectorAgentReferenceConfirmationBoundaryIntent(value)) return false;
   return hasPhrase(normalizedIntent, [
     "只告诉我",
     "只跟我说",

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   activeAgentDirectorClarificationFromTimeline,
+  agentDirectorReviewRevisionCanFormProposalDirectly,
+  buildAgentDirectorClarificationFreeformResolutionTimelineEntry,
   buildAgentDirectorClarificationResolutionTimelineEntry,
   buildAgentDirectorClarificationTimelineEntries,
   buildAgentDirectorClarificationTurn,
@@ -12,6 +14,7 @@ import {
 import {
   activeAgentDirectorReviewRegenerationConfirmationFromTimeline,
   activeAgentDirectorReviewRegenerationProposalFromTimeline,
+  agentDirectorReviewRegenerationConfirmationMatchesSourceReview,
   agentDirectorReviewRegenerationConfirmationMatchesJob,
   buildAgentDirectorReviewRegenerationConfirmationTimelineEntries,
   buildAgentDirectorReviewRegenerationProposal,
@@ -83,6 +86,45 @@ assert.ok(continuityClarification);
 assert.equal(continuityClarification.options[0]?.id, "apply_as_stated");
 assert.equal(continuityClarification.options[1]?.id, "strengthen_direction");
 assert.match(continuityClarification.question, /新版本提案/);
+assert.equal(agentDirectorReviewRevisionCanFormProposalDirectly("纸飞机亮得太早了"), false);
+assert.equal(agentDirectorReviewRevisionCanFormProposalDirectly("机器人抬手前先看向女孩，保持纸飞机的位置连续。"), true);
+
+const concreteRevisionIntent = "P6S01 需要修改：纸飞机亮起得太晚。让女孩递出后 1 秒内亮起，机器人先低头看纸飞机再抬眼，保持雨夜灯箱、女孩和机器人外观连续。";
+assert.equal(agentDirectorReviewRevisionCanFormProposalDirectly(concreteRevisionIntent), true);
+const directClarification = buildAgentDirectorClarificationTurn({
+  userIntent: concreteRevisionIntent,
+  selectedShotId: "P6S01",
+  targetLabel: "P6S01",
+  createdAt: "2026-07-18T09:01:45.000Z",
+  reviewRevision: {
+    intentId: revision.intent.intentId,
+    identity,
+  },
+});
+assert.ok(directClarification);
+const directProposalResult = buildAgentDirectorReviewRegenerationProposal({
+  revisionIntent: revision.intent,
+  clarification: directClarification,
+  resolvedIntent: concreteRevisionIntent,
+  directionLabel: "按此修改",
+  createdAt: "2026-07-18T09:01:46.000Z",
+});
+assert.equal(directProposalResult.ok, true);
+assert.ok(directProposalResult.proposal);
+const directProposalTimeline = [
+  ...buildAgentDirectorReviewRevisionTimelineEntries(revision.intent),
+  buildAgentDirectorClarificationFreeformResolutionTimelineEntry({
+    turn: directClarification,
+    resolvedIntent: concreteRevisionIntent,
+    createdAt: "2026-07-18T09:01:46.000Z",
+  }),
+  ...buildAgentDirectorReviewRegenerationProposalTimelineEntries(directProposalResult.proposal),
+];
+assert.equal(activeAgentDirectorClarificationFromTimeline(directProposalTimeline), undefined);
+assert.equal(
+  activeAgentDirectorReviewRegenerationProposalFromTimeline(directProposalTimeline, identity)?.proposalId,
+  directProposalResult.proposal.proposalId,
+);
 
 const option = clarification.options[0]!;
 const proposalResult = buildAgentDirectorReviewRegenerationProposal({
@@ -246,6 +288,35 @@ const restoredConfirmation = activeAgentDirectorReviewRegenerationConfirmationFr
 assert.equal(restoredConfirmation?.confirmationId, newJob.sourceConfirmationId);
 assert.equal(restoredConfirmation?.executionMode, "dry_run");
 assert.equal(restoredConfirmation?.providerCalled, false);
+const sourceReviewJob: AgentVideoGenerationJob = {
+  ...newJob,
+  jobId: identity.jobId,
+  actionId: identity.actionId,
+  status: "succeeded",
+  reviewResult: {
+    status: "needs_review",
+    projectId: identity.projectId,
+    projectRoot: identity.projectRoot,
+    projectFactHash: identity.projectFactHash,
+    jobId: identity.jobId,
+    actionId: identity.actionId,
+    shotId: identity.shotId,
+    sourceReceiptId: identity.sourceReceiptId,
+    outputPath: identity.outputPath,
+    outputHash: identity.outputHash,
+    receivedAt: "2026-07-18T09:00:03.000Z",
+  },
+};
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesSourceReview({
+  confirmation: restoredConfirmation,
+  currentProject: identity,
+  sourceJob: sourceReviewJob,
+}), true);
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesSourceReview({
+  confirmation: restoredConfirmation,
+  currentProject: identity,
+  sourceJob: { ...sourceReviewJob, reviewResult: { ...sourceReviewJob.reviewResult!, outputHash: `sha256:${"b".repeat(64)}` } },
+}), false);
 assert.equal(agentDirectorReviewRegenerationConfirmationMatchesJob(restoredConfirmation, {
   actionId: newJob.actionId,
   confirmationId: newJob.sourceConfirmationId,

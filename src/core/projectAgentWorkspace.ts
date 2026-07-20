@@ -7,6 +7,7 @@ import {
   detectDirectorAgentPermissionIntent,
   directorAgentPermissionIntentDisallowsVideoSubmit,
   isDirectorAgentExplainOnlyIntent,
+  isDirectorAgentReferenceConfirmationBoundaryIntent,
 } from "./directorAgentPermissionIntent";
 import { directorIntentStartsFreshVideoDraft } from "./directorFreshDraftIntent";
 
@@ -924,6 +925,9 @@ export function routeProjectAgentIntent(input: {
   const text = compact(input.text);
   const permissionIntent = detectDirectorAgentPermissionIntent(text);
   const referenceGenerationDisallowed = permissionIntent === "plan_only";
+  const referencePreparationRequested = isPositiveReferencePreparationIntent(text);
+  const referenceConfirmationBoundaryRequested = referencePreparationRequested
+    && isDirectorAgentReferenceConfirmationBoundaryIntent(text);
   const requestedShotCount = requestedStoryboardShotCountFromIntent(text);
   const explicitCurrentStoryShotCountRestructure = Boolean(
     requestedShotCount
@@ -931,7 +935,7 @@ export function routeProjectAgentIntent(input: {
   );
   const newStoryIntent = directorIntentStartsFreshVideoDraft(text)
     || /完整项目|整个短片|整支片/.test(text);
-  if (isDirectorAgentExplainOnlyIntent(text)) {
+  if (isDirectorAgentExplainOnlyIntent(text) && !referenceConfirmationBoundaryRequested) {
     return {
       kind: "status",
       label: "说明下一步",
@@ -962,7 +966,9 @@ export function routeProjectAgentIntent(input: {
   if (/查资料|查一下|搜一下|搜索|参考.*风格|研究|((分镜|风格|镜头|节奏).{0,8}怎么做)/.test(text)) {
     return { kind: "research", label: "查资料", target: "story", confirmation: "none", plan: ["整理检索问题", "保存可用资料", "等你确认后写入项目"] };
   }
-  const referencePreparationRequested = isPositiveReferencePreparationIntent(text);
+  if (referenceConfirmationBoundaryRequested) {
+    return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "形成生成范围确认", "确认前不执行生成"] };
+  }
   if (referencePreparationRequested && referenceGenerationDisallowed) {
     return { kind: "reference", label: "准备参考计划", target: "assets", confirmation: "none", plan: ["判断缺少的角色、场景或道具参考", "整理参考范围和优先级", "不生成图片、不提交视频"] };
   }
