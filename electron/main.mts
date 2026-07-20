@@ -8,6 +8,7 @@ import net from "node:net";
 import { createProjectRootScope, spawnAllowed } from "./projectScope.mts";
 import { createRuntimeSessionToken } from "./runtimeSessionToken.mts";
 import { isSafeExternalUrl, isTrustedDocumentUrl, isTrustedRendererSender, runtimeLoopbackHost } from "./securityPolicy.mts";
+import { exportDiagnosticBundle } from "./diagnosticBundle.mts";
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = electron;
 app.setName("Vibe Director Studio");
@@ -76,6 +77,13 @@ const projectRootScope = createProjectRootScope();
 const sandboxWatchers = new Map<string, ReturnType<typeof fs.watch>>();
 const rootToWatchers = new Map<string, Set<string>>();
 let sandboxWatchCounter = 0;
+const runtimeDiagnosticLines: string[] = [];
+const recentDiagnosticErrors: string[] = [];
+
+function appendDiagnosticLines(target: string[], value: unknown, limit: number) {
+  for (const line of String(value ?? "").split(/\r?\n/).filter(Boolean)) target.push(line);
+  if (target.length > limit) target.splice(0, target.length - limit);
+}
 
 type PackagedAcceptanceExportFault = "write_enospc" | "publish_enospc";
 
@@ -403,24 +411,33 @@ async function startRuntimeServer() {
       },
     });
   } catch (error) {
-    console.error(`Runtime API server failed to start: ${error instanceof Error ? error.message : String(error)}`);
+    const message = `Runtime API server failed to start: ${error instanceof Error ? error.message : String(error)}`;
+    appendDiagnosticLines(recentDiagnosticErrors, message, 40);
+    console.error(message);
     runtimeServer = null;
     return undefined;
   }
   runtimeServer.stdout?.on("data", (data: Buffer) => {
+    appendDiagnosticLines(runtimeDiagnosticLines, `[runtime:stdout] ${data}`, 500);
     process.stdout.write(`[runtime] ${data}`);
   });
   runtimeServer.stderr?.on("data", (data: Buffer) => {
+    appendDiagnosticLines(runtimeDiagnosticLines, `[runtime:stderr] ${data}`, 500);
+    appendDiagnosticLines(recentDiagnosticErrors, data, 40);
     process.stderr.write(`[runtime] ${data}`);
   });
   runtimeServer.on("error", (error) => {
-    console.error(`Runtime API server error: ${error instanceof Error ? error.message : String(error)}`);
+    const message = `Runtime API server error: ${error instanceof Error ? error.message : String(error)}`;
+    appendDiagnosticLines(recentDiagnosticErrors, message, 40);
+    console.error(message);
   });
   runtimeServer.on("close", (code) => {
     runtimeServer = null;
     runtimeApiBaseUrl = undefined;
     if (code !== 0 && code !== null) {
-      console.error(`Runtime API server exited with code ${code}`);
+      const message = `Runtime API server exited with code ${code}`;
+      appendDiagnosticLines(recentDiagnosticErrors, message, 40);
+      console.error(message);
     }
   });
   const nextRuntimeApiBaseUrl = `http://${runtimeHost}:${runtimePort}`;
@@ -666,6 +683,61 @@ function registerIpcHandlers() {
       rootToWatchers.delete(resolved);
     }
     return { forgotten: existed };
+  });
+
+  handleTrustedIpc("diagnostics:export", async () => {
+    if (process.platform !== "darwin") {
+      throw new Error("Diagnostic ZIP export is currently available in the macOS local Beta.");
+    }
+    const acceptanceOutput = packagedAcceptanceControlEnabled
+      ? (process.env.VIBE_ELECTRON_ACCEPTANCE_DIAGNOSTICS_OUTPUT || "").trim()
+      : "";
+    let outputPath = "";
+    if (acceptanceOutput) {
+      const resolved = path.resolve(acceptanceOutput);
+      const relativeToTmp = path.relative("/tmp", resolved);
+      if (relativeToTmp.startsWith("..") || path.isAbsolute(relativeToTmp) || path.extname(resolved).toLowerCase() !== ".zip") {
+        throw new Error("Packaged diagnostic acceptance output must be a .zip under /tmp.");
+      }
+      outputPath = resolved;
+    } else {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const result = await dialog.showSaveDialog({
+        title: "导出诊断日志",
+        buttonLabel: "导出",
+        defaultPath: path.join(app.getPath("downloads"), `Vibe-Director-Diagnostics-${stamp}.zip`),
+        filters: [{ name: "ZIP", extensions: ["zip"] }],
+        properties: ["showOverwriteConfirmation", "createDirectory"],
+      });
+      if (result.canceled || !result.filePath) return { cancelled: true };
+      outputPath = result.filePath.toLowerCase().endsWith(".zip") ? result.filePath : `${result.filePath}.zip`;
+    }
+    const binding = currentProjectBindingForRenderer();
+    const projectRoot = binding?.currentProject?.projectRoot;
+    try {
+      const exported = await exportDiagnosticBundle({
+        outputPath,
+        projectRoot,
+        userDataRoot: app.getPath("userData"),
+        runtimeRoot: readEnv("VIBE_DIRECTOR_RUNTIME_WORKDIR", "VIBE_CORE_RUNTIME_WORKDIR") || app.getPath("userData"),
+        runtimeLogs: runtimeDiagnosticLines,
+        recentMainErrors: recentDiagnosticErrors,
+        tempRoot: app.getPath("temp"),
+        appInfo: {
+          name: app.getName(),
+          version: app.getVersion(),
+          packaged: app.isPackaged,
+          platform: process.platform,
+          arch: process.arch,
+          electron: process.versions.electron || "unknown",
+          node: process.versions.node,
+        },
+      });
+      return { cancelled: false, ...exported };
+    } catch (error) {
+      appendDiagnosticLines(recentDiagnosticErrors, error instanceof Error ? error.message : String(error), 40);
+      throw error;
+    }
   });
 
   handleTrustedIpc("sandbox:watch", async (_event, watchDir: string) => {

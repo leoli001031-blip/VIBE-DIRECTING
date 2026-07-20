@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LockKeyhole, Settings } from "lucide-react";
+import { Download, LockKeyhole, Settings } from "lucide-react";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { RuntimeView } from "../../core/runtimeView";
 import {
@@ -166,6 +166,8 @@ export function SettingsShell({
   const [credFormSaving, setCredFormSaving] = useState(false);
   const [servicePanelOpen, setServicePanelOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [diagnosticExportBusy, setDiagnosticExportBusy] = useState(false);
+  const [diagnosticExportStatus, setDiagnosticExportStatus] = useState("");
   const resolvedWebSearchSettings = normalizeAgentWebSearchSettings(webSearchSettings);
 
   useEffect(() => {
@@ -311,6 +313,26 @@ export function SettingsShell({
     if (!tavilyReady) {
       setServicePanelOpen(true);
       setCredFormProviderId("tavily-search");
+    }
+  }
+
+  async function exportDiagnosticLogs() {
+    const exportDiagnostics = window.vibeRuntime?.exportDiagnostics;
+    if (!exportDiagnostics || diagnosticExportBusy) {
+      setDiagnosticExportStatus("当前环境不能导出诊断日志。");
+      return;
+    }
+    setDiagnosticExportBusy(true);
+    setDiagnosticExportStatus("正在整理脱敏诊断日志...");
+    try {
+      const result = await exportDiagnostics();
+      setDiagnosticExportStatus(result.cancelled
+        ? "已取消导出。"
+        : `${result.fileName || "诊断日志"} 已导出。`);
+    } catch {
+      setDiagnosticExportStatus("诊断日志导出失败，请稍后重试。");
+    } finally {
+      setDiagnosticExportBusy(false);
     }
   }
 
@@ -559,6 +581,18 @@ export function SettingsShell({
               </label>
             </div>
           </details>
+        </div>
+        <div className="settings-group-title">诊断</div>
+        <div className="settings-list">
+          <div className="settings-readonly-note">
+            <strong>导出诊断日志</strong>
+            <small>只包含版本、脱敏日志和状态摘要；不包含密钥、完整项目或媒体。</small>
+            <button type="button" onClick={exportDiagnosticLogs} disabled={diagnosticExportBusy}>
+              <Download size={16} aria-hidden="true" />
+              {diagnosticExportBusy ? "正在导出..." : "导出诊断日志"}
+            </button>
+            {diagnosticExportStatus && <small role="status">{diagnosticExportStatus}</small>}
+          </div>
         </div>
       </div>
       <details

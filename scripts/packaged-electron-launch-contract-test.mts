@@ -401,6 +401,7 @@ assert(mainSource.includes('invalid_click_coordinates'), "packaged native click 
 assert(preloadSource.includes("contextBridge"), "built preload must expose a context-isolated bridge");
 assert(preloadSource.includes("vibeRuntime"), "built preload must expose vibeRuntime");
 assert(preloadSource.includes("sandboxDiscardStagedExport"), "built preload must expose exact interrupted-export staging cleanup");
+assert(preloadSource.includes("exportDiagnostics"), "built preload must expose diagnostic ZIP export");
 assert(preloadSource.includes("ensureRuntimeApiBaseUrl"), "built preload must expose lazy runtime startup");
 assert(preloadSource.includes("currentProjectBinding"), "built preload must expose current project binding restore helper");
 assert(preloadSource.includes("__VIBE_CURRENT_PROJECT_BINDING__"), "built preload must expose current project bootstrap binding");

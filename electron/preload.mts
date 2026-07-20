@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld("vibeRuntime", {
   createLocalProject: (input?: { displayName?: string }) => ipcRenderer.invoke("project:createLocal", input),
   rememberProject: (projectRoot: string) => ipcRenderer.invoke("project:remember", projectRoot),
   forgetProject: (projectRoot: string) => ipcRenderer.invoke("project:forget", projectRoot),
+  exportDiagnostics: () => ipcRenderer.invoke("diagnostics:export"),
   sandboxWatch: (watchDir: string) => ipcRenderer.invoke("sandbox:watch", watchDir),
   sandboxUnwatch: (watchId: string) => ipcRenderer.invoke("sandbox:unwatch", watchId),
   sandboxFileExists: (filePath: string) => ipcRenderer.invoke("sandbox:fileExists", filePath),

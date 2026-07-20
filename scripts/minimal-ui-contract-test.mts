@@ -531,6 +531,7 @@ check(!/\?agent-kernel-v\d+/.test(directorModeSource), "DirectorMode must not pi
 checkMessage(requireWithin(creatorDeskPanelsSource, /function\s+CreatorDeskPanels\s*\(/, "CreatorDeskPanels component"));
 checkMessage(requireWithin(creatorDeskProjectionSource, /function\s+buildCreatorDeskProjection\s*\(/, "creator desk projection helper"));
 checkMessage(requireWithin(appSource, /import\s+\{\s*buildCreatorDeskProjection\s*\}\s+from\s+"\.\/ui\/app\/creatorDeskProjection"/, "App must import creator desk projection helper"));
+checkMessage(requireWithin(settingsShellSource, /window\.vibeRuntime\?\.exportDiagnostics[\s\S]*导出诊断日志[\s\S]*不包含密钥、完整项目或媒体/, "Settings must expose the one-click redacted diagnostic export without moving it into the Director workflow"));
 checkMessage(requireWithin(appSource, /async function runAgentVideoTextQaPreflight[\s\S]*ruleQaReport\?\.status === "blocked"[\s\S]*return undefined[\s\S]*runDirectorTextQa\(qaInput\)/, "Deterministic Director Rule QA blockers must stop provider-backed text QA before paid video confirmation"));
 checkMessage(requireWithin(appBody, /creatorDeskProjection\s*=\s*useMemo\(\(\)\s*=>\s*buildCreatorDeskProjection\(/, "App must derive creator desk projection outside DirectorMode"));
 checkMessage(requireWithin(appBody, /creatorDesk=\{creatorDeskProjection\}/, "App must pass creator desk projection into DirectorMode"));

@@ -28,6 +28,15 @@ export interface ElectronBridge {
     displayName?: string;
   }>;
   forgetProject?(projectRoot: string): Promise<{ forgotten: boolean }>;
+  exportDiagnostics?(): Promise<{
+    cancelled: boolean;
+    filePath?: string;
+    fileName?: string;
+    size?: number;
+    sha256?: string;
+    sidecarCount?: number;
+    generatedAt?: string;
+  }>;
   sandboxWatch(watchDir: string): Promise<{ watching: boolean; dir: string; watchId?: string; reason?: string }>;
   sandboxUnwatch?(watchId: string): Promise<{ unwatched: boolean; watchId: string; reason?: string }>;
   sandboxFileExists?(filePath: string): Promise<{ exists: boolean; path: string }>;

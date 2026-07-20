@@ -59,6 +59,7 @@ for (const channel of [
   "project:createLocal",
   "project:remember",
   "project:forget",
+  "diagnostics:export",
   "sandbox:watch",
   "sandbox:unwatch",
   "sandbox:fileExists",
@@ -79,5 +80,11 @@ assert(mainSource.includes('win.webContents.on("will-redirect"'), "renderer wind
 assert(mainSource.includes('win.webContents.on("will-attach-webview"'), "renderer windows must reject webview attachment");
 assert(/isSafeExternalUrl\(url\)[\s\S]{0,160}shell\.openExternal\(url\)/.test(mainSource), "only safe web URLs may be delegated to the system browser");
 assert(/const runtimeHost = runtimeLoopbackHost\(readEnv\("VIBE_DIRECTOR_RUNTIME_API_HOST", "VIBE_CORE_RUNTIME_API_HOST"\)\)/.test(mainSource), "Electron Runtime host overrides must stay loopback-only");
+assert(/VIBE_ELECTRON_ACCEPTANCE_DIAGNOSTICS_OUTPUT[\s\S]*path\.relative\("\/tmp", resolved\)/.test(mainSource), "diagnostic acceptance output must stay under /tmp");
+assert(/exportDiagnosticBundle\(\{[\s\S]*runtimeLogs: runtimeDiagnosticLines[\s\S]*recentMainErrors: recentDiagnosticErrors/.test(mainSource), "diagnostic export must use the redacted bundle builder");
+
+const diagnosticBundleSource = readFileSync("electron/diagnosticBundle.mts", "utf8");
+assert(/spawn\(dittoPath,[\s\S]*shell: false/.test(diagnosticBundleSource), "diagnostic ZIP creation must use a fixed non-shell process");
+assert(/credentialsIncluded: false[\s\S]*mediaIncluded: false[\s\S]*absolutePathsIncluded: false/.test(diagnosticBundleSource), "diagnostic manifest must declare privacy exclusions");
 
 console.log("electron-security-policy-test: ok");
