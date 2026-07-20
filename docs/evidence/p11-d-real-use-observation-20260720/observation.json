@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "p11_d_real_use_observation/1.0.0",
+  "observedAt": "2026-07-20",
+  "status": "pass_local_packaged_observation",
+  "packagedApp": "/tmp/vibe-director-p11-d-20260720/Vibe Director Studio P11D-7.app",
+  "checkpointCommit": "5618206",
+  "provider": {
+    "calls": 0,
+    "fees": 0,
+    "realExecutionVerified": false
+  },
+  "boundaries": {
+    "generationConfirmationExecuted": false,
+    "projectFactPromotionPerformed": false,
+    "deliveryExportPerformed": false,
+    "sourceProjectsChanged": false,
+    "visualRedesignPerformed": false
+  },
+  "tasks": [
+    {
+      "id": "plan_only_two_shot_story",
+      "fixtureRoot": "/tmp/vibe-director-p11-d-20260720/task1-fixed-2",
+      "result": "pass",
+      "input": "我要拍一个 8 秒短片：雨夜便利店门口，女孩把纸飞机递给机器人保安，纸飞机在灯箱里亮起来。整理成 2 个镜头，不生成参考图，不提交视频。",
+      "finalState": {
+        "storyShots": 2,
+        "referenceStatus": "missing_2",
+        "videoStatus": "not_generated",
+        "currentTask": "idle_continue_conversation",
+        "staleConfirmationVisible": false
+      },
+      "evidence": [
+        "task1-plan-only-cold-restore-pass.jpeg"
+      ]
+    },
+    {
+      "id": "explicit_reference_confirmation",
+      "fixtureRoot": "/tmp/vibe-director-p11-d-20260720/task2-explicit-reference-vlHGgL",
+      "result": "pass_after_p1_fix",
+      "input": "开始补参考",
+      "finalState": {
+        "projectReportedMissingReferences": 2,
+        "stagedActionKind": "prepare_reference_generation",
+        "currentTask": "confirm_reference_validation",
+        "confirmationVisible": true,
+        "executionMode": "dry_run",
+        "mediaCreated": 0
+      },
+      "friction": "The qualified phrase 开始补参考。只形成确认，不执行生成。 routed as status; the canonical command routed correctly.",
+      "evidence": [
+        "task2-explicit-reference-confirmation-pass.jpeg"
+      ]
+    },
+    {
+      "id": "review_revision_proposal",
+      "fixtureRoot": "/tmp/vibe-director-p11-d-20260720/task3-review-LTthco",
+      "result": "pass",
+      "path": [
+        "needs_review",
+        "needs_work",
+        "clarify",
+        "proposal",
+        "new_confirmation",
+        "cold_restore"
+      ],
+      "finalState": {
+        "initialJobStatus": "succeeded_dry_run_needs_review",
+        "newJobStatus": "staged_dry_run",
+        "providerCalled": false,
+        "currentTask": "confirm_video_validation",
+        "originalProjectHashUnchanged": true,
+        "originalMediaHashesUnchanged": true,
+        "promotionPerformed": false,
+        "exportPerformed": false
+      },
+      "hashes": {
+        "projectVibeSha256": "49e73fc7d6c21e98451a5b5ac6d6b4d144f63a4f6ebd4f882df936673a125ba9",
+        "versionASha256": "44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f",
+        "versionBSha256": "0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544"
+      },
+      "evidence": [
+        "task3-review-clarify-proposal-confirmation-pass.jpeg",
+        "task3-review-confirmation-cold-restore-pass.jpeg"
+      ]
+    }
+  ],
+  "fixedDefects": [
+    {
+      "severity": "P1",
+      "id": "passive_intent_overrode_plan_only_scope",
+      "result": "fixed"
+    },
+    {
+      "severity": "P1",
+      "id": "physical_missing_reference_lost_to_metadata_pipeline",
+      "result": "fixed"
+    }
+  ],
+  "remainingFriction": [
+    "Qualified reference intent is sensitive to exact wording.",
+    "Review revision uses three decisions before the independent execution confirmation.",
+    "Real Provider wait and returned-media usability were not observed."
+  ],
+  "verification": [
+    "agent-current-task-projection:test",
+    "agent-director-turn-projection:test",
+    "agent-director-review-decision:test",
+    "agent-director-review-regeneration:test",
+    "project-agent-generation-job-ledger:test",
+    "project-agent-staged-plan-draft:test",
+    "project-agent-timeline:test",
+    "current-project-ui-closed-loop:test",
+    "minimal-agent-p1:test",
+    "minimal-ui:test",
+    "package:dir",
+    "packaged-launch-contract:test",
+    "package:smoke",
+    "tsc_no_emit",
+    "git_diff_check"
+  ],
+  "evidenceHashes": {
+    "task1-plan-only-cold-restore-pass.jpeg": "55e5a49253353b5cba82996925f34198bbd7071278fc8d4017d6757c30c304ed",
+    "task2-explicit-reference-confirmation-pass.jpeg": "1d95cc93d173903a39279d840d8c3bf5a9d343b17584b69c986a5c07a7e27294",
+    "task3-review-clarify-proposal-confirmation-pass.jpeg": "6c7ef8e52cef144bd2c38a1e9c343249ea753520b7f088f889fdf7c40ef6935d",
+    "task3-review-confirmation-cold-restore-pass.jpeg": "504dfa578e03355c07ed501c44ce1c0c593317ffdaab5f2b281ace70b1e8c173"
+  }
+}

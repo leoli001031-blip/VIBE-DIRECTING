@@ -115,6 +115,46 @@ assert(unsavedStoryProjection.step === "choose_save_location", "an unsaved confi
 assert(unsavedStoryProjection.source === "pipeline_plan", "the save-location prerequisite should come from the structured pipeline plan");
 assert(unsavedStoryProjection.requiresConfirmation, "choosing a save location must retain its own confirmation boundary");
 
+const planOnlySavedStoryProjection = buildAgentCurrentTaskProjection({
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: true,
+    localProjectReady: true,
+    referenceMissingCount: 2,
+    videoSubmitted: false,
+  }),
+  intentRoute: {
+    kind: "status",
+    confirmation: "none",
+  },
+  executionScope: {
+    referenceGenerationAllowed: false,
+    videoSubmitAllowed: false,
+  },
+});
+assert(planOnlySavedStoryProjection.step === "idle", "plan-only projects must not invent a reference-generation confirmation after the story is saved");
+assert(planOnlySavedStoryProjection.requiresConfirmation === false, "a deferred generation step must leave the Agent composer available");
+
+const explicitReferenceRequestProjection = buildAgentCurrentTaskProjection({
+  pipelinePlan: plan({
+    storyDraftPresent: true,
+    storyConfirmed: true,
+    localProjectReady: true,
+    referenceMissingCount: 2,
+    videoSubmitted: false,
+  }),
+  intentRoute: {
+    kind: "reference",
+    confirmation: "reference_generation",
+  },
+  executionScope: {
+    referenceGenerationAllowed: false,
+    videoSubmitAllowed: false,
+  },
+});
+assert(explicitReferenceRequestProjection.step === "prepare_references", "an explicit reference request must reopen the reference confirmation even from plan-only mode");
+assert(explicitReferenceRequestProjection.requiresConfirmation, "an explicit reference request must preserve its own confirmation boundary");
+
 const versionPairProjection = buildAgentCurrentTaskProjection({
   reviewVersionPair: {
     pairId: "review_pair_P6S01",

@@ -6508,7 +6508,10 @@ export function MinimalAgentPanel({
     videoSendAction?.reviewCount
       ?? (timelineShowsVideoReady || videoSendAction?.status === "needs_review" ? 1 : 0),
   ));
-  const referenceMissingCountForAgent = referenceExecutionSatisfiedForAgent ? 0 : referenceMissingCount;
+  const projectObservationHasMissingReferences = projectObservation?.references.status === "missing";
+  const referenceMissingCountForAgent = referenceExecutionSatisfiedForAgent
+    ? 0
+    : Math.max(referenceMissingCount, projectObservationHasMissingReferences ? 1 : 0);
   const referenceReviewCountForAgent = agentCurrentTaskReferenceReviewCount({
     needsReviewCount: referenceReviewableCount,
     displayableCount: referenceDisplayableCount,
@@ -9356,12 +9359,14 @@ export function MinimalAgentPanel({
       },
       projectStatus: projectStatusView,
       projectObservation: composerProjectObservation,
-      intentRoute: {
-        kind: composerIntentRoute.kind,
-        label: composerIntentRoute.label,
-        confirmation: composerIntentRoute.confirmation,
-        plan: composerIntentRoute.plan,
-      },
+      intentRoute: visibleComposerInputText
+        ? {
+            kind: composerIntentRoute.kind,
+            label: composerIntentRoute.label,
+            confirmation: composerIntentRoute.confirmation,
+            plan: composerIntentRoute.plan,
+          }
+        : undefined,
       timelineConfirmations: agentCurrentTaskTimelineConfirmations,
       restoredStagedPlan: agentCurrentTaskStagedPlanRestoreFromDraft(restoredAgentStagedPlanDraft),
       pipelinePlan: agentCurrentTaskPipelinePlan,
@@ -9370,6 +9375,10 @@ export function MinimalAgentPanel({
       currentProjectRoot: localProjectReadyForTools ? runtimeState.project.root : undefined,
       currentProjectFactHash: projectFactHash,
       completedSteps: agentCurrentTaskCompletedSteps,
+      executionScope: {
+        referenceGenerationAllowed: !referenceGenerationBlockedByContract,
+        videoSubmitAllowed: !videoPermissionBlockedByContract,
+      },
       referenceReviewCount: referenceReviewCountForAgent,
       videoReviewCount: videoReviewCountForAgent,
       reviewVersionPair: reviewVersionPair && activeReviewVersionCandidate
@@ -9419,12 +9428,15 @@ export function MinimalAgentPanel({
       newVideoDraftShotCountForAgent,
       projectStatusView,
       projectFactHash,
+      referenceGenerationBlockedByContract,
       referenceReviewCountForAgent,
       reviewVersionPair,
       activeReviewVersion,
       activeReviewVersionCandidate,
       reviewSelectionProjection,
       videoReviewCountForAgent,
+      videoPermissionBlockedByContract,
+      visibleComposerInputText,
       runtimeState.project.root,
       runtimeState.sourceIndex.projectId,
       restoredAgentStagedPlanDraft,

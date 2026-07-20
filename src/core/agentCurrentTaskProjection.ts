@@ -131,6 +131,10 @@ export interface AgentCurrentTaskProjectionInput {
   currentProjectRoot?: string;
   currentProjectFactHash?: string;
   completedSteps?: AgentCurrentTaskCompletedStep[];
+  executionScope?: {
+    referenceGenerationAllowed: boolean;
+    videoSubmitAllowed: boolean;
+  };
   referenceReviewCount?: number;
   videoReviewCount?: number;
   reviewVersionPair?: {
@@ -236,6 +240,15 @@ function effectForStep(step: AgentCurrentTaskStep): AgentCurrentTaskEffect {
   if (step === "prepare_references" || step === "submit_video") return "generation_job";
   if (step === "export") return "local_export";
   return "none";
+}
+
+function fallbackStepDeferredByExecutionScope(
+  step: AgentCurrentTaskStep,
+  scope: AgentCurrentTaskProjectionInput["executionScope"],
+) {
+  if (step === "prepare_references") return scope?.referenceGenerationAllowed === false;
+  if (step === "submit_video") return scope?.videoSubmitAllowed === false;
+  return false;
 }
 
 function currentPipelineBlockers(plan: AgentVideoPipelinePlan | undefined, step: AgentCurrentTaskStep) {
@@ -759,6 +772,18 @@ export function buildAgentCurrentTaskProjection(input: AgentCurrentTaskProjectio
         actionId: exportCompletion.actionId,
         completedAt: exportCompletion.completedAt,
       },
+      blockers: [],
+      facts: factsForInput(input),
+    });
+  }
+
+  if (!routeStep && fallbackStepDeferredByExecutionScope(step, input.executionScope)) {
+    return buildProjection({
+      source: "project_status",
+      step: "idle",
+      label: labelForStep("idle"),
+      requiresConfirmation: false,
+      effect: "none",
       blockers: [],
       facts: factsForInput(input),
     });
