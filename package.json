@@ -34,6 +34,7 @@
     "p10-e-packaged-acceptance:test": "tsx scripts/agent-director-workflow-packaged-acceptance.mts",
     "p11-a-packaged-reliability:test": "tsx scripts/p11-packaged-reliability-acceptance.mts",
     "p11-a-packaged-soak:test": "tsx scripts/p11-packaged-soak-acceptance.mts",
+    "p11-f-local-beta-diagnostics:test": "tsx scripts/p11-local-beta-continuous-use-acceptance.mts",
     "p11-b-provider-canary:prepare": "tsx scripts/p11-provider-canary-acceptance.mts --mode=prepare",
     "p11-b-provider-canary:inspect": "tsx scripts/p11-provider-canary-acceptance.mts --mode=inspect",
     "p11-b-provider-canary:submit": "tsx scripts/p11-provider-canary-acceptance.mts --mode=submit",

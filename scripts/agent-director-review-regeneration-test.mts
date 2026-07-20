@@ -14,6 +14,7 @@ import {
 import {
   activeAgentDirectorReviewRegenerationConfirmationFromTimeline,
   activeAgentDirectorReviewRegenerationProposalFromTimeline,
+  agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger,
   agentDirectorReviewRegenerationConfirmationMatchesSourceReview,
   agentDirectorReviewRegenerationConfirmationMatchesJob,
   buildAgentDirectorReviewRegenerationConfirmationTimelineEntries,
@@ -331,6 +332,38 @@ assert.equal(agentDirectorReviewRegenerationConfirmationMatchesJob(restoredConfi
   actionId: identity.actionId,
   confirmationId: newJob.sourceConfirmationId,
   job: newJob,
+}), false);
+const restoredLedger = {
+  ...stagedIndependentCandidate.ledger,
+  jobs: [sourceReviewJob, newJob],
+};
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger({
+  confirmation: restoredConfirmation,
+  currentProject: identity,
+  ledger: restoredLedger,
+  actionId: newJob.actionId,
+  confirmationId: newJob.sourceConfirmationId,
+}), true);
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger({
+  confirmation: restoredConfirmation,
+  currentProject: identity,
+  ledger: { ...restoredLedger, jobs: [sourceReviewJob] },
+  actionId: newJob.actionId,
+  confirmationId: newJob.sourceConfirmationId,
+}), false);
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger({
+  confirmation: restoredConfirmation,
+  currentProject: identity,
+  ledger: { ...restoredLedger, jobs: [sourceReviewJob, { ...newJob, projectId: "other_project" }] },
+  actionId: newJob.actionId,
+  confirmationId: newJob.sourceConfirmationId,
+}), false);
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger({
+  confirmation: restoredConfirmation,
+  currentProject: { ...identity, projectFactHash: "pv_stale" },
+  ledger: restoredLedger,
+  actionId: newJob.actionId,
+  confirmationId: newJob.sourceConfirmationId,
 }), false);
 
 const liveConfirmationResult = buildAgentDirectorReviewRegenerationConfirmationTimelineEntries({

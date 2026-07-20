@@ -1,5 +1,8 @@
 import type { VibeAgentTimelineEntry } from "../../agent-core/types";
-import type { AgentVideoGenerationJob } from "../../core/agentVideoProductionContract";
+import type {
+  AgentVideoGenerationJob,
+  AgentVideoGenerationJobLedger,
+} from "../../core/agentVideoProductionContract";
 import type { JimengExplicitSubmitProfile } from "../../core/jimengVideoCli";
 import {
   AGENT_DIRECTOR_REVIEW_IDENTITY_SCHEMA_VERSION,
@@ -548,6 +551,43 @@ export function agentDirectorReviewRegenerationConfirmationMatchesJob(
       && (confirmation.executionMode !== "live" || job.modelId === confirmation.submitProfile?.modelVersion)
       && job.providerCalled === false,
   );
+}
+
+export function agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger(input: {
+  confirmation?: AgentDirectorReviewRegenerationConfirmation;
+  currentProject: Pick<AgentDirectorReviewIdentity, "projectId" | "projectRoot" | "projectFactHash">;
+  ledger?: AgentVideoGenerationJobLedger;
+  actionId?: string;
+  confirmationId?: string;
+}) {
+  const { confirmation, currentProject, ledger } = input;
+  if (
+    !confirmation
+    || !ledger
+    || ledger.projectId !== currentProject.projectId
+    || normalizeAgentDirectorReviewProjectRoot(ledger.projectRoot || "")
+      !== normalizeAgentDirectorReviewProjectRoot(currentProject.projectRoot)
+    || ledger.projectFactHash !== currentProject.projectFactHash
+  ) return false;
+  const sourceJob = ledger.jobs.find((job) => job.jobId === confirmation.sourceIdentity.jobId);
+  const regenerationJob = ledger.jobs.find((job) => job.jobId === confirmation.jobId);
+  const jobMatchesCurrentProject = (job: AgentVideoGenerationJob | undefined) => Boolean(
+    job
+      && job.projectId === currentProject.projectId
+      && normalizeAgentDirectorReviewProjectRoot(job.projectRoot || "")
+        === normalizeAgentDirectorReviewProjectRoot(currentProject.projectRoot)
+      && job.projectFactHash === currentProject.projectFactHash,
+  );
+  if (!jobMatchesCurrentProject(sourceJob) || !jobMatchesCurrentProject(regenerationJob)) return false;
+  return agentDirectorReviewRegenerationConfirmationMatchesSourceReview({
+    confirmation,
+    currentProject,
+    sourceJob,
+  }) && agentDirectorReviewRegenerationConfirmationMatchesJob(confirmation, {
+    actionId: input.actionId,
+    confirmationId: input.confirmationId,
+    job: regenerationJob,
+  });
 }
 
 export function agentDirectorReviewRegenerationSchemaCompatibility() {

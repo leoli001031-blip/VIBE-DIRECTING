@@ -204,8 +204,8 @@ import {
 import {
   activeAgentDirectorReviewRegenerationConfirmationFromTimeline,
   activeAgentDirectorReviewRegenerationProposalFromTimeline,
+  agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger,
   agentDirectorReviewRegenerationConfirmationMatchesSourceReview,
-  agentDirectorReviewRegenerationConfirmationMatchesJob,
   buildAgentDirectorReviewRegenerationConfirmationTimelineEntries,
   buildAgentDirectorReviewRegenerationProposal,
   buildAgentDirectorReviewRegenerationProposalRevisionTimelineEntry,
@@ -5393,11 +5393,23 @@ export function MinimalAgentPanel({
     && restoredAgentStagedPlanDraft.action?.kind === "prepare_reference_generation"
     ? restoredAgentStagedPlanDraft.action.actionId
     : timelineReferenceGenerationActionId;
+  const restoredDirectorReviewRegenerationConfirmation = useMemo(
+    () => activeAgentDirectorReviewRegenerationConfirmationFromTimeline(agentTimelineEntries),
+    [agentTimelineEntries],
+  );
+  const restoredAgentGenerationLedgerForCurrentProject = agentVideoExecutionLedgerMatchesProject(
+    restoredAgentGenerationJobLedger,
+    agentGenerationProjectIdentity,
+  ) ? restoredAgentGenerationJobLedger : undefined;
+  const reviewRegenerationRecoveryLedger = restoredAgentGenerationLedgerForCurrentProject
+    || (agentVideoExecutionLedgerMatchesProject(agentVideoDryRunLedger, agentGenerationProjectIdentity)
+      ? agentVideoDryRunLedger
+      : undefined);
   const activeDirectorReviewRegenerationConfirmation = useMemo(
     () => {
-      const confirmation = activeAgentDirectorReviewRegenerationConfirmationFromTimeline(agentTimelineEntries);
+      const confirmation = restoredDirectorReviewRegenerationConfirmation;
       if (!confirmation || !agentGenerationProjectIdentity.projectRoot) return undefined;
-      const sourceJob = agentVideoDryRunLedger.jobs.find((job) => job.jobId === confirmation.sourceIdentity.jobId);
+      const sourceJob = reviewRegenerationRecoveryLedger?.jobs.find((job) => job.jobId === confirmation.sourceIdentity.jobId);
       return agentDirectorReviewRegenerationConfirmationMatchesSourceReview({
         confirmation,
         currentProject: {
@@ -5409,11 +5421,11 @@ export function MinimalAgentPanel({
       }) ? confirmation : undefined;
     },
     [
-      agentTimelineEntries,
       agentGenerationProjectIdentity.projectFactHash,
       agentGenerationProjectIdentity.projectId,
       agentGenerationProjectIdentity.projectRoot,
-      agentVideoDryRunLedger,
+      restoredDirectorReviewRegenerationConfirmation,
+      reviewRegenerationRecoveryLedger,
     ],
   );
   const visibleAgentTimelineEntries = useMemo(() => {
@@ -6748,6 +6760,7 @@ export function MinimalAgentPanel({
     }
     const draft = restoredAgentStagedPlanDraft;
     if (!draft || draft.status !== "active" || !draft.action || !draft.toolHandoff) return;
+    if (restoredDirectorReviewRegenerationConfirmation && !restoredAgentGenerationLedgerForCurrentProject) return;
     if (restoredAgentDraftIdRef.current === draft.draftId) return;
     if (hasPreparedAgentState) return;
     restoredAgentDraftIdRef.current = draft.draftId;
@@ -6765,17 +6778,18 @@ export function MinimalAgentPanel({
       selection: restoredSelection,
     }, projectReferenceGuide));
     const nextProjection = buildAgentPanelProjection(nextWorkflow, runtimeState, "review");
-    const reviewRegenerationJob = activeDirectorReviewRegenerationConfirmation
-      ? agentVideoDryRunLedger.jobs.find((job) => job.jobId === activeDirectorReviewRegenerationConfirmation.jobId)
-      : undefined;
-    const preserveReviewRegenerationHandoff = agentDirectorReviewRegenerationConfirmationMatchesJob(
-      activeDirectorReviewRegenerationConfirmation,
-      {
+    const preserveReviewRegenerationHandoff = agentGenerationProjectIdentity.projectRoot
+      && agentDirectorReviewRegenerationConfirmationMatchesRestoredLedger({
+        confirmation: restoredDirectorReviewRegenerationConfirmation,
+        currentProject: {
+          projectId: agentGenerationProjectIdentity.projectId,
+          projectRoot: agentGenerationProjectIdentity.projectRoot,
+          projectFactHash: agentGenerationProjectIdentity.projectFactHash,
+        },
+        ledger: restoredAgentGenerationLedgerForCurrentProject,
         actionId: draft.action.actionId,
         confirmationId: draft.toolHandoff.handoffId,
-        job: reviewRegenerationJob,
-      },
-    );
+      });
     const refreshedToolHandoff = preserveReviewRegenerationHandoff
       ? draft.toolHandoff
       : buildVibeAgentToolHandoff({
@@ -6824,13 +6838,16 @@ export function MinimalAgentPanel({
     });
     setStatus(draft.action.status === "blocked" ? "需要补充" : "等你确认");
   }, [
-    activeDirectorReviewRegenerationConfirmation,
     activeVideoPermissionContract,
-    agentVideoDryRunLedger,
+    agentGenerationProjectIdentity.projectFactHash,
+    agentGenerationProjectIdentity.projectId,
+    agentGenerationProjectIdentity.projectRoot,
     hasPreparedAgentState,
 	    localProjectReadyForTools,
 	    onRefreshRestoredAgentStagedPlanDraft,
 	    projectReferenceGuide,
+    restoredAgentGenerationLedgerForCurrentProject,
+    restoredDirectorReviewRegenerationConfirmation,
     restoredAgentStagedPlanDraft,
     runtimeState,
     scopeLabel,
