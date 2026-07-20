@@ -73,9 +73,13 @@ export function buildDirectorAgentVideoTextQaInput(input: {
   project: ProjectVibeDocument;
   action: DirectorAgentActionEnvelope;
   userIntent: string;
+  seedancePrompt?: string;
+  storyboardPrompt?: string;
   ruleQaReport?: DirectorRuleQaReport;
 }): DirectorTextQaInput | undefined {
   if (input.action.kind !== "prepare_video_submit" || input.action.status === "blocked") return undefined;
+  const seedancePrompt = input.seedancePrompt?.trim();
+  if (!seedancePrompt) return undefined;
 
   const shotIds = scopedShotIdsForAction(input.project, input.action);
   const shotIdSet = new Set(shotIds);
@@ -96,12 +100,14 @@ export function buildDirectorAgentVideoTextQaInput(input: {
           : "全能参考"
       : "混合模式",
     compilerReasons: [
-      "Agent 视频提交前的文本 QA，只检查项目规划、参考策略和生成合同。",
+      "Agent 视频提交前的文本 QA 检查项目规划、参考策略和已编译的 Seedance prompt。",
       "最终 Seedance 提交仍会在 runtime 里重新编译 prompt 并再次 QA。",
     ],
     durationSeconds: durationSeconds || undefined,
     visibleClips: shots.reduce((sum, shot) => sum + (Number(shot.visibleClips) || 1), 0),
     storyboardPanels: shots.reduce((sum, shot) => sum + (Number(shot.storyboardPanels) || 0), 0),
+    seedancePrompt,
+    storyboardPrompt: input.storyboardPrompt?.trim() || undefined,
     userIntent: input.userIntent,
     styleIntent: input.project.storyFlow.sections.map((section) => section.summary).filter(Boolean).join("\n"),
     ruleQaReport: input.ruleQaReport,

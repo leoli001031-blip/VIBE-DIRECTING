@@ -51,6 +51,42 @@ Reauthorized evidence:
 - Sanitized repository evidence:
   `docs/evidence/p11-b-provider-canary-20260720/reauthorized-final-observation.json`
 
+## Post-terminal prompt QA boundary hardening
+
+The reauthorized attempt remains terminal and was not retried. A local P1 fix
+now prevents the renderer from sending Director text QA an input that has no
+compiled `seedancePrompt`. When the renderer does not own a compiled prompt,
+the redundant text-QA pass returns without calling its Provider.
+
+The authoritative Runtime boundary remains unchanged and fail closed:
+
+1. Compile the actual Seedance prompt.
+2. Run deterministic Director Rule QA against that prompt.
+3. Run Director text QA with the same compiled prompt.
+4. Only after both gates pass may the video CLI reach `multimodal2video`.
+
+This is a minimal correction to the false blocker, not a second canary. It does
+not add a hash-bound pre-confirmation prompt receipt; Runtime still compiles and
+checks the final prompt after confirmation but before any video Provider call.
+That larger preflight architecture remains unverified and out of scope here.
+
+Post-terminal verification passed with zero additional Provider calls:
+
+- `npm run director-product-agent-loop:test`
+- `npm run director-text-qa:test`
+- `npm run prototype-ui:test`
+- `npm run minimal-agent-p1:test`
+- `npm run minimal-ui:test`
+- `npm run p11-b-provider-canary:contract:test`
+- `npm run p11-b-provider-canary:preflight:test`
+- `npx tsc --noEmit --pretty false`
+- `npm run package:dir`
+- `npm run packaged-launch-contract:test`
+- `npm run package:smoke`
+
+Sanitized hardening evidence:
+`docs/evidence/p11-b-provider-canary-20260720/prompt-qa-boundary-hardening.json`.
+
 P11-A passed at commit `7f7e203`. In the original attempt, the user authorized exactly one packaged
 submission of `P11S01`, using `5` seconds, `720p`, and
 `seedance2.0_vip`, with no automatic retry. That one-submit authorization was

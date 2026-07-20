@@ -355,6 +355,8 @@ async function runAgentVideoTextQaPreflight(input: {
   ruleQaReport?: DirectorRuleQaReport;
 }): Promise<DirectorTextQaReport | undefined> {
   if (input.ruleQaReport?.status === "blocked") return undefined;
+  // Runtime owns final Seedance prompt compilation and rechecks it before the video CLI.
+  // Until a compiled prompt is available, do not ask provider text QA to judge an empty prompt.
   const qaInput = buildDirectorAgentVideoTextQaInput(input);
   if (!qaInput) return undefined;
   try {

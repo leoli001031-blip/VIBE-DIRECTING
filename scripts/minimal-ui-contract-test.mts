@@ -168,8 +168,10 @@ const settingsShellPath = "src/ui/diagnostics/SettingsShell.tsx";
 const currentProjectRuntimeHookPath = "src/ui/app/useCurrentProjectRuntimePanels.ts";
 const currentProjectRuntimeClientPath = "src/core/projectCurrentBindingClient.ts";
 const projectReviewDecisionClientPath = "src/core/projectReviewDecisionClient.ts";
+const directorAgentTextQaInputPath = "src/core/directorAgentTextQaInput.ts";
 const projectAgentStagedPlanDraftPath = "src/project/projectAgentStagedPlanDraft.ts";
 const localRuntimeApiServerPath = "scripts/local-runtime-api-server.mts";
+const currentProjectSeedanceSubmitRoutePath = "scripts/runtime-routes/current-project-seedance-submit.mts";
 const stylesPath = "src/styles.css";
 const directorStylesPath = "src/styles/director.css";
 const projectRealChainPanelCssPath = "src/ui/project/ProjectRealChainPanel.css";
@@ -243,8 +245,10 @@ const settingsShellSource = stripComments(readText(settingsShellPath));
 const currentProjectRuntimeHookSource = stripComments(readText(currentProjectRuntimeHookPath));
 const currentProjectRuntimeClientSource = stripComments(readText(currentProjectRuntimeClientPath));
 const projectReviewDecisionClientSource = stripComments(readText(projectReviewDecisionClientPath));
+const directorAgentTextQaInputSource = stripComments(readText(directorAgentTextQaInputPath));
 const projectAgentStagedPlanDraftSource = stripComments(readText(projectAgentStagedPlanDraftPath));
 const localRuntimeApiServerSource = stripComments(readText(localRuntimeApiServerPath));
+const currentProjectSeedanceSubmitRouteSource = stripComments(readText(currentProjectSeedanceSubmitRoutePath));
 const extractedDiagnosticsSources = [
   diagnosticsModeSource,
   runtimeDiagnosticsProjectionSource,
@@ -533,6 +537,18 @@ checkMessage(requireWithin(creatorDeskProjectionSource, /function\s+buildCreator
 checkMessage(requireWithin(appSource, /import\s+\{\s*buildCreatorDeskProjection\s*\}\s+from\s+"\.\/ui\/app\/creatorDeskProjection"/, "App must import creator desk projection helper"));
 checkMessage(requireWithin(settingsShellSource, /window\.vibeRuntime\?\.exportDiagnostics[\s\S]*导出诊断日志[\s\S]*不包含密钥、完整项目或媒体/, "Settings must expose the one-click redacted diagnostic export without moving it into the Director workflow"));
 checkMessage(requireWithin(appSource, /async function runAgentVideoTextQaPreflight[\s\S]*ruleQaReport\?\.status === "blocked"[\s\S]*return undefined[\s\S]*runDirectorTextQa\(qaInput\)/, "Deterministic Director Rule QA blockers must stop provider-backed text QA before paid video confirmation"));
+checkMessage(requireWithin(directorAgentTextQaInputSource, /function\s+buildDirectorAgentVideoTextQaInput[\s\S]*const seedancePrompt = input\.seedancePrompt\?\.trim\(\)[\s\S]*if \(!seedancePrompt\) return undefined[\s\S]*seedancePrompt,/, "Renderer text QA must never ask a provider to evaluate an empty Seedance prompt"));
+const runtimePromptCompileIndex = currentProjectSeedanceSubmitRouteSource.indexOf("const seedancePrompt = buildSeedancePrompt");
+const runtimeRuleQaIndex = currentProjectSeedanceSubmitRouteSource.indexOf("const ruleQaReport = runDirectorRuleQa");
+const runtimeTextQaIndex = currentProjectSeedanceSubmitRouteSource.indexOf("const textQaReport = await runDirectorTextQaForRuntime");
+const runtimeVideoCliIndex = currentProjectSeedanceSubmitRouteSource.indexOf('"multimodal2video"');
+check(
+  runtimePromptCompileIndex >= 0
+    && runtimePromptCompileIndex < runtimeRuleQaIndex
+    && runtimeRuleQaIndex < runtimeTextQaIndex
+    && runtimeTextQaIndex < runtimeVideoCliIndex,
+  "Runtime must compile the actual Seedance prompt and pass both QA gates before the video CLI",
+);
 checkMessage(requireWithin(appBody, /creatorDeskProjection\s*=\s*useMemo\(\(\)\s*=>\s*buildCreatorDeskProjection\(/, "App must derive creator desk projection outside DirectorMode"));
 checkMessage(requireWithin(appBody, /creatorDesk=\{creatorDeskProjection\}/, "App must pass creator desk projection into DirectorMode"));
 checkMessage(requireWithin(directorModeSource, /import\s+\{\s*CreatorDeskPanels\s*\}\s+from\s+"\.\/CreatorDeskPanels"/, "DirectorMode must import CreatorDeskPanels"));

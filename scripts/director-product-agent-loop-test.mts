@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   runDirectorProductAgentLoop,
 } from "../src/agent/index.ts";
+import { buildDirectorAgentVideoTextQaInput } from "../src/core/directorAgentTextQaInput.ts";
 import {
   buildProjectRuntimeStateFromProjectVibe,
   parseProjectVibeText,
@@ -96,6 +97,24 @@ assert(stagedVideoAfterDryRunReferenceValidation.snapshot.projectReadiness.statu
 assert(stagedVideoAfterDryRunReferenceValidation.action.kind === "prepare_video_submit", "explicit video intent after reference validation must remain a video action");
 assert(stagedVideoAfterDryRunReferenceValidation.action.status === "staged", "persisted video action must not be downgraded by raw missing-reference facts after structured validation");
 assert(stagedVideoAfterDryRunReferenceValidation.status === "awaiting_confirmation", "validated video action must reach the normal confirmation boundary");
+
+const deferredRuntimeVideoTextQa = buildDirectorAgentVideoTextQaInput({
+  project,
+  action: stagedVideoAfterDryRunReferenceValidation.action,
+  userIntent: "发送视频",
+  ruleQaReport: stagedVideoAfterDryRunReferenceValidation.ruleQaReport,
+});
+assert(deferredRuntimeVideoTextQa === undefined, "renderer text QA must defer when Runtime has not compiled the Seedance prompt yet");
+
+const compiledSeedancePrompt = "Create one five-second shot with a stable subject and no music.";
+const compiledVideoTextQa = buildDirectorAgentVideoTextQaInput({
+  project,
+  action: stagedVideoAfterDryRunReferenceValidation.action,
+  userIntent: "发送视频",
+  seedancePrompt: compiledSeedancePrompt,
+  ruleQaReport: stagedVideoAfterDryRunReferenceValidation.ruleQaReport,
+});
+assert(compiledVideoTextQa?.seedancePrompt === compiledSeedancePrompt, "renderer text QA must forward the exact compiled Seedance prompt when one is available");
 
 const stagedPatch = runDirectorProductAgentLoop({
   project,

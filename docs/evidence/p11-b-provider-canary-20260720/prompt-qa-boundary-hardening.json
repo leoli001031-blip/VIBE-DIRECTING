@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "p11_provider_canary_prompt_qa_boundary_hardening_v1",
+  "status": "local_hardening_passed_without_provider_retry",
+  "generatedAt": "2026-07-20T10:28:57Z",
+  "terminalCanaryRoot": "/tmp/vibe-director-p11-b-20260720-r2",
+  "shotId": "P11S01",
+  "additionalPackagedSubmitActions": 0,
+  "additionalVideoProviderCalls": 0,
+  "queryAttempts": 0,
+  "automaticRetries": 0,
+  "extraGeneratedImages": 0,
+  "externalTaskId": null,
+  "contract": {
+    "rendererMissingCompiledPrompt": "defer_without_text_qa_provider_call",
+    "runtimeOrder": [
+      "compile_seedance_prompt",
+      "director_rule_qa",
+      "director_text_qa",
+      "multimodal2video"
+    ],
+    "runtimeRemainsFailClosed": true
+  },
+  "verification": [
+    "npm run director-product-agent-loop:test",
+    "npm run director-text-qa:test",
+    "npm run prototype-ui:test",
+    "npm run minimal-agent-p1:test",
+    "npm run minimal-ui:test",
+    "npm run p11-b-provider-canary:contract:test",
+    "npm run p11-b-provider-canary:preflight:test",
+    "npx tsc --noEmit --pretty false",
+    "npm run package:dir",
+    "npm run packaged-launch-contract:test",
+    "npm run package:smoke"
+  ],
+  "remainingBoundary": "No hash-bound pre-confirmation prompt receipt was added; final prompt compilation and QA still occur after confirmation and before the video Provider CLI.",
+  "canaryVerdict": "Single real Provider canary FAILED",
+  "providerVerdict": "Real video Provider execution NOT VERIFIED"
+}

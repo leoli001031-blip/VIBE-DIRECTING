@@ -60,6 +60,7 @@ const agentPanelProjectionPath = "src/ui/director/agentPanelProjection.ts";
 const directorModePath = "src/ui/director/DirectorModeShell.tsx";
 const creatorDeskPanelsPath = "src/ui/director/CreatorDeskPanels.tsx";
 const appPath = "src/App.tsx";
+const directorAgentTextQaInputPath = "src/core/directorAgentTextQaInput.ts";
 const minimalTopNavPath = "src/ui/director/MinimalTopNav.tsx";
 const minimalStoryFlowPath = "src/ui/director/MinimalStoryFlow.tsx";
 const minimalAssetLibraryPath = "src/ui/director/MinimalAssetLibrary.tsx";
@@ -71,6 +72,7 @@ const agentPanelProjectionSource = stripComments(readText(agentPanelProjectionPa
 const directorModeSource = stripComments(readText(directorModePath));
 const creatorDeskPanelsSource = stripComments(readText(creatorDeskPanelsPath));
 const appSource = stripComments(readText(appPath));
+const directorAgentTextQaInputSource = stripComments(readText(directorAgentTextQaInputPath));
 const minimalTopNavSource = stripComments(readText(minimalTopNavPath));
 const minimalStoryFlowSource = stripComments(readText(minimalStoryFlowPath));
 const minimalAssetLibrarySource = stripComments(readText(minimalAssetLibraryPath));
@@ -202,7 +204,12 @@ checkWithin(
 checkWithin(
   app,
   /function\s+stagePrototypeAgentPlan\(input: StagePrototypeAgentPlanInput\): Promise<StagePrototypeAgentPlanResult>[\s\S]*runAgentVideoTextQaPreflight\(\{[\s\S]*ruleQaReport:\s*productAgentLoop\.ruleQaReport[\s\S]*textQaReport[\s\S]*runDirectorProductAgentLoop\(\{[\s\S]*textQaReport/,
-  "App.tsx staged Product Agent path must run video text QA before returning a submit-ready action",
+  "App.tsx staged Product Agent path must consume video text QA when a compiled prompt is available",
+);
+checkWithin(
+  directorAgentTextQaInputSource,
+  /function\s+buildDirectorAgentVideoTextQaInput[\s\S]*const seedancePrompt = input\.seedancePrompt\?\.trim\(\)[\s\S]*if \(!seedancePrompt\) return undefined[\s\S]*seedancePrompt,/,
+  "renderer video text QA must defer instead of evaluating a missing Seedance prompt",
 );
 checkWithin(
   app,
@@ -275,7 +282,7 @@ check(
 );
 checkWithin(
   app,
-  /async function runLocalExportAction\(input\?: \{ agentToolTrace\?: ExportActionState\["agentToolTrace"\]; signal\?: AbortSignal \}\)[\s\S]*signal: input\?\.signal[\s\S]*setExportActionState\(nextState\)[\s\S]*return nextState[\s\S]*setExportActionState\(failedState\)[\s\S]*return failedState/,
+  /async function runLocalExportAction\(input\?: \{[\s\S]*agentToolTrace\?: ExportActionState\["agentToolTrace"\][\s\S]*signal\?: AbortSignal[\s\S]*\}\)[\s\S]*signal: input\?\.signal[\s\S]*setExportActionState\(nextState\)[\s\S]*return nextState[\s\S]*setExportActionState\(failedState\)[\s\S]*return failedState/,
   "App.tsx Agent-triggered export must return the structured export action result",
 );
 checkWithin(
