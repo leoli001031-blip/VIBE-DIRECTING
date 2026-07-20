@@ -234,7 +234,9 @@ async function persistEvidence(status: "running" | "preflight_pass" | "pass" | "
     updatedAt: new Date().toISOString(),
     elapsedMs: Date.now() - startedAtMs,
     required: {
-      minimumDurationMs,
+      minimumDurationMs: requiredDurationMs,
+      configuredDurationMs: durationMs,
+      fullSoakMinimumDurationMs: minimumDurationMs,
       restartCount: requiredRestarts,
       stateAdvanceCount: requiredStateAdvances,
       sampleIntervalMs,
@@ -368,9 +370,14 @@ await persistEvidence(failure ? "failed" : preflightMode ? "preflight_pass" : "p
   logs,
   failure: failure || undefined,
   invariants: {
-    elapsedAtLeast60Minutes: !preflightMode && Date.now() - startedAtMs >= minimumDurationMs,
-    forcedRestartsAtLeast10: restartCount >= requiredRestarts,
-    stateAdvancesAtLeast20: stateAdvanceCount >= requiredStateAdvances,
+    elapsedAtLeastRequiredDuration: Date.now() - startedAtMs >= durationMs,
+    forcedRestartsAtLeastRequired: restartCount >= requiredRestarts,
+    stateAdvancesAtLeastRequired: stateAdvanceCount >= requiredStateAdvances,
+    ...(!preflightMode ? {
+      elapsedAtLeast60Minutes: Date.now() - startedAtMs >= minimumDurationMs,
+      forcedRestartsAtLeast10: restartCount >= 10,
+      stateAdvancesAtLeast20: stateAdvanceCount >= 20,
+    } : {}),
     oneCurrentTaskAtEveryObservation: observations.every((item) => item.duplicateCurrentTask === false),
     noProjectStateDrift: !projectStateDrift,
     noResidualStaging: finalStagingFiles.length === 0,

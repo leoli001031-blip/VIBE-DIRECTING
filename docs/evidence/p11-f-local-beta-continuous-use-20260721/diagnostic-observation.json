@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "p11_f_local_beta_continuous_use/1.0.0",
+  "observedAt": "2026-07-20T19:20:18.985Z",
+  "status": "pass_local_packaged",
+  "packagedApp": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app",
+  "fixtureRoot": "/tmp/vibe-director-p11-f-diagnostics-54xHjT",
+  "projectRoot": "/tmp/vibe-director-p11-e-20260720-mmu7WM/review/projects/p11-e-review",
+  "currentTask": {
+    "count": 1,
+    "step": "submit_video",
+    "source": "timeline_confirmation",
+    "label": "确认验证视频流程",
+    "confirmationEnabled": true,
+    "oldReviewVisible": false
+  },
+  "diagnostic": {
+    "outputPath": "/tmp/vibe-director-p11-f-diagnostics-54xHjT/Vibe-Director-Diagnostics.zip",
+    "fileName": "Vibe-Director-Diagnostics.zip",
+    "sizeBytes": 3216,
+    "sha256": "ec56f6c25a06d581563593841df0a5f3c58a0a7cc198646fcdc2ee4bbef7a794",
+    "sidecarCount": 3,
+    "generationLedger": {
+      "recordCount": 2,
+      "statusCounts": {
+        "succeeded": 2,
+        "staged": 3,
+        "confirmed": 1,
+        "running": 1,
+        "needs_review": 1
+      }
+    },
+    "stagedPlanStatus": "active",
+    "timelineRecordCount": 7,
+    "privacy": {
+      "credentialsIncluded": false,
+      "tokensIncluded": false,
+      "fullProjectFilesIncluded": false,
+      "mediaIncluded": false,
+      "absolutePathsIncluded": false
+    }
+  },
+  "projectStateDrift": false,
+  "runtimeOrphanPids": [],
+  "providerCalls": 0,
+  "providerFees": 0,
+  "finalExecutionConfirmed": false,
+  "exportPerformed": false,
+  "realProviderExecutionVerified": false,
+  "screenshot": {
+    "fileName": "01-post-soak-confirmation-and-diagnostics.png",
+    "sha256": "0d103816747741b40df6b9a5c08b0b903ce25efe63f49433c3bc772bd3b0bf46"
+  }
+}

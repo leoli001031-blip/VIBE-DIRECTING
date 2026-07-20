@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "p11_f_initial_drift_reproduction/1.0.0",
+  "observedAt": "2026-07-20T16:40:45.000Z",
+  "status": "failed_before_fix",
+  "sourceCommit": "14d03a5c3c9a6c8ccdcbc86414879fd9e6380976",
+  "fixtureRoot": "/tmp/vibe-director-p11-e-20260720-Y0HuPH",
+  "elapsedMs": 180301,
+  "counts": {
+    "launchCount": 3,
+    "sampleCount": 34,
+    "restartCount": 2,
+    "stateAdvanceCount": 4
+  },
+  "currentTaskStable": true,
+  "projectStateDrift": true,
+  "changedFile": ".vibe-runtime/agent-staged-plan.json",
+  "before": {
+    "loopStatus": "awaiting_confirmation",
+    "userFacingMessage": "需要你先确认这次动作。",
+    "nonConfirmationBlockers": []
+  },
+  "after": {
+    "loopStatus": "blocked",
+    "userFacingMessage": "已有视频任务，先查询结果或复核回流。",
+    "nonConfirmationBlockers": [
+      "video_submit_not_ready",
+      "video_submit_already_sent"
+    ]
+  },
+  "finalStagingFiles": [],
+  "runtimeOrphanPids": [],
+  "unexpectedLogErrors": 0,
+  "providerCalls": 0,
+  "rootCause": "The regeneration confirmation restore raced the persisted generation ledger and refreshed the staged handoff from passive video state."
+}

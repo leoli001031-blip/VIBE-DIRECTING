@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "p11_f_final_interaction_observation/1.0.0",
+  "observedAt": "2026-07-20T19:11:47.197Z",
+  "status": "pass_local_packaged",
+  "sourceCommit": "94fe0834aff46f2d950fc505e877c5416a7add46",
+  "packagedApp": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app",
+  "fixtureRoot": "/tmp/vibe-director-p11-e-20260720-mmu7WM",
+  "reference": {
+    "intent": "开始补参考。只形成确认，不执行生成。",
+    "actionKind": "prepare_reference_generation",
+    "confirmationRestored": true,
+    "confirmationEnabledAfterRestore": true,
+    "mediaCreated": 0
+  },
+  "review": {
+    "visibleClarifyTurns": 0,
+    "proposalCount": 1,
+    "jobsBeforeProposalConfirmation": 1,
+    "jobsAfterProposalConfirmation": 2,
+    "finalJobStatus": "staged",
+    "finalExecutionMode": "dry_run",
+    "coldRestoreCurrentTask": "确认验证视频流程",
+    "coldRestoreTaskSource": "timeline_confirmation",
+    "oldReviewVisibleAfterNavigation": false,
+    "projectFactsChanged": false,
+    "mediaChanged": false,
+    "finalExecutionConfirmed": false,
+    "exportPerformed": false
+  },
+  "providerCalls": 0,
+  "providerFees": 0,
+  "realProviderExecutionVerified": false
+}

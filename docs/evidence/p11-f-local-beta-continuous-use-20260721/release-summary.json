@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "p11_f_local_beta_release_summary/1.0.0",
+  "product": "Vibe Director Studio",
+  "version": "0.0.1",
+  "sourceCommit": "94fe0834aff46f2d950fc505e877c5416a7add46",
+  "buildTime": "2026-07-20T19:11:00.967Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "sourceState": "clean",
+  "signature": "ad_hoc",
+  "notarized": false,
+  "publicDistributionClaimed": false,
+  "artifacts": [
+    {
+      "kind": "dmg",
+      "fileName": "Vibe Director Studio-0.0.1-arm64.dmg",
+      "sizeBytes": 119172764,
+      "sha256": "8b560f6d5aa530ed3102729a396a708c7795832cb23998d67e7ddce89a86ef9b"
+    },
+    {
+      "kind": "zip",
+      "fileName": "Vibe Director Studio-0.0.1-arm64-mac.zip",
+      "sizeBytes": 115208869,
+      "sha256": "a9f02e61b6aee9e7af3fc7c441b0f3914bfbe851b5066db52bc558493437ec2c"
+    }
+  ],
+  "acceptance": {
+    "codesignVerified": true,
+    "dmgVerified": true,
+    "zipExtracted": true,
+    "extractedAppLaunched": true,
+    "exampleProjectOpened": true,
+    "diagnosticExported": true,
+    "providerCalls": 0
+  }
+}

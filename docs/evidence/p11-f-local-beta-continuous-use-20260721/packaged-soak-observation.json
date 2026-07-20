@@ -1,0 +1,861 @@
+{
+  "schemaVersion": "p11_a_packaged_soak/1.0.0",
+  "status": "preflight_pass",
+  "mode": "preflight",
+  "startedAt": "2026-07-20T19:17:07.185Z",
+  "updatedAt": "2026-07-20T19:20:07.429Z",
+  "elapsedMs": 180244,
+  "required": {
+    "minimumDurationMs": 30000,
+    "configuredDurationMs": 180000,
+    "fullSoakMinimumDurationMs": 3600000,
+    "restartCount": 2,
+    "stateAdvanceCount": 4,
+    "sampleIntervalMs": 5000
+  },
+  "fixture": {
+    "root": "/tmp/vibe-director-p11-a-soak-Oo8Zzt",
+    "projectRoot": "/tmp/vibe-director-p11-e-20260720-mmu7WM/review/projects/p11-e-review",
+    "projectId": "p11_e_review_project",
+    "appPath": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app"
+  },
+  "counts": {
+    "launchCount": 3,
+    "sampleCount": 35,
+    "restartCount": 2,
+    "stateAdvanceCount": 4
+  },
+  "rss": {
+    "sampleCount": 45,
+    "firstKb": 201840,
+    "lastKb": 180704,
+    "minKb": 173376,
+    "maxKb": 203392,
+    "deltaKb": -21136
+  },
+  "observations": [
+    {
+      "label": "initial",
+      "observedAt": "2026-07-20T19:17:10.149Z",
+      "elapsedMs": 2964,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 201840,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_1",
+      "observedAt": "2026-07-20T19:17:10.196Z",
+      "elapsedMs": 3011,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 201840,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_2",
+      "observedAt": "2026-07-20T19:17:15.198Z",
+      "elapsedMs": 8013,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 202064,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_3",
+      "observedAt": "2026-07-20T19:17:20.197Z",
+      "elapsedMs": 13012,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 196080,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_4",
+      "observedAt": "2026-07-20T19:17:25.200Z",
+      "elapsedMs": 18015,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 194000,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_5",
+      "observedAt": "2026-07-20T19:17:30.205Z",
+      "elapsedMs": 23020,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 194016,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_6",
+      "observedAt": "2026-07-20T19:17:35.453Z",
+      "elapsedMs": 28268,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 194016,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_7",
+      "observedAt": "2026-07-20T19:17:40.706Z",
+      "elapsedMs": 33521,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 173376,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_1_export",
+      "observedAt": "2026-07-20T19:17:45.262Z",
+      "elapsedMs": 38077,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 173536,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_8",
+      "observedAt": "2026-07-20T19:17:45.704Z",
+      "elapsedMs": 38519,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 173584,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_9",
+      "observedAt": "2026-07-20T19:17:50.707Z",
+      "elapsedMs": 43522,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 173680,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_10",
+      "observedAt": "2026-07-20T19:17:55.703Z",
+      "elapsedMs": 48518,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 173712,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_11",
+      "observedAt": "2026-07-20T19:18:00.709Z",
+      "elapsedMs": 53524,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 173728,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_12",
+      "observedAt": "2026-07-20T19:18:05.709Z",
+      "elapsedMs": 58524,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 173760,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_1_before",
+      "observedAt": "2026-07-20T19:18:07.225Z",
+      "elapsedMs": 60040,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 174064,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_1_after",
+      "observedAt": "2026-07-20T19:18:10.895Z",
+      "elapsedMs": 63710,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 202672,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_13",
+      "observedAt": "2026-07-20T19:18:10.933Z",
+      "elapsedMs": 63748,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 202672,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_14",
+      "observedAt": "2026-07-20T19:18:19.555Z",
+      "elapsedMs": 72370,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 203248,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_2_preview",
+      "observedAt": "2026-07-20T19:18:21.889Z",
+      "elapsedMs": 74704,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 203312,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_15",
+      "observedAt": "2026-07-20T19:18:21.946Z",
+      "elapsedMs": 74761,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 203312,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_16",
+      "observedAt": "2026-07-20T19:18:26.946Z",
+      "elapsedMs": 79761,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 201184,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_17",
+      "observedAt": "2026-07-20T19:18:31.947Z",
+      "elapsedMs": 84762,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 201184,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_18",
+      "observedAt": "2026-07-20T19:18:36.941Z",
+      "elapsedMs": 89756,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 183744,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_19",
+      "observedAt": "2026-07-20T19:18:41.941Z",
+      "elapsedMs": 94756,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180448,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_20",
+      "observedAt": "2026-07-20T19:18:46.943Z",
+      "elapsedMs": 99758,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180512,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_21",
+      "observedAt": "2026-07-20T19:18:51.943Z",
+      "elapsedMs": 104758,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180496,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_3_export",
+      "observedAt": "2026-07-20T19:18:57.272Z",
+      "elapsedMs": 110087,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180736,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_22",
+      "observedAt": "2026-07-20T19:18:57.321Z",
+      "elapsedMs": 110136,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180768,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_23",
+      "observedAt": "2026-07-20T19:19:02.327Z",
+      "elapsedMs": 115142,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180800,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_2_before",
+      "observedAt": "2026-07-20T19:19:07.237Z",
+      "elapsedMs": 120052,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180848,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_2_after",
+      "observedAt": "2026-07-20T19:19:10.944Z",
+      "elapsedMs": 123759,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 203136,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_24",
+      "observedAt": "2026-07-20T19:19:10.983Z",
+      "elapsedMs": 123798,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 203136,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_25",
+      "observedAt": "2026-07-20T19:19:15.986Z",
+      "elapsedMs": 128801,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 203392,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_26",
+      "observedAt": "2026-07-20T19:19:20.987Z",
+      "elapsedMs": 133802,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 203360,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_27",
+      "observedAt": "2026-07-20T19:19:25.989Z",
+      "elapsedMs": 138804,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 203360,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_28",
+      "observedAt": "2026-07-20T19:19:30.988Z",
+      "elapsedMs": 143803,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 201296,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_4_preview",
+      "observedAt": "2026-07-20T19:19:33.308Z",
+      "elapsedMs": 146123,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 201328,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_29",
+      "observedAt": "2026-07-20T19:19:35.989Z",
+      "elapsedMs": 148804,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 183888,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_30",
+      "observedAt": "2026-07-20T19:19:41.007Z",
+      "elapsedMs": 153823,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180544,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_31",
+      "observedAt": "2026-07-20T19:19:45.985Z",
+      "elapsedMs": 158800,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180560,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_32",
+      "observedAt": "2026-07-20T19:19:50.987Z",
+      "elapsedMs": 163802,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180576,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_33",
+      "observedAt": "2026-07-20T19:19:55.986Z",
+      "elapsedMs": 168801,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180672,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_34",
+      "observedAt": "2026-07-20T19:20:00.991Z",
+      "elapsedMs": 173806,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180640,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_35",
+      "observedAt": "2026-07-20T19:20:05.992Z",
+      "elapsedMs": 178807,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180688,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "final",
+      "observedAt": "2026-07-20T19:20:07.226Z",
+      "elapsedMs": 180041,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180704,
+      "task": {
+        "step": "submit_video",
+        "source": "timeline_confirmation",
+        "label": "确认验证视频流程",
+        "identity": "submit_video::timeline_confirmation::确认验证视频流程"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    }
+  ],
+  "restarts": [
+    {
+      "index": 1,
+      "atElapsedMs": 63710,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "submit_video::timeline_confirmation::确认验证视频流程",
+      "taskIdentityAfter": "submit_video::timeline_confirmation::确认验证视频流程",
+      "drift": false
+    },
+    {
+      "index": 2,
+      "atElapsedMs": 123759,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "submit_video::timeline_confirmation::确认验证视频流程",
+      "taskIdentityAfter": "submit_video::timeline_confirmation::确认验证视频流程",
+      "drift": false
+    }
+  ],
+  "stateAdvances": [
+    {
+      "index": 1,
+      "atElapsedMs": 38077,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "submit_video::timeline_confirmation::确认验证视频流程"
+    },
+    {
+      "index": 2,
+      "atElapsedMs": 74704,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "submit_video::timeline_confirmation::确认验证视频流程"
+    },
+    {
+      "index": 3,
+      "atElapsedMs": 110087,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "submit_video::timeline_confirmation::确认验证视频流程"
+    },
+    {
+      "index": 4,
+      "atElapsedMs": 146123,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "submit_video::timeline_confirmation::确认验证视频流程"
+    }
+  ],
+  "providerCalls": 0,
+  "completedAt": "2026-07-20T19:20:07.429Z",
+  "projectStateDrift": false,
+  "finalStagingFiles": [],
+  "runtimeOrphanPids": [],
+  "logs": {
+    "files": [
+      {
+        "path": "packaged-app-57689.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-57890.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-58098.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      }
+    ],
+    "knownWarningCount": 3,
+    "unexpectedErrorCount": 0
+  },
+  "invariants": {
+    "elapsedAtLeastRequiredDuration": true,
+    "forcedRestartsAtLeastRequired": true,
+    "stateAdvancesAtLeastRequired": true,
+    "oneCurrentTaskAtEveryObservation": true,
+    "noProjectStateDrift": true,
+    "noResidualStaging": true,
+    "noRuntimeOrphans": true,
+    "noUnexpectedErrors": true,
+    "providerCalls": 0
+  }
+}
