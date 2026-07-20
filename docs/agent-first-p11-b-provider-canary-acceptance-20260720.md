@@ -4,14 +4,61 @@ Date: 2026-07-20
 
 Status: **TERMINAL FAILURE BEFORE VIDEO PROVIDER EXECUTION**.
 
-P11-A passed at commit `7f7e203`. The user authorized exactly one packaged
+## Reauthorized follow-up
+
+After the original P11-B result was closed, the user explicitly authorized one
+new attempt with the same frozen specification: `P11S01`, `5` seconds, `720p`,
+`seedance2.0_vip`, one submit action, and no automatic retry. This was a new
+authorization, not an automatic retry, and used the fresh isolated root
+`/tmp/vibe-director-p11-b-20260720-r2`.
+
+The fresh prepare pass reached one exact packaged confirmation with a valid
+`single_continuous_shot` execution mode, three locked references, one staged
+live job, zero Provider calls, and no relay queue. The packaged App then clicked
+`确认并提交 1 次` exactly once and wrote its immutable attempt lock.
+
+The confirmed action was blocked locally because the pre-submit Director text
+QA received no compiled `seedancePrompt`. The UI requested a 2-4 sentence
+English prompt, but the Runtime video-submit route and `dreamina
+multimodal2video` command were never reached. No submit report, relay queue, or
+`externalTaskId` was produced.
+
+Exact counts for the reauthorized attempt:
+
+| Counter | Value |
+| --- | ---: |
+| Packaged submit actions | 1 |
+| Seedance video submit calls | 0 |
+| Query attempts | 0 |
+| Seedance video query calls | 0 |
+| Automatic retries | 0 |
+| Extra generated images | 0 |
+| Returned media | 0 |
+
+The video Provider fee boundary was not crossed. Provider-backed text-QA call
+count remains not durably evidenced, so no exact text-model cost is claimed.
+The attempt is terminal under the user's no-retry boundary and cannot be
+queried without an external task identity.
+
+Reauthorized evidence:
+
+- Pre-submit observation:
+  `/tmp/vibe-director-p11-b-20260720-r2/evidence/pre-submit-observation.json`
+- Atomic attempt record:
+  `/tmp/vibe-director-p11-b-20260720-r2/evidence/submit-attempt.json`
+- Packaged result observation:
+  `/tmp/vibe-director-p11-b-20260720-r2/evidence/submit-observation.json`
+- Sanitized repository evidence:
+  `docs/evidence/p11-b-provider-canary-20260720/reauthorized-final-observation.json`
+
+P11-A passed at commit `7f7e203`. In the original attempt, the user authorized exactly one packaged
 submission of `P11S01`, using `5` seconds, `720p`, and
 `seedance2.0_vip`, with no automatic retry. That one-submit authorization was
 consumed by the packaged confirmation action. The action failed during
 pre-submit validation, before the Seedance video command ran.
 
-This result is terminal for P11-B. The fixture must not be prepared again,
-submitted again, switched to another model, or retried automatically.
+That original fixture remains terminal and immutable. It must not be prepared
+again, submitted again, switched to another model, or retried automatically.
 
 ## Frozen request
 

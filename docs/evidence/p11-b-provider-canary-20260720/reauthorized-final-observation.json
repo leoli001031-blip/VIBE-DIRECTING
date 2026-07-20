@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "p11_provider_canary_reauthorized_final_observation/1.0.0",
+  "recordedAt": "2026-07-20T10:09:17.602Z",
+  "status": "failed_before_video_provider_execution",
+  "project": {
+    "projectId": "p11_provider_canary",
+    "isolatedRoot": "/tmp/vibe-director-p11-b-20260720-r2/projects/p11-provider-canary",
+    "shotId": "P11S01",
+    "projectFactHash": "pv_052c4989"
+  },
+  "request": {
+    "durationSeconds": 5,
+    "aspectRatio": "16:9",
+    "videoResolution": "720p",
+    "modelId": "seedance2.0_vip",
+    "referenceCount": 3,
+    "maximumSubmitCount": 1,
+    "automaticRetry": false,
+    "extraImageGeneration": false
+  },
+  "identity": {
+    "jobId": "agent_video_job_review_regeneration_proposal_agent_video_P11S01_a2503723_submit_video_002",
+    "actionId": "agent_action_2026_07_20t10_02_16_204z_prepare_video_submit",
+    "confirmationId": "agent_tool_handoff_2026_07_20t10_02_16_204z_agent_action_2026_07_20t10_02_16_204z_prepare_video_submit",
+    "externalTaskId": null
+  },
+  "counts": {
+    "packagedSubmitActions": 1,
+    "videoProviderSubmitCalls": 0,
+    "queryAttempts": 0,
+    "videoProviderQueryCalls": 0,
+    "automaticRetries": 0,
+    "extraGeneratedImages": 0,
+    "returnedMedia": 0
+  },
+  "ledger": {
+    "status": "staged",
+    "providerCalled": false,
+    "providerId": "jimeng-seedance",
+    "modelId": "seedance2.0_vip"
+  },
+  "failure": {
+    "boundary": "confirmed_action_text_qa_preflight",
+    "code": "missing_compiled_seedance_prompt",
+    "localContributingCauses": [
+      "agent_video_text_qa_input_omitted_seedance_prompt",
+      "runtime_prompt_compilation_happened_after_paid_confirmation",
+      "paid_confirmation_exposed_before_compiled_prompt_qa_passed"
+    ],
+    "runtimeVideoSubmitReached": false,
+    "dreaminaMultimodal2VideoCalled": false,
+    "submitReportCreated": false,
+    "relayQueueCreated": false,
+    "submitLockConsumed": true,
+    "resubmitAllowed": false,
+    "queryPossible": false
+  },
+  "costEvidence": {
+    "videoProviderFeeBoundaryCrossed": false,
+    "textQaProviderCallCount": "not_durably_evidenced"
+  },
+  "baselineMedia": {
+    "status": "preserved_needs_review",
+    "sha256": "bd605aad4071cc00940d54639576d54bed77473dc7e1e253e4c29aafd0cee4fe"
+  },
+  "conclusion": {
+    "singleRealProviderCanary": "FAILED",
+    "realVideoProviderExecution": "NOT VERIFIED"
+  }
+}
