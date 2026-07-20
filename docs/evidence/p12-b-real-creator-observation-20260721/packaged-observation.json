@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "vibe_director_p12_b_packaged_creator_observation_v1",
+  "observedAt": "2026-07-20T21:21:43Z",
+  "appPath": "release/mac-arm64/Vibe Director Studio.app",
+  "mode": "local_packaged_computer_use",
+  "providerCalls": 0,
+  "providerFees": 0,
+  "generationExecuted": false,
+  "projectSaved": false,
+  "projectFactPromoted": false,
+  "deliveryExported": false,
+  "scenarios": [
+    {
+      "id": "explicit_three_shot_revision",
+      "result": "pass_after_p1_fix",
+      "projectRoot": "/tmp/vibe-director-p12b-creative-a-fixed-r2/projects",
+      "runtimeRoot": "/tmp/vibe-director-p12b-creative-a-fixed-r2/runtime",
+      "initialPrompt": "我要拍一个 9 秒短片：凌晨自助洗衣店，女孩把一枚旧纽扣放进玻璃罐，滚筒停下时罐里映出星空。整理成 3 个镜头。先只整理草案，不生成参考，不提交视频。",
+      "revisionPrompt": "第二个镜头不要拍女孩正面，改成玻璃罐和旧纽扣的近景；第三个镜头只保留星空倒影，不要重复第二个镜头。先形成修改确认，不要保存，不生成素材。",
+      "beforeFix": [
+        "Multiple target clauses were merged into one shot revision.",
+        "Generic replacement language could be mislabeled as a scene move.",
+        "Workflow and repetition-control clauses leaked into shot content."
+      ],
+      "afterFix": {
+        "previewLabel": "修改第 2、3 镜",
+        "shot1Preserved": true,
+        "shot2": "玻璃罐和旧纽扣的近景",
+        "shot3": "星空倒影",
+        "singleCurrentTask": "确认这版故事",
+        "oldConfirmationVisible": false
+      },
+      "sideEffectFiles": 0
+    },
+    {
+      "id": "open_ended_minimum_shot_story",
+      "result": "pass_after_p1_fix",
+      "projectRoot": "/tmp/vibe-director-p12b-creative-b-r3/projects",
+      "runtimeRoot": "/tmp/vibe-director-p12b-creative-b-r3/runtime",
+      "prompt": "我想拍一个克制、安静的 8 秒短片：夜班护士在医院天台听到坏掉收音机里传来海浪声，最后她笑了一下。你来决定最少需要几个镜头。先只讨论和整理，不生成任何素材。",
+      "beforeFix": [
+        "The negative material boundary was routed to material workspace review.",
+        "The meta planning instruction became a storyboard shot."
+      ],
+      "afterFix": {
+        "previewRoute": "整理新故事",
+        "shotCount": 2,
+        "shot1": "夜班护士在医院天台听到坏掉收音机里传来海浪声",
+        "shot2": "她笑了一下",
+        "props": [
+          "坏掉的收音机"
+        ],
+        "singleCurrentTask": "确认这版故事"
+      },
+      "sideEffectFiles": 0
+    }
+  ],
+  "residualObservations": [
+    {
+      "severity": "p2",
+      "finding": "The initial deterministic three-shot fallback repeats the ending before creator revision."
+    },
+    {
+      "severity": "p2",
+      "finding": "Character extraction can list both 护士 and 夜班护士 for one role."
+    },
+    {
+      "severity": "boundary",
+      "finding": "This was operator-observed packaged acceptance, not external creator usability research."
+    }
+  ],
+  "gate": {
+    "localPackagedCreatorObservation": "pass",
+    "realProviderExecution": "not_verified",
+    "externalCreatorUsability": "not_yet_observed",
+    "publicDistribution": "not_claimed"
+  }
+}

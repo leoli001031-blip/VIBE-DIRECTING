@@ -127,6 +127,7 @@ const currentDraftScriptForFeedback = findFunctionBody(newVideoStartSource, "cur
 const stripShotCountPlanningInstructions = findFunctionBody(newVideoStartSource, "stripShotCountPlanningInstructions");
 const targetShotRevisionIndex = findFunctionBody(newVideoStartSource, "targetShotRevisionIndex");
 const targetShotRevisionIndexForRows = findFunctionBody(newVideoStartSource, "targetShotRevisionIndexForRows");
+const explicitMultiTargetShotRevisionClauses = findFunctionBody(newVideoStartSource, "explicitMultiTargetShotRevisionClauses");
 const cleanTargetShotRevisionText = findFunctionBody(newVideoStartSource, "cleanTargetShotRevisionText");
 const excludedPropLabelsFromFeedback = findFunctionBody(newVideoStartSource, "excludedPropLabelsFromFeedback");
 const cleanStoryboardFeedbackControlClauses = findFunctionBody(newVideoStartSource, "cleanStoryboardFeedbackControlClauses");
@@ -137,7 +138,10 @@ const normalizeFinalShotIsolationSegments = findFunctionBody(newVideoStartSource
 const isolateFinalShotFeedbackSegments = findFunctionBody(newVideoStartSource, "isolateFinalShotFeedbackSegments");
 const applyExplicitShotCountFeedbackRows = findFunctionBody(newVideoStartSource, "applyExplicitShotCountFeedbackRows");
 const applyTargetedShotRevisionRows = findFunctionBody(newVideoStartSource, "applyTargetedShotRevisionRows");
+const applyMultiTargetedShotRevisionRows = findFunctionBody(newVideoStartSource, "applyMultiTargetedShotRevisionRows");
+const feedbackExplicitlyRequestsSceneRevision = findFunctionBody(newVideoStartSource, "feedbackExplicitlyRequestsSceneRevision");
 const targetedShotRevisionSummary = findFunctionBody(newVideoStartSource, "targetedShotRevisionSummary");
+const multiTargetedShotRevisionSummary = findFunctionBody(newVideoStartSource, "multiTargetedShotRevisionSummary");
 const shotCountRevisionSummary = findFunctionBody(newVideoStartSource, "shotCountRevisionSummary");
 const applyTargetedFeedbackGuardsToAiRows = findFunctionBody(newVideoStartSource, "applyTargetedFeedbackGuardsToAiRows");
 const localStoryboardBeatCandidates = findFunctionBody(newVideoStartSource, "localStoryboardBeatCandidates");
@@ -331,8 +335,9 @@ check(
   failures,
 );
 check(
-  /const requestedFeedbackShotCount = explicitShotCount\(feedbackText\)[\s\S]*const currentFeedbackScript = currentDraftScriptForFeedback\(planningDraft,\s*storyboardRows\)[\s\S]*const selectedFeedbackStoryboardRowId = selectedStoryboardRowId[\s\S]*const targetedFeedbackStoryboardRows = \(!requestedFeedbackShotCount \|\| requestedFeedbackShotCount === storyboardRows\.length\)[\s\S]*applyTargetedShotRevisionRows\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)[\s\S]*const explicitFeedbackStoryboardRows = targetedFeedbackStoryboardRows \? undefined : requestedFeedbackShotCount[\s\S]*applyExplicitShotCountFeedbackRows\(storyboardRows,\s*feedbackText,\s*currentFeedbackScript\)[\s\S]*const feedbackHasLocalStoryboardIntent = Boolean\([\s\S]*explicitFeedbackStoryboardRows[\s\S]*targetedFeedbackStoryboardRows[\s\S]*requestedFeedbackShotCount[\s\S]*enumeratedShotSegments\(feedbackText\)\.length > 1/.test(sendDiscussionFeedback)
+  /const requestedFeedbackShotCount = explicitShotCount\(feedbackText\)[\s\S]*const currentFeedbackScript = currentDraftScriptForFeedback\(planningDraft,\s*storyboardRows\)[\s\S]*const selectedFeedbackStoryboardRowId = selectedStoryboardRowId[\s\S]*const multiTargetedFeedbackStoryboardRows = \(!requestedFeedbackShotCount \|\| requestedFeedbackShotCount === storyboardRows\.length\)[\s\S]*applyMultiTargetedShotRevisionRows\(storyboardRows,\s*feedbackText\)[\s\S]*const targetedFeedbackStoryboardRows = !multiTargetedFeedbackStoryboardRows[\s\S]*applyTargetedShotRevisionRows\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)[\s\S]*const explicitFeedbackStoryboardRows = multiTargetedFeedbackStoryboardRows \|\| targetedFeedbackStoryboardRows \? undefined : requestedFeedbackShotCount[\s\S]*applyExplicitShotCountFeedbackRows\(storyboardRows,\s*feedbackText,\s*currentFeedbackScript\)[\s\S]*const feedbackHasLocalStoryboardIntent = Boolean\([\s\S]*explicitFeedbackStoryboardRows[\s\S]*multiTargetedFeedbackStoryboardRows[\s\S]*targetedFeedbackStoryboardRows[\s\S]*requestedFeedbackShotCount[\s\S]*enumeratedShotSegments\(feedbackText\)\.length > 1/.test(sendDiscussionFeedback)
     && /const feedbackLocalStoryboardRows = feedbackHasLocalStoryboardIntent[\s\S]*buildStoryboardRowsFromSession\(feedbackSession, feedbackPlanningDraft, feedbackStylePreflight\)/.test(sendDiscussionFeedback)
+    && /if \(multiTargetedFeedbackStoryboardRows\) return multiTargetedFeedbackStoryboardRows/.test(sendDiscussionFeedback)
     && /if \(targetedFeedbackStoryboardRows\) return targetedFeedbackStoryboardRows/.test(sendDiscussionFeedback)
     && /if \(explicitFeedbackStoryboardRows\) return explicitFeedbackStoryboardRows/.test(sendDiscussionFeedback)
     && /const rowsForFeedbackPlanning = feedbackLocalStoryboardRows\.length \? feedbackLocalStoryboardRows : storyboardRows/.test(sendDiscussionFeedback)
@@ -342,7 +347,7 @@ check(
     && /targetDurationSeconds:[\s\S]*rowsForFeedbackPlanning\.reduce/.test(sendDiscussionFeedback)
     && /buildStoryboardRowsFromAiPlan\(aiPlan,\s*rowsForFeedbackPlanning\)/.test(sendDiscussionFeedback)
     && /shotCount:\s*rowsForFeedbackPlanning\.length/.test(sendDiscussionFeedback),
-  "Draft feedback must first update local rows, with single target-shot revisions taking priority when the requested count only preserves current rows, then let AI optimize from that structure.",
+  "Draft feedback must first update local rows, with explicit multi-shot revisions taking priority over single-shot and shot-count fallbacks, then let AI optimize from that structure.",
   failures,
 );
 check(
@@ -503,9 +508,11 @@ check(
     && /propsFromShotText\(revisionText,\s*fallbackProps\)/.test(applyTargetedShotRevisionRows)
     && /props:\s*propLabels\.join\("、"\) \|\| "无"/.test(applyTargetedShotRevisionRows)
     && /primaryAction/.test(applyTargetedShotRevisionRows)
-    && /const targetedFeedbackStoryboardRows = \(!requestedFeedbackShotCount \|\| requestedFeedbackShotCount === storyboardRows\.length\)[\s\S]*applyTargetedShotRevisionRows\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)/.test(sendDiscussionFeedback)
-    && /const explicitFeedbackStoryboardRows = targetedFeedbackStoryboardRows \? undefined : requestedFeedbackShotCount/.test(sendDiscussionFeedback)
-    && /targetedFeedbackStoryboardRows[\s\S]*explicitFeedbackStoryboardRows[\s\S]*\|\| requestedFeedbackShotCount/.test(sendDiscussionFeedback)
+    && /const multiTargetedFeedbackStoryboardRows = \(!requestedFeedbackShotCount \|\| requestedFeedbackShotCount === storyboardRows\.length\)[\s\S]*applyMultiTargetedShotRevisionRows\(storyboardRows,\s*feedbackText\)/.test(sendDiscussionFeedback)
+    && /const targetedFeedbackStoryboardRows = !multiTargetedFeedbackStoryboardRows[\s\S]*applyTargetedShotRevisionRows\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)/.test(sendDiscussionFeedback)
+    && /const explicitFeedbackStoryboardRows = multiTargetedFeedbackStoryboardRows \|\| targetedFeedbackStoryboardRows \? undefined : requestedFeedbackShotCount/.test(sendDiscussionFeedback)
+    && /multiTargetedFeedbackStoryboardRows[\s\S]*targetedFeedbackStoryboardRows[\s\S]*explicitFeedbackStoryboardRows[\s\S]*\|\| requestedFeedbackShotCount/.test(sendDiscussionFeedback)
+    && /if \(multiTargetedFeedbackStoryboardRows\) return multiTargetedFeedbackStoryboardRows/.test(sendDiscussionFeedback)
     && /if \(targetedFeedbackStoryboardRows\) return targetedFeedbackStoryboardRows/.test(sendDiscussionFeedback),
   "Targeted feedback such as '把第二个镜头改成海浪', '结尾那镜不要月亮', or selected-shot '这个镜头只改场景不要改动作' must patch only the relevant row, keep order, and honor content exclusions instead of becoming a full reflow.",
   failures,
@@ -524,18 +531,32 @@ check(
   /function targetedShotRevisionSummary\(rows: NewVideoStoryboardShot\[\], feedbackText: string,\s*selectedRowId\?: string\)/.test(newVideoStartSource)
     && /targetShotRevisionIndexForRows\(feedbackText,\s*rows,\s*selectedRowId\)/.test(targetedShotRevisionSummary)
     && /cleanTargetShotRevisionText\(feedbackText\)/.test(targetedShotRevisionSummary)
-    && /const scene = removalRequest \? "" : sceneFromShotText\(revisionText,\s*sceneLabels,\s*targetIndex\)/.test(targetedShotRevisionSummary)
+    && /const scene = removalRequest \|\| !feedbackExplicitlyRequestsSceneRevision\(feedbackText,\s*revisionText\)[\s\S]*sceneFromShotText\(revisionText,\s*sceneLabels,\s*targetIndex\)/.test(targetedShotRevisionSummary)
     && /targetLabel = `第 \$\{targetIndex \+ 1\} 镜`/.test(targetedShotRevisionSummary)
     && /changeLabel = scene[\s\S]*场景改到\$\{scene\}/.test(targetedShotRevisionSummary)
     && /feedbackRequestsPreserveShotAction\(feedbackText\)/.test(targetedShotRevisionSummary)
     && /保留原动作/.test(targetedShotRevisionSummary)
     && /removalChangeLabel[\s\S]*去掉\$\{excludedProps\.join\("、"\)\}/.test(targetedShotRevisionSummary)
     && /doneLabel: `已修改\$\{targetLabel\}：\$\{changeLabel\}`/.test(targetedShotRevisionSummary)
-    && /const targetedFeedbackSummary = targetedFeedbackStoryboardRows[\s\S]*targetedShotRevisionSummary\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)/.test(sendDiscussionFeedback)
+    && /const targetedFeedbackSummary = multiTargetedFeedbackStoryboardRows[\s\S]*multiTargetedShotRevisionSummary\(storyboardRows,\s*feedbackText\)[\s\S]*targetedFeedbackStoryboardRows[\s\S]*targetedShotRevisionSummary\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)/.test(sendDiscussionFeedback)
     && /understandingBody:\s*targetedFeedbackSummary\?\.intentBody/.test(sendDiscussionFeedback)
     && /assistantBody:\s*targetedFeedbackSummary[\s\S]*targetedFeedbackSummary\.doneLabel/.test(sendDiscussionFeedback)
     && /localFeedbackReadyMessage = feedbackLocalStoryboardRows\.length[\s\S]*targetedFeedbackSummary[\s\S]*targetedFeedbackSummary\.doneLabel/.test(sendDiscussionFeedback),
   "Target-shot feedback such as '第 2 镜换到地铁口' must produce specific post-send Agent copy instead of saying it reflowed the whole draft.",
+  failures,
+);
+check(
+  /matchAll\(markerPattern\)/.test(explicitMultiTargetShotRevisionClauses)
+    && /start === 0 \|\| [^\n]*\.test\(cleaned\[start - 1\]/.test(explicitMultiTargetShotRevisionClauses)
+    && /new Set\(markers\.map\(\(marker\) => marker\.targetIndex\)\)\.size < 2/.test(explicitMultiTargetShotRevisionClauses)
+    && /applyTargetedShotRevisionRows\(nextRows,\s*clause\.text\)/.test(applyMultiTargetedShotRevisionRows)
+    && /feedbackExplicitlyRequestsSceneRevision/.test(targetedShotRevisionSummary)
+    && /场景\|地点\|环境/.test(feedbackExplicitlyRequestsSceneRevision)
+    && /summaries\.map\(\(summary\) => `\$\{summary\.targetLabel\}：\$\{summary\.changeLabel\}`\)/.test(multiTargetedShotRevisionSummary)
+    && /不会把后一个镜头的要求写进前一个镜头/.test(multiTargetedShotRevisionSummary)
+    && /workflowControlClausePattern/.test(cleanTargetShotRevisionText)
+    && /repetitionControlPattern/.test(cleanTargetShotRevisionText),
+  "Explicit multi-shot feedback must isolate each target clause, suppress workflow/repetition controls, and report every changed shot without inventing a scene move.",
   failures,
 );
 check(
@@ -1020,6 +1041,9 @@ check(
     && /耳机/.test(propsFromShotText)
     && /广告牌/.test(propsFromShotText)
     && /旧手机/.test(propsFromShotText)
+    && /玻璃罐/.test(propsFromShotText)
+    && /旧纽扣\|纽扣/.test(propsFromShotText)
+    && /坏掉\(\?:的\)\?收音机\|收音机/.test(propsFromShotText)
     && /红雨伞/.test(propsFromShotText)
     && /便利店招牌/.test(propsFromShotText)
     && /preferSpecificPropLabels/.test(newVideoStartSource)

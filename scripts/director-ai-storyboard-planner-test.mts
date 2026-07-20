@@ -135,6 +135,13 @@ assert(!naturalPlanOnlyBrief.storyText.includes("不生成参考"), "natural no-
 assert(!naturalPlanOnlyBrief.storyText.includes("不提交视频"), "natural no-video controls must not become storyboard story text");
 assert(naturalPlanOnlyBrief.directiveText.includes("先整理故事和镜头"), "natural plan-only wording should be preserved as planning preference text");
 
+const delegatedMinimumShotBrief = splitCreativePlanningText("我想拍一个克制、安静的 8 秒短片：夜班护士在医院天台听到坏掉收音机里传来海浪声，最后她笑了一下。你来决定最少需要几个镜头。先只讨论和整理，不生成任何素材。");
+assert(delegatedMinimumShotBrief.storyText.includes("夜班护士在医院天台"), "delegated shot-count wording must keep the actual story setting");
+assert(delegatedMinimumShotBrief.storyText.includes("最后她笑了一下"), "delegated shot-count wording must keep the ending beat");
+assert(!delegatedMinimumShotBrief.storyText.includes("你来决定最少需要几个镜头"), "delegated shot-count control must not become a storyboard beat");
+assert(!delegatedMinimumShotBrief.storyText.includes("不生成任何素材"), "no-material-generation control must not become story content");
+assert(delegatedMinimumShotBrief.directiveText.includes("你来决定最少需要几个镜头"), "delegated shot-count control should remain available as planning preference text");
+
 const requestedShotCountBrief = splitCreativePlanningText("做一个 12 秒 90 年代日漫感小短片：雨夜天桥下，戴耳机的女高中生追着一张发光车票跑向最后一班电车。拆成 3 个镜头，先只整理故事和镜头，不生成参考，不提交视频。");
 assert(requestedShotCountBrief.storyText.includes("雨夜天桥下"), "requested shot count wording should keep the real story setting");
 assert(requestedShotCountBrief.storyText.includes("女高中生追着一张发光车票"), "requested shot count wording should keep the real story action");

@@ -8,7 +8,7 @@ export function directorIntentStartsFreshVideoDraft(value: string) {
   const currentObjectFeedback = /^(这个|这段|这一段|当前|选中|刚才|这里|它)\b|^(把|给)?(这个|这段|这一段|当前|选中|刚才|这里|它)|(?:镜头|shot)\s*\d+/iu.test(text);
   const hardFreshSignal = /(新建|新项目|新视频|新短片|另起|换个主题|换一个项目|全新|重新开始)/u.test(text);
   if (hardFreshSignal) return true;
-  if (isMaterialWorkspaceReviewIntent(text)) return false;
+  if (directorIntentIsMaterialWorkspaceReview(text)) return false;
   if (currentObjectFeedback) return false;
   if (hasPositiveExistingProjectActionSignal(text)) return false;
 
@@ -23,7 +23,7 @@ export function directorIntentCanStartNewVideoPlanningWithoutProject(value: stri
   if (!text) return false;
   if (isDirectorAgentExplainOnlyIntent(text)) return false;
   if (hasPositiveExistingProjectActionSignal(text)) return false;
-  if (isMaterialWorkspaceReviewIntent(text)) return false;
+  if (directorIntentIsMaterialWorkspaceReview(text)) return false;
   const compactText = text.replace(/\s+/g, "");
   const explicitlyPlanningOnly = /只(整理|规划|拆|写|看)|先(整理|规划|拆|写|看)|不(生成|发送|提交|导出)|不要(生成|发送|提交|导出)|别(生成|发送|提交|导出)/u.test(text);
   const asksForCostlyOrProjectAction = /(生成参考|补齐参考|生图|生成图片|提交视频|发送视频|生视频|导出|继续|下一步|执行|确认)/u.test(text);
@@ -32,8 +32,12 @@ export function directorIntentCanStartNewVideoPlanningWithoutProject(value: stri
     || (compactText.length >= 12 && !/[?？]$/.test(compactText));
 }
 
-function isMaterialWorkspaceReviewIntent(text: string) {
-  return /(?:素材|文件|参考素材|项目材料|拖入文件).{0,16}(?:整理|分类|归类|绑定|匹配|建议|识别)|(?:整理|分类|归类|绑定|匹配|识别).{0,16}(?:素材|文件|参考素材|项目材料|拖入文件)|绑定建议/u.test(text);
+export function directorIntentIsMaterialWorkspaceReview(text: string) {
+  const positiveMaterialText = text.replace(
+    /(?:先)?(?:不要|别|不|无需)(?:再|自动)?(?:生成|制作|创建|产出|整理|分类|归类|绑定|匹配|识别)?(?:任何|额外|新的)?(?:参考素材|项目材料|拖入文件|素材|文件)/gu,
+    "",
+  );
+  return /(?:素材|文件|参考素材|项目材料|拖入文件).{0,16}(?:整理|分类|归类|绑定|匹配|建议|识别)|(?:整理|分类|归类|绑定|匹配|识别).{0,16}(?:素材|文件|参考素材|项目材料|拖入文件)|绑定建议/u.test(positiveMaterialText);
 }
 
 function hasPositiveExistingProjectActionSignal(text: string) {

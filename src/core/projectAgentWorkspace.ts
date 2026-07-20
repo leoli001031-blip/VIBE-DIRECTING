@@ -9,7 +9,10 @@ import {
   isDirectorAgentExplainOnlyIntent,
   isDirectorAgentReferenceConfirmationBoundaryIntent,
 } from "./directorAgentPermissionIntent";
-import { directorIntentStartsFreshVideoDraft } from "./directorFreshDraftIntent";
+import {
+  directorIntentIsMaterialWorkspaceReview,
+  directorIntentStartsFreshVideoDraft,
+} from "./directorFreshDraftIntent";
 
 export type ProjectInboxKind =
   | "script"
@@ -975,7 +978,7 @@ export function routeProjectAgentIntent(input: {
   if (referencePreparationRequested) {
     return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "确认生成范围", "生成后进入复核"] };
   }
-  if (/(?:素材|文件|参考素材|项目材料|拖入文件).{0,16}(?:整理|分类|归类|绑定|匹配|建议|识别)|(?:整理|分类|归类|绑定|匹配|识别).{0,16}(?:素材|文件|参考素材|项目材料|拖入文件)|绑定建议/.test(text)) {
+  if (directorIntentIsMaterialWorkspaceReview(text)) {
     return { kind: "reference", label: "整理素材", target: "assets", confirmation: "asset_review", plan: ["读取当前素材", "给出角色、场景、道具或声音绑定建议", "等你确认后再写入项目"] };
   }
   if (!text && input.hasAttachments) {

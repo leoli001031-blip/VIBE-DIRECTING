@@ -23,6 +23,7 @@ const freshIdeas = [
   "从零开始一个新视频：地铁末班车里，保洁员捡到一张会变化日期的旧车票。",
   "来一支群像 OP，五个角色在雨夜电车站依次亮相，只规划。",
   "重新做一个汽车山路追逐短片，先整理。",
+  "我想拍一个克制、安静的 8 秒短片：夜班护士在医院天台听到坏掉收音机里传来海浪声，最后她笑了一下。你来决定最少需要几个镜头。先只讨论和整理，不生成任何素材。",
 ];
 const emptyProjectStorySeeds = [
   "夜班电梯里，一个保安收到来自明天的楼层提示。",
@@ -103,6 +104,16 @@ const routedFresh = routeProjectAgentIntent({
 });
 assert(routedFresh.kind === "story", "fresh video idea should route to story planning even when a shot is selected");
 assert(routedFresh.label === "整理新故事", "fresh video idea should be labeled as a new-story draft");
+
+const openEndedNoMaterialGenerationIdea = freshIdeas[freshIdeas.length - 1]!;
+const routedOpenEndedNoMaterialGeneration = routeProjectAgentIntent({
+  text: openEndedNoMaterialGenerationIdea,
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(routedOpenEndedNoMaterialGeneration.kind === "story", "a fresh story with '不生成任何素材' must stay in story planning instead of material review");
+assert(routedOpenEndedNoMaterialGeneration.label === "整理新故事", "a no-material-generation boundary must not replace the new-story label with 整理素材");
 
 const routedFeedback = routeProjectAgentIntent({
   text: currentObjectFeedback[0],

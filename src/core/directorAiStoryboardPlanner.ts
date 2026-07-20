@@ -148,7 +148,7 @@ function isDirectiveOnlyLine(line: string): boolean {
 function isOperationDirectiveClause(clause: string): boolean {
   const text = clean(clause);
   return isDirectorAgentPermissionControlOnlyIntent(text)
-    || /先查|查一下|先做规划|先做计划|先做分镜|先看规划|先(?:整理|拆|规划)(?:故事|镜头|分镜|脚本|节奏|规划|计划)|风格|画风|分镜|镜头|参考|资料|质感|节奏|不要|不用|先不要|先不|先只|只整理|只规划|只做计划|只做规划|只看规划|只拆分镜|不生图|不生成图片|不提交视频|不生视频|不跑视频|不走生图|跑到视频前|日漫|动漫|动画|电影|写实|悬疑|喜剧|赛博|anime|style|storyboard|cinematic/i.test(text);
+    || /先查|查一下|先做规划|先做计划|先做分镜|先看规划|先(?:整理|拆|规划)(?:故事|镜头|分镜|脚本|节奏|规划|计划)|(?:你来|由你|请你)决定.{0,16}(?:镜头|分镜)|风格|画风|分镜|镜头|参考|资料|质感|节奏|不要|不用|先不要|先不|先只|只整理|只规划|只做计划|只做规划|只看规划|只拆分镜|不生图|不生成图片|不生成(?:任何|额外|新的)?素材|不提交视频|不生视频|不跑视频|不走生图|跑到视频前|日漫|动漫|动画|电影|写实|悬疑|喜剧|赛博|anime|style|storyboard|cinematic/i.test(text);
 }
 
 function storyBeatInsideDirectiveClause(clause: string): string {
@@ -194,7 +194,7 @@ export function splitCreativePlanningText(value: unknown, maxLength = 24000): { 
         directives.push("执行边界：按用户要求限制生成/提交。");
       }
       const withoutInlineDirectives = prefixed.line.replace(
-        /(^|[，,；;。.!?！？\s])(((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|先整理|先拆|先规划|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)|(?:(?:拆成|分成|分为|切成|规划成|做成|整理成|整理为|重排成|重排为)\s*(?:[0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)))[^。.!?！？\n]*)/gu,
+        /(^|[，,；;。.!?！？\s])(((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|先整理|先拆|先规划|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)|(?:你来|由你|请你)决定|(?:(?:拆成|分成|分为|切成|规划成|做成|整理成|整理为|重排成|重排为)\s*(?:[0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)))[^。.!?！？\n]*)/gu,
         (match, separator: string, clause: string) => {
           if (!isOperationDirectiveClause(clause)) return match;
           directives.push(clean(clause));
