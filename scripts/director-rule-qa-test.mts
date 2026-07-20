@@ -222,6 +222,41 @@ assert(fractionalDurationReport.status === "blocked", "fractional or too-short v
 assert(codes(fractionalDurationReport).has("fractional_video_duration"), "should catch fractional duration seconds");
 assert(codes(fractionalDurationReport).has("short_single_video_unit"), "should catch sub-4s video units");
 
+const executionModeReport = runDirectorRuleQa({
+  shots: [{
+    id: "EM01",
+    title: "无效执行模式",
+    durationSeconds: 5,
+    referenceStrategy: "omni_reference",
+    executionMode: "action_closeup",
+    visibleClips: 1,
+    sceneGuidance: ["雨后屋顶"],
+  }],
+});
+assert(executionModeReport.status === "blocked", "unknown executionMode should block before paid confirmation");
+assert(codes(executionModeReport).has("invalid_execution_mode"), "should catch non-canonical executionMode values");
+
+for (const executionMode of [
+  "single_continuous_shot",
+  "relationship_wide",
+  "action_insert",
+  "reaction_closeup",
+  "planned_cut_sequence",
+]) {
+  const report = runDirectorRuleQa({
+    shots: [{
+      id: `VALID_${executionMode}`,
+      title: "合法执行模式",
+      durationSeconds: 5,
+      referenceStrategy: "omni_reference",
+      executionMode,
+      visibleClips: 1,
+      sceneGuidance: ["雨后屋顶"],
+    }],
+  });
+  assert(!codes(report).has("invalid_execution_mode"), `${executionMode} should remain a valid executionMode`);
+}
+
 const promptLeakReport = runDirectorRuleQa({
   shots: [
     {

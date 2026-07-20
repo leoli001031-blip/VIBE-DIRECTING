@@ -354,6 +354,7 @@ async function runAgentVideoTextQaPreflight(input: {
   userIntent: string;
   ruleQaReport?: DirectorRuleQaReport;
 }): Promise<DirectorTextQaReport | undefined> {
+  if (input.ruleQaReport?.status === "blocked") return undefined;
   const qaInput = buildDirectorAgentVideoTextQaInput(input);
   if (!qaInput) return undefined;
   try {

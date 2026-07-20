@@ -18,6 +18,7 @@ import {
 import type { AssetRecord, ShotRecord } from "../../core/types";
 import type { VibeAgentKernelTurn, VibeAgentTimelineEntry } from "../../agent-core/types";
 import type { AgentVideoExecutionReceipt } from "../../core/agentVideoExecutionAdapter";
+import type { JimengCliModelVersion, JimengCliVideoResolution } from "../../core/jimengVideoCli";
 import { formatShotNumber } from "./MinimalStoryFlow";
 
 export type AgentPlanPhase = "idle" | "review" | "confirmed";
@@ -46,6 +47,8 @@ export type AgentControlledToolInvocationTarget = {
   videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
   exportExecutionReceipt?: AgentVideoExecutionReceipt;
+  modelVersion?: JimengCliModelVersion;
+  videoResolution?: JimengCliVideoResolution;
 };
 
 export const defaultAgentVideoSubmitContract: AgentVideoSubmitContract = {

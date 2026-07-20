@@ -1,5 +1,6 @@
 import type { VibeAgentTimelineEntry } from "../../agent-core/types";
 import type { AgentVideoGenerationJob } from "../../core/agentVideoProductionContract";
+import type { JimengExplicitSubmitProfile } from "../../core/jimengVideoCli";
 import {
   AGENT_DIRECTOR_REVIEW_IDENTITY_SCHEMA_VERSION,
   agentDirectorReviewIdentityFromUnknown,
@@ -51,7 +52,8 @@ export interface AgentDirectorReviewRegenerationConfirmation {
   actionId: string;
   confirmationId: string;
   jobId: string;
-  executionMode: "dry_run";
+  executionMode: "dry_run" | "live";
+  submitProfile?: JimengExplicitSubmitProfile;
   promptPolicy: "compiled_from_confirmed_proposal";
   compiledPromptHash: string;
   originalResultPreserved: true;
@@ -307,6 +309,7 @@ export function buildAgentDirectorReviewRegenerationConfirmationTimelineEntries(
   job: AgentVideoGenerationJob;
   confirmationId: string;
   compiledPrompt: string;
+  submitProfile?: JimengExplicitSubmitProfile;
   createdAt?: string;
 }): { ok: boolean; entries: VibeAgentTimelineEntry[]; confirmation?: AgentDirectorReviewRegenerationConfirmation; blockers: string[] } {
   const createdAt = input.createdAt || new Date().toISOString();
@@ -317,7 +320,14 @@ export function buildAgentDirectorReviewRegenerationConfirmationTimelineEntries(
     confirmationId ? "" : "review_regeneration_confirmation_id_required",
     compiledPrompt && compiledPrompt !== input.proposal.resolvedIntent ? "" : "review_regeneration_compiled_prompt_required",
     job.status === "staged" ? "" : "review_regeneration_job_must_be_staged",
-    job.executionMode === "dry_run" ? "" : "review_regeneration_job_must_be_dry_run",
+    job.executionMode === "dry_run" || job.executionMode === "live" ? "" : "review_regeneration_job_execution_mode_invalid",
+    job.executionMode === "live" && !input.submitProfile ? "review_regeneration_live_submit_profile_required" : "",
+    input.submitProfile
+      && (input.submitProfile.modelVersion !== "seedance2.0_vip" || input.submitProfile.videoResolution !== "720p")
+      ? "review_regeneration_live_submit_profile_unsupported"
+      : "",
+    job.executionMode === "live" && input.submitProfile?.modelVersion !== job.modelId ? "review_regeneration_live_model_mismatch" : "",
+    job.executionMode === "dry_run" && input.submitProfile ? "review_regeneration_dry_run_submit_profile_forbidden" : "",
     job.kind === "video_submit" && job.pipelineStep === "submit_video" ? "" : "review_regeneration_job_kind_invalid",
     job.actionId && job.actionId !== input.proposal.sourceIdentity.actionId ? "" : "review_regeneration_new_action_id_required",
     job.jobId && job.jobId !== input.proposal.sourceIdentity.jobId ? "" : "review_regeneration_new_job_id_required",
@@ -343,7 +353,8 @@ export function buildAgentDirectorReviewRegenerationConfirmationTimelineEntries(
     actionId: job.actionId,
     confirmationId,
     jobId: job.jobId,
-    executionMode: "dry_run",
+    executionMode: job.executionMode,
+    ...(input.submitProfile ? { submitProfile: input.submitProfile } : {}),
     promptPolicy: "compiled_from_confirmed_proposal",
     compiledPromptHash: `fnv1a:${stableId(compiledPrompt)}`,
     originalResultPreserved: true,
@@ -363,6 +374,7 @@ export function buildAgentDirectorReviewRegenerationConfirmationTimelineEntries(
     compiledPromptHash: confirmation.compiledPromptHash,
     originalResultPreserved: confirmation.originalResultPreserved,
     providerCalled: confirmation.providerCalled,
+    submitProfile: confirmation.submitProfile,
     projectId: job.projectId,
     projectRoot: job.projectRoot,
     projectFactHash: job.projectFactHash,
@@ -391,7 +403,9 @@ export function buildAgentDirectorReviewRegenerationConfirmationTimelineEntries(
         type: "confirmation_request",
         createdAt,
         title: `确认重新生成 ${input.proposal.targetLabel}`,
-        body: "提案已确认。下一步只验证这个新生成任务的确认边界，不调用付费生成服务。",
+        body: confirmation.executionMode === "live"
+          ? `提案已确认。下一步将提交 1 次 ${confirmation.submitProfile!.modelVersion} ${confirmation.submitProfile!.videoResolution} 外部视频任务。`
+          : "提案已确认。下一步只验证这个新生成任务的确认边界，不调用付费生成服务。",
         toolName: "submit_video",
         actionKind: "prepare_video_submit",
         actionId: job.actionId,
@@ -401,13 +415,19 @@ export function buildAgentDirectorReviewRegenerationConfirmationTimelineEntries(
         facts: [
           { label: "目标", value: input.proposal.targetLabel },
           { label: "任务", value: job.jobId },
-          { label: "方式", value: "本地合同验证" },
+          { label: "方式", value: confirmation.executionMode === "live" ? "外部付费任务" : "本地合同验证" },
+          ...(confirmation.submitProfile ? [
+            { label: "模型", value: confirmation.submitProfile.modelVersion },
+            { label: "清晰度", value: confirmation.submitProfile.videoResolution },
+          ] : []),
           { label: "旧结果", value: "保留" },
         ],
         details: {
           ...commonDetails,
           directorTurnKind: confirmationDetailKind,
-          next: "确认后仍只做本地合同验证；不会调用付费生成服务、自动重试、晋级或导出。",
+          next: confirmation.executionMode === "live"
+            ? "确认后只提交这 1 次；不会自动重试、批准、晋级或导出。"
+            : "确认后仍只做本地合同验证；不会调用付费生成服务、自动重试、晋级或导出。",
         },
       },
     ],
@@ -424,6 +444,16 @@ function confirmationFromEntry(entry: VibeAgentTimelineEntry): AgentDirectorRevi
   const confirmationId = text(details.confirmationId);
   const jobId = text(details.jobId);
   const compiledPromptHash = text(details.compiledPromptHash);
+  const submitProfileRecord = record(details.submitProfile);
+  const submitProfile = submitProfileRecord
+    && submitProfileRecord.modelVersion === "seedance2.0_vip"
+    && submitProfileRecord.videoResolution === "720p"
+    ? {
+        modelVersion: "seedance2.0_vip" as const,
+        videoResolution: "720p" as const,
+      }
+    : undefined;
+  const executionMode = details.executionMode === "live" ? "live" : details.executionMode === "dry_run" ? "dry_run" : undefined;
   if (
     !sourceIdentity
     || validateAgentDirectorReviewIdentity(sourceIdentity).length
@@ -435,7 +465,9 @@ function confirmationFromEntry(entry: VibeAgentTimelineEntry): AgentDirectorRevi
     || confirmationId !== entry.id
     || actionId !== entry.actionId
     || details.schemaVersion !== AGENT_DIRECTOR_REVIEW_REGENERATION_SCHEMA_VERSION
-    || details.executionMode !== "dry_run"
+    || !executionMode
+    || (executionMode === "live" && !submitProfile)
+    || (executionMode === "dry_run" && Boolean(details.submitProfile))
     || details.promptPolicy !== "compiled_from_confirmed_proposal"
     || !compiledPromptHash.startsWith("fnv1a:")
     || details.originalResultPreserved !== true
@@ -449,7 +481,8 @@ function confirmationFromEntry(entry: VibeAgentTimelineEntry): AgentDirectorRevi
     actionId,
     confirmationId,
     jobId,
-    executionMode: "dry_run",
+    executionMode,
+    ...(submitProfile ? { submitProfile } : {}),
     promptPolicy: "compiled_from_confirmed_proposal",
     compiledPromptHash,
     originalResultPreserved: true,
@@ -479,7 +512,7 @@ export function agentDirectorReviewRegenerationConfirmationMatchesJob(
     confirmationId?: string;
     job?: Pick<
       AgentVideoGenerationJob,
-      "jobId" | "actionId" | "sourceConfirmationId" | "executionMode" | "providerCalled"
+      "jobId" | "actionId" | "sourceConfirmationId" | "executionMode" | "providerCalled" | "modelId"
     >;
   },
 ) {
@@ -492,7 +525,8 @@ export function agentDirectorReviewRegenerationConfirmationMatchesJob(
       && job.jobId === confirmation.jobId
       && job.actionId === confirmation.actionId
       && job.sourceConfirmationId === confirmation.confirmationId
-      && job.executionMode === "dry_run"
+      && job.executionMode === confirmation.executionMode
+      && (confirmation.executionMode !== "live" || job.modelId === confirmation.submitProfile?.modelVersion)
       && job.providerCalled === false,
   );
 }

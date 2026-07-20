@@ -2,6 +2,7 @@ import {
   buildDefaultProviderRegistry,
   selectCapabilityForRequirement,
 } from "./providerCapabilities";
+import type { JimengCliModelVersion, JimengCliVideoResolution } from "./jimengVideoCli";
 import type {
   ProviderCapability,
   ProviderCapabilityRequirement,
@@ -382,6 +383,37 @@ export function buildDefaultAgentVideoProviderCapabilityRegistry(generatedAt?: s
       "All entries are dry-run/local contract declarations; no external provider route is opened here.",
       "Planned capabilities are visible for product planning but block execution unless a caller explicitly allows planned states.",
     ],
+  };
+}
+
+export function buildLiveSeedanceAgentVideoProviderCapabilityRegistry(input: {
+  modelVersion: JimengCliModelVersion;
+  videoResolution: JimengCliVideoResolution;
+  generatedAt?: string;
+}): AgentVideoProviderCapabilityRegistry {
+  return {
+    schemaVersion: AGENT_VIDEO_PROVIDER_REGISTRY_SCHEMA_VERSION,
+    registryVersion: "agent-video-provider-registry/seedance-live-0.1.0",
+    generatedAt: input.generatedAt,
+    capabilities: [{
+      capabilityId: `jimeng-seedance:${input.modelVersion}:image-to-video`,
+      providerId: "jimeng-seedance",
+      providerName: "Jimeng Seedance",
+      modelId: input.modelVersion,
+      capability: "image-to-video",
+      state: "active",
+      dryRunOnly: false,
+      liveSubmitAllowed: true,
+      requiresReferences: true,
+      requiresLocalProject: true,
+      asyncMode: "async",
+      maxDurationSeconds: 8,
+      supportedResolutions: [input.videoResolution],
+      inputAssetTypes: ["text", "reference_image", "start_frame"],
+      outputAssetTypes: ["video"],
+      notes: ["Explicit paid Seedance capability; callers must still provide an exact confirmation receipt."],
+    }],
+    notes: ["This registry is created only for an explicitly requested Seedance submit profile."],
   };
 }
 
@@ -812,8 +844,10 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
         .reverse()
         .find((job) => (
           job.kind === "video_submit"
+          && job.operation === "execute"
           && job.status === "running"
           && Boolean(job.externalTaskId)
+          && job.executionMode === (input.executionMode || "dry_run")
           && jobMatchesLedgerBinding(job, input.ledger)
         ))
     : undefined;
@@ -824,20 +858,22 @@ export function planAgentVideoProductionAction(input: PlanAgentVideoProductionAc
       blockers: ["A video query requires a recoverable submitted task id from the current project facts."],
     };
   }
-  const capabilityResolution = resolveAgentVideoProviderCapability({
-    capability: capabilityForJobKind(jobKind),
-    registry: input.registry,
-    executionMode: input.executionMode,
-  });
-  if (capabilityResolution.status === "blocked" || !capabilityResolution.capability) {
+  const capabilityResolution = querySourceJob
+    ? undefined
+    : resolveAgentVideoProviderCapability({
+        capability: capabilityForJobKind(jobKind),
+        registry: input.registry,
+        executionMode: input.executionMode,
+      });
+  if (!querySourceJob && (capabilityResolution?.status === "blocked" || !capabilityResolution?.capability)) {
     return {
       status: "blocked",
       ledger: input.ledger,
-      blockers: capabilityResolution.blockers,
+      blockers: capabilityResolution?.blockers || ["Video query capability identity is unavailable."],
     };
   }
   const generatedAt = input.generatedAt || defaultTimestamp;
-  const capability = capabilityResolution.capability;
+  const capability = querySourceJob || capabilityResolution!.capability!;
   const job: AgentVideoGenerationJob = {
     jobId: `agent_video_job_${compactId(input.plan.planId)}_${compactId(input.action)}_${String(input.ledger.jobs.length + 1).padStart(3, "0")}`,
     projectId: input.ledger.projectId,

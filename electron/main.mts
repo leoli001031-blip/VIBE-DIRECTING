@@ -483,7 +483,7 @@ async function startPackagedAcceptanceControl(win: electron.BrowserWindow) {
       for (const line of lines) {
         if (!line.trim()) continue;
         void (async () => {
-          let request: { id?: number; token?: string; method?: string; expression?: string; width?: number; height?: number };
+          let request: { id?: number; token?: string; method?: string; expression?: string; width?: number; height?: number; x?: number; y?: number };
           try {
             request = JSON.parse(line);
           } catch {
@@ -515,6 +515,23 @@ async function startPackagedAcceptanceControl(win: electron.BrowserWindow) {
             if (request.method === "capture_page") {
               const image = await win.webContents.capturePage();
               respond({ id, ok: true, value: image.toPNG().toString("base64") });
+              return;
+            }
+            if (request.method === "click_at") {
+              const x = Number(request.x);
+              const y = Number(request.y);
+              const [width, height] = win.getContentSize();
+              if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= width || y >= height) {
+                respond({ id, ok: false, error: "invalid_click_coordinates" });
+                return;
+              }
+              win.show();
+              win.focus();
+              win.webContents.focus();
+              win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+              win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+              win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+              respond({ id, ok: true, value: { x, y } });
               return;
             }
             if (request.method === "close") {

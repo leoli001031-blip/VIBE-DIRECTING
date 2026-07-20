@@ -44,6 +44,20 @@ export const JIMENG_FULL_FRAME_REFERENCE_RULES = [
 export type JimengCliModelVersion = typeof JIMENG_CLI_SUPPORTED_MODEL_VERSIONS[number];
 export type JimengCliVideoResolution = typeof JIMENG_CLI_SUPPORTED_VIDEO_RESOLUTIONS[number];
 
+export interface JimengExplicitSubmitProfile {
+  modelVersion: JimengCliModelVersion;
+  videoResolution: JimengCliVideoResolution;
+}
+
+export function jimengExplicitVip720pProfileFromIntent(value: string): JimengExplicitSubmitProfile | undefined {
+  const explicitVip = /seedance2\.0_vip/i.test(value)
+    || /seedance\s*2(?:\.0)?\s*vip/i.test(value);
+  const explicit720p = /(?:^|\s|[+，,：:])720\s*p(?:$|\s|[+，,。.!！])/i.test(value);
+  return explicitVip && explicit720p
+    ? { modelVersion: JIMENG_CLI_VIP_MODEL_VERSION, videoResolution: JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION }
+    : undefined;
+}
+
 export interface JimengCliModelOption {
   value: JimengCliModelVersion;
   label: string;

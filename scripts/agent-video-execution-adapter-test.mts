@@ -302,9 +302,9 @@ const runningQuery = await runAgentVideoExecution({
   executionMode: "live",
   liveExecutionAllowed: true,
   liveCapability: {
-    providerId: "mock-video-provider",
-    providerName: "Mock Video Provider",
-    modelId: "mock-video-model",
+    providerId: "must-not-replace-submit-provider",
+    providerName: "Query Transport",
+    modelId: "must-not-replace-submit-model",
   },
   execute: (context) => {
     queryCalls += 1;
@@ -315,6 +315,7 @@ const runningQuery = await runAgentVideoExecution({
 });
 assert(runningQuery.status === "running" && runningQuery.job?.operation === "query", "a live query must persist as a query job while the external task is still running");
 assert(runningQuery.job?.externalTaskId === "mock-submit-p3", "the persisted query job must retain the submitted external task id");
+assert(runningQuery.job?.providerId === runningVideo.job?.providerId && runningQuery.job?.modelId === runningVideo.job?.modelId, "a query job must inherit the exact submitted provider and model identity");
 
 const mismatchedQueryOperation = await runAgentVideoExecution({
   plan: videoQueryPlan,
@@ -338,6 +339,40 @@ const mismatchedQueryOperation = await runAgentVideoExecution({
 });
 assert(mismatchedQueryOperation.status === "blocked" && queryCalls === 1, "a persisted query action must never be replayed as video submit");
 
+const incompleteReturnedQuery = await runAgentVideoExecution({
+  plan: videoQueryPlan,
+  ledger: runningQuery.ledger,
+  action: "submit_video",
+  operation: "query",
+  actionId: "p3-live-video-query-action",
+  sourceConfirmationId: "p3-live-video-query-confirmation",
+  executionMode: "live",
+  liveExecutionAllowed: true,
+  liveCapability: {
+    providerId: "mock-video-provider",
+    providerName: "Mock Video Provider",
+    modelId: "mock-video-model",
+  },
+  execute: () => ({
+    status: "needs_review",
+    providerCalled: true,
+    externalTaskId: "mock-submit-p3",
+    outputVideoPath: "video/P3S01-incomplete-query-result.mp4",
+    relayQueue: {
+      items: [{
+        shotId: "P3S01",
+        externalTaskId: "mock-submit-p3",
+        outputVideoPath: "video/P3S01-incomplete-query-result.mp4",
+      }],
+    },
+  }),
+  onLedgerSnapshot: persistLedgerSnapshot,
+});
+assert(incompleteReturnedQuery.status === "failed", "a returned query without SHA-256 evidence must fail closed");
+assert(incompleteReturnedQuery.receipt.errors.some((error) => error.includes("video_review_result_invalid")), "an incomplete returned query must expose the strict Review-evidence blocker");
+const incompleteSourceJob = incompleteReturnedQuery.ledger.jobs.find((job) => job.jobId === runningVideo.job?.jobId);
+assert(incompleteSourceJob?.status === "running" && !incompleteSourceJob.reviewResult, "incomplete returned media must not mutate the original submit job into Review");
+
 const completedQuery = await runAgentVideoExecution({
   plan: videoQueryPlan,
   ledger: runningQuery.ledger,
@@ -354,13 +389,31 @@ const completedQuery = await runAgentVideoExecution({
   },
   execute: () => {
     queryCalls += 1;
-    return { status: "needs_review", providerCalled: true, outputVideoPath: "/tmp/p3-query-result.mp4" };
+    return {
+      status: "needs_review",
+      providerCalled: true,
+      externalTaskId: "mock-submit-p3",
+      outputVideoPath: "video/P3S01-query-result.mp4",
+      outputVideoSha256: `sha256:${"b".repeat(64)}`,
+      relayQueue: {
+        items: [{
+          shotId: "P3S01",
+          externalTaskId: "mock-submit-p3",
+          outputVideoPath: "video/P3S01-query-result.mp4",
+          outputVideoSha256: `sha256:${"b".repeat(64)}`,
+        }],
+      },
+    };
   },
   onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(completedQuery.status === "completed" && completedQuery.job?.jobId === runningQuery.job?.jobId, "a repeated query must reuse and finish the same query job");
 assert(queryCalls === 2 && completedQuery.ledger.jobs.length === runningQuery.ledger.jobs.length, "repeated queries must not append duplicate jobs");
-assert(completedQuery.receipt.operation === "query" && completedQuery.receipt.outputAssets[0] === "/tmp/p3-query-result.mp4", "query receipts must preserve operation and returned video evidence");
+assert(completedQuery.receipt.operation === "query" && completedQuery.receipt.outputAssets[0] === "video/P3S01-query-result.mp4", "query receipts must preserve operation and returned video evidence");
+const completedSubmitJob = completedQuery.ledger.jobs.find((job) => job.jobId === runningVideo.job?.jobId);
+assert(completedSubmitJob?.status === "succeeded", "a returned query result must close the original submit job instead of leaving stale Running state");
+assert(completedSubmitJob?.reviewResult?.status === "needs_review", "a returned query result must attach strict needs_review evidence to the original submit job");
+assert(completedSubmitJob?.reviewResult?.outputHash === `sha256:${"b".repeat(64)}`, "returned Review evidence must retain the provider media SHA-256");
 
 let timeoutSignalObserved = false;
 const timeoutResult = await runAgentVideoExecution({

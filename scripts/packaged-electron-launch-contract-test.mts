@@ -396,6 +396,8 @@ assert(
 assert(mainSource.includes('server.listen(packagedAcceptanceControlPort, "127.0.0.1"'), "packaged acceptance control must bind to loopback only");
 assert(mainSource.includes('request.method === "set_bounds"'), "packaged acceptance control must support authenticated responsive-window checks");
 assert(mainSource.includes('request.method === "capture_page"'), "packaged acceptance control must support authenticated visual evidence capture");
+assert(mainSource.includes('request.method === "click_at"'), "packaged acceptance control must support authenticated native click acceptance");
+assert(mainSource.includes('invalid_click_coordinates'), "packaged native click acceptance must reject coordinates outside the window");
 assert(preloadSource.includes("contextBridge"), "built preload must expose a context-isolated bridge");
 assert(preloadSource.includes("vibeRuntime"), "built preload must expose vibeRuntime");
 assert(preloadSource.includes("sandboxDiscardStagedExport"), "built preload must expose exact interrupted-export staging cleanup");

@@ -282,6 +282,30 @@ assert(omniReferenceProjection.agentCommand.kind === "submit_video", "locked omn
 const lockedProjectVibe = createProjectVibeFromRuntimeState(lockedRuntimeState);
 assert(lockedProjectVibe.assets.every((asset) => asset.status === "locked"), "Project.vibe projection should refresh locked assets");
 assert(lockedProjectVibe.visualMemory.entries.every((entry) => entry.status === "locked" && entry.canUseAsFutureReference), "locked visual memory should become future-reference safe");
+const directorFieldRuntimeState = {
+  ...lockedRuntimeState,
+  storyFlow: {
+    ...lockedRuntimeState.storyFlow,
+    shots: lockedRuntimeState.storyFlow.shots.map((shot: any, index: number) => index === 0 ? {
+      ...shot,
+      durationSeconds: 7,
+      referenceStrategy: "omni_reference",
+      executionMode: "action_closeup",
+      camera: "中远景轻推，不切镜",
+      primaryAction: "触碰纸飞机",
+      actionTrigger: "手指接触",
+      microReaction: "蓝光亮起",
+      sceneGuidance: ["雨后屋顶"],
+    } : shot),
+  },
+};
+const directorFieldProjectVibe = createProjectVibeFromRuntimeState(directorFieldRuntimeState as any);
+const directorFieldShot = directorFieldProjectVibe.shots[0];
+assert(directorFieldShot?.durationSeconds === 7, "Project.vibe projection should preserve shot duration");
+assert(directorFieldShot?.referenceStrategy === "omni_reference", "Project.vibe projection should preserve referenceStrategy");
+assert(directorFieldShot?.executionMode === "action_closeup", "Project.vibe projection should preserve executionMode for deterministic QA");
+assert(directorFieldShot?.camera === "中远景轻推，不切镜", "Project.vibe projection should preserve camera intent");
+assert(directorFieldShot?.primaryAction === "触碰纸飞机" && directorFieldShot.microReaction === "蓝光亮起", "Project.vibe projection should preserve action semantics");
 const projectRootPrefixedRuntimeState = {
   ...runtimeState,
   visualMemory: {

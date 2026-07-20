@@ -6,12 +6,14 @@ import {
 import {
   AGENT_VIDEO_PROVIDER_REGISTRY_SCHEMA_VERSION,
   planAgentVideoProductionAction,
+  recordAgentVideoGenerationJobReviewResult,
   recordAgentVideoGenerationJobExecution,
   transitionAgentVideoGenerationJob,
   type AgentVideoExecutionMode,
   type AgentVideoGenerationJob,
   type AgentVideoGenerationJobLedger,
   type AgentVideoGenerationJobOperation,
+  type AgentVideoGenerationReviewResult,
   type AgentVideoGenerationJobStatus,
   type AgentVideoPipelineAction,
   type AgentVideoPipelinePlan,
@@ -510,6 +512,72 @@ function externalTaskId(value: unknown) {
     || text(firstRelayItem?.submitId);
 }
 
+function normalizedSha256(value: unknown) {
+  const candidate = text(value)?.toLowerCase();
+  if (!candidate) return undefined;
+  if (/^sha256:[a-f0-9]{64}$/.test(candidate)) return candidate;
+  return /^[a-f0-9]{64}$/.test(candidate) ? `sha256:${candidate}` : undefined;
+}
+
+function returnedVideoReviewEvidence(
+  value: unknown,
+  job: AgentVideoGenerationJob,
+  receivedAt: string,
+): AgentVideoGenerationReviewResult | undefined {
+  const result = record(value);
+  const relayQueue = record(result?.relayQueue);
+  const relayItems = array(relayQueue?.items).map(record).filter(Boolean);
+  const returnedItem = relayItems.find((item) => outputPath(item?.outputVideoPath)) || relayItems[0];
+  const returnedPath = outputPath(result?.outputVideoPath)
+    || outputPath(returnedItem?.outputVideoPath)
+    || array(returnedItem?.localMediaPaths).map(outputPath).find(Boolean);
+  const outputHash = normalizedSha256(result?.outputVideoSha256)
+    || normalizedSha256(result?.outputSha256)
+    || normalizedSha256(result?.outputHash)
+    || normalizedSha256(returnedItem?.outputVideoSha256)
+    || normalizedSha256(returnedItem?.outputSha256)
+    || normalizedSha256(returnedItem?.outputHash);
+  const shotId = text(result?.shotId)
+    || text(returnedItem?.shotId)
+    || array(returnedItem?.shotIds).map(text).find(Boolean);
+  const taskId = externalTaskId(value) || job.externalTaskId;
+  if (!returnedPath || !outputHash || !shotId || !taskId) return undefined;
+  return {
+    status: "needs_review",
+    projectId: job.projectId,
+    projectRoot: job.projectRoot,
+    projectFactHash: job.projectFactHash,
+    jobId: job.jobId,
+    actionId: job.actionId,
+    shotId,
+    sourceReceiptId: text(result?.sourceReceiptId)
+      || text(result?.providerReceiptId)
+      || text(returnedItem?.sourceReceiptId)
+      || text(returnedItem?.providerReceiptId)
+      || `seedance_submit_${taskId}`,
+    outputPath: returnedPath,
+    outputHash,
+    receivedAt,
+  };
+}
+
+function sourceVideoJobForReturnedReview(
+  ledger: AgentVideoGenerationJobLedger,
+  job: AgentVideoGenerationJob,
+) {
+  if (job.operation === "execute") return job;
+  return [...ledger.jobs].reverse().find((candidate) => (
+    candidate.kind === "video_submit"
+    && candidate.operation === "execute"
+    && candidate.status === "running"
+    && candidate.executionMode === job.executionMode
+    && candidate.projectId === job.projectId
+    && candidate.projectRoot === job.projectRoot
+    && candidate.projectFactHash === job.projectFactHash
+    && candidate.externalTaskId === job.externalTaskId
+  ));
+}
+
 function resultError(value: unknown, fallback: string) {
   const result = record(value);
   return text(result?.message)
@@ -830,11 +898,38 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     }
   }
 
+  const completedAt = timestamp();
+  if (resultStatus === "succeeded" && input.action === "submit_video") {
+    const reviewJob = sourceVideoJobForReturnedReview(ledger, job);
+    const reviewResult = reviewJob
+      ? returnedVideoReviewEvidence(rawResult, reviewJob, completedAt)
+      : undefined;
+    if (!reviewJob || !reviewResult) {
+      resultStatus = "failed";
+      error = "[video_review_result_invalid] Returned video result is missing exact task, shot, project path, or SHA-256 evidence.";
+      outputAssets = [];
+    } else {
+      const recorded = recordAgentVideoGenerationJobReviewResult({
+        ledger,
+        jobId: reviewJob.jobId,
+        result: reviewResult,
+      });
+      if (!recorded.ok || !recorded.job) {
+        resultStatus = "failed";
+        error = `[video_review_result_invalid] ${recorded.blockers.join(" ")}`;
+        outputAssets = [];
+      } else {
+        ledger = recorded.ledger;
+        if (reviewJob.jobId === job.jobId) job = recorded.job;
+      }
+    }
+  }
+
   if (resultStatus === "running" || resultStatus === "timed_out") {
     const recorded = recordAgentVideoGenerationJobExecution({
       ledger,
       jobId: job.jobId,
-      generatedAt: timestamp(),
+      generatedAt: completedAt,
       providerCalled,
       externalTaskId: taskId,
       outputAssets,
@@ -847,22 +942,26 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
       if (persistenceFailure) return persistenceFailure;
     }
   } else {
-    const transitioned = transitionAgentVideoGenerationJob({
-      ledger,
-      jobId: job.jobId,
-      status: resultStatus === "succeeded" ? "succeeded" : resultStatus === "cancelled" ? "cancelled" : "failed",
-      generatedAt: timestamp(),
-      providerCalled,
-      externalTaskId: taskId,
-      outputAssets,
-      error,
-    });
-    if (transitioned.ok && transitioned.job) {
-      ledger = transitioned.ledger;
-      job = transitioned.job;
-      persistenceFailure = await persistCurrentSnapshot(true, providerCalled, rawResult);
-      if (persistenceFailure) return persistenceFailure;
+    if (job.status !== "succeeded" || resultStatus !== "succeeded") {
+      const transitioned = transitionAgentVideoGenerationJob({
+        ledger,
+        jobId: job.jobId,
+        status: resultStatus === "succeeded" ? "succeeded" : resultStatus === "cancelled" ? "cancelled" : "failed",
+        generatedAt: completedAt,
+        providerCalled,
+        externalTaskId: taskId,
+        outputAssets,
+        error,
+      });
+      if (transitioned.ok && transitioned.job) {
+        ledger = transitioned.ledger;
+        job = transitioned.job;
+      }
+    } else {
+      job = ledger.jobs.find((candidate) => candidate.jobId === job.jobId) || job;
     }
+    persistenceFailure = await persistCurrentSnapshot(true, providerCalled, rawResult);
+    if (persistenceFailure) return persistenceFailure;
   }
 
   const finalReceipt = receipt(input, resultStatus, generatedAt, job, error ? [error] : []);

@@ -5,6 +5,14 @@ import {
   type ReferenceAssetBucket,
 } from "./referenceAssetStrategy";
 
+const DIRECTOR_EXECUTION_MODES = new Set([
+  "single_continuous_shot",
+  "relationship_wide",
+  "action_insert",
+  "reaction_closeup",
+  "planned_cut_sequence",
+]);
+
 export type DirectorRuleQaSeverity = "blocker" | "warning" | "info";
 
 export type DirectorRuleQaCategory =
@@ -293,7 +301,19 @@ function checkGenerationContract(input: DirectorRuleQaInput, findings: DirectorR
   for (const [index, shot] of input.shots.entries()) {
     const id = shotId(shot, index);
     const strategy = clean(shot.referenceStrategy);
+    const executionMode = clean(shot.executionMode);
     const durationSeconds = positiveNumber(shot.durationSeconds);
+    if (executionMode && !DIRECTOR_EXECUTION_MODES.has(executionMode)) {
+      addFinding(findings, {
+        code: "invalid_execution_mode",
+        severity: "blocker",
+        category: "generation_contract",
+        path: `shots.${id}.executionMode`,
+        message: `镜头执行模式“${executionMode}”不在正式合同中。`,
+        evidence: executionMode,
+        suggestedFix: "使用 single_continuous_shot、relationship_wide、action_insert、reaction_closeup 或 planned_cut_sequence。",
+      });
+    }
     if (!durationSeconds) {
       addFinding(findings, {
         code: "invalid_duration",

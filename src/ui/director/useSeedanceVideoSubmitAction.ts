@@ -22,7 +22,14 @@ import {
   agentVideoSubmitContractAllowsVideo,
   type AgentVideoSubmitContract,
 } from "./agentPanelProjection";
-import { JIMENG_CLI_DEFAULT_MODEL_VERSION } from "../../core/jimengVideoCli";
+import {
+  JIMENG_CLI_DEFAULT_MODEL_VERSION,
+  JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
+  JIMENG_CLI_MODEL_OPTIONS,
+  normalizeJimengVideoResolution,
+  type JimengCliModelVersion,
+  type JimengCliVideoResolution,
+} from "../../core/jimengVideoCli";
 
 const STORYBOARD_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const SEEDANCE_SUBMIT_CONFIRM_PHRASE = "submit-seedance-video";
@@ -95,7 +102,14 @@ export type SeedanceVideoSubmitRunOptions = {
   videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
   signal?: AbortSignal;
+  modelVersion?: JimengCliModelVersion;
+  videoResolution?: JimengCliVideoResolution;
 };
+
+function seedanceSubmitModelLabel(modelVersion: JimengCliModelVersion, videoResolution: JimengCliVideoResolution) {
+  const modelLabel = JIMENG_CLI_MODEL_OPTIONS.find((option) => option.value === modelVersion)?.label || modelVersion;
+  return `${modelLabel} ${videoResolution}`;
+}
 
 function defaultConfirmAction(message: string) {
   return typeof window !== "undefined" ? window.confirm(message) : false;
@@ -413,7 +427,13 @@ export function useSeedanceVideoSubmitAction({
       return nextState;
     }
 
-    if (!options?.skipConfirm && !confirmAction(`要提交 1 条代表性视频到 ${SEEDANCE_TEST_MODEL_LABEL} 吗？\n\n本轮不会批量提交；拿到提交号后就进入后台等待，可以稍后查询结果。`)) {
+    const modelVersion = options?.modelVersion || JIMENG_CLI_DEFAULT_MODEL_VERSION;
+    const videoResolution = normalizeJimengVideoResolution(
+      options?.videoResolution || JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
+      modelVersion,
+    );
+    const submitModelLabel = seedanceSubmitModelLabel(modelVersion, videoResolution);
+    if (!options?.skipConfirm && !confirmAction(`要提交 1 条代表性视频到 ${submitModelLabel} 吗？\n\n本轮不会批量提交；拿到提交号后就进入后台等待，可以稍后查询结果。`)) {
       const nextState: SeedanceVideoSubmitActionState = { status: "idle", message: "已取消，本次没有发送；需要时可以重新确认。" };
       setActionState(nextState);
       return nextState;
@@ -434,13 +454,13 @@ export function useSeedanceVideoSubmitAction({
     }
     const submitShotIds = scopedTarget.shotIds;
     const confirmedAt = options?.confirmedAt || new Date().toISOString();
-    setActionState({ status: "running", message: `正在准备 1 条代表性视频，并发送到 ${SEEDANCE_TEST_MODEL_LABEL}。` });
+    setActionState({ status: "running", message: `正在准备 1 条代表性视频，并发送到 ${submitModelLabel}。` });
     const request = videoRequestSignal(options?.signal);
     try {
       const submitted = await submitProjectSeedanceVideo(runtimeProjectIdentity, {
           providerId: STORYBOARD_PROVIDER_ID,
-          modelVersion: JIMENG_CLI_DEFAULT_MODEL_VERSION,
-          videoResolution: "720p",
+          modelVersion,
+          videoResolution,
             ratio: "16:9",
             pollSeconds: 90,
             selectedShotIds: submitShotIds.length ? submitShotIds : undefined,

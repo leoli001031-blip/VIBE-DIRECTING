@@ -58,12 +58,14 @@ import {
 } from "../../core/agentCurrentTaskProjection";
 import {
   buildAgentVideoPipelinePlan,
+  buildLiveSeedanceAgentVideoProviderCapabilityRegistry as buildExternalVideoCapabilityRegistry,
   createAgentVideoGenerationJobLedger,
   planAgentVideoProductionAction,
   selectLatestAgentVideoGenerationReviewJob,
   type AgentVideoGenerationJob,
   type AgentVideoGenerationJobLedger,
 } from "../../core/agentVideoProductionContract";
+import { jimengExplicitVip720pProfileFromIntent as explicitExternalVideoProfileFromIntent } from "../../core/jimengVideoCli";
 import {
   agentDirectorApprovedReviewReceiptMatchesIdentity,
   type AgentDirectorReviewIdentity,
@@ -655,6 +657,8 @@ function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
 function minimalAgentActionContractFacts(facts: Array<{ label: string; value: string }> = []) {
   const confirmationLabels = new Set([
     "目标",
+    "模型",
+    "清晰度",
     "会做",
     "保护",
     "写入",
@@ -1256,6 +1260,8 @@ function minimalAgentConfirmationReadableBody(message: MinimalAgentMessage) {
   const actionLabel = confirmationAction.label.replace(/^确认/, "") || "继续这一步";
   const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
   const writeFact = minimalAgentFactValue(message, ["写入"]);
+  const modelFact = minimalAgentFactValue(message, ["模型"]);
+  const resolutionFact = minimalAgentFactValue(message, ["清晰度"]);
   const providerFact = minimalAgentFactValue(message, ["外部提交", "会做", "执行", "调用", "成本"]);
   const combinedCopy = cleanMinimalAgentMessageCopy(`${message.body} ${message.next || ""} ${confirmationAction.hint} ${providerFact}`);
   const projectOnlyChange = minimalAgentMessageIsProjectDraftEdit(message)
@@ -1279,6 +1285,14 @@ function minimalAgentConfirmationReadableBody(message: MinimalAgentMessage) {
   }
   if (message.actionKind === "prepare_export") {
     return `${actionLine}${writeLine || "确认后才会写入本地导出文件。"}`;
+  }
+  if (
+    message.executionMode === "live"
+    && message.actionKind === "prepare_video_submit"
+    && modelFact
+    && resolutionFact
+  ) {
+    return `${actionLine}${writeLine}确认后将提交 1 次 ${modelFact} ${resolutionFact} 外部视频任务。`;
   }
   if (/不会.*提交视频|不会自动提交视频|不提交视频/.test(combinedCopy)) {
     return `${actionLine}${writeLine}这一步不会提交视频，确认后才执行。`;
@@ -8243,6 +8257,9 @@ export function MinimalAgentPanel({
     );
     const queryLive = Boolean(action?.kind === "query_video_result" && onSendSeedanceVideo && videoCanResume && !videoBusy);
     const exportLive = Boolean(action?.kind === "prepare_export" && onRunExport);
+    const explicitVideoSubmitProfile = action?.kind === "prepare_video_submit"
+      ? explicitExternalVideoProfileFromIntent(userIntent)
+      : undefined;
     return runAgentVideoConfirmedProductAction({
       controller: agentVideoExecutionController,
       plan: agentCurrentTaskPipelinePlan,
@@ -8271,7 +8288,7 @@ export function MinimalAgentPanel({
       video: {
         live: videoLive,
         perform: onSendSeedanceVideo
-          ? (target, signal) => onSendSeedanceVideo({ ...target, signal })
+          ? (target, signal) => onSendSeedanceVideo({ ...target, ...explicitVideoSubmitProfile, signal })
           : undefined,
       },
       videoQuery: {
@@ -11661,6 +11678,14 @@ export function MinimalAgentPanel({
     }
     const createdAt = new Date().toISOString();
     const compiledPrompt = compileAgentDirectorReviewRegenerationPrompt(proposal);
+    const explicitVideoSubmitProfile = explicitExternalVideoProfileFromIntent(compiledPrompt);
+    const liveRegenerationReady = Boolean(
+      explicitVideoSubmitProfile
+      && onSendSeedanceVideo
+      && videoSendAction?.keyConfigured
+      && videoSendAction.ready
+      && !videoSendAction.disabled,
+    );
     const videoPermission = agentVideoPermissionForMode("video_allowed");
     const action = buildDirectorAgentActionEnvelope({
       userIntent: compiledPrompt,
@@ -11719,13 +11744,19 @@ export function MinimalAgentPanel({
       ledger: agentVideoDryRunLedger,
       action: "submit_video",
       actionId: action.actionId,
-      executionMode: "dry_run",
+      executionMode: liveRegenerationReady ? "live" : "dry_run",
       generatedAt: createdAt,
       sourceConfirmationId: handoff.handoffId,
       sourceTimelineId: proposal.proposalId,
       prompt: compiledPrompt,
       inputAssets: [],
       outputAssets: [],
+      registry: liveRegenerationReady && explicitVideoSubmitProfile
+        ? buildExternalVideoCapabilityRegistry({
+            ...explicitVideoSubmitProfile,
+            generatedAt: createdAt,
+          })
+        : undefined,
     });
     if (staged.status !== "staged_job" || !staged.job) {
       setStatus(staged.blockers[0] || "新的本地验证任务无法建立；原结果保持不变。");
@@ -11736,6 +11767,7 @@ export function MinimalAgentPanel({
       job: staged.job,
       confirmationId: handoff.handoffId,
       compiledPrompt,
+      submitProfile: liveRegenerationReady ? explicitVideoSubmitProfile : undefined,
       createdAt,
     });
     if (!confirmation.ok) {
@@ -11794,7 +11826,9 @@ export function MinimalAgentPanel({
       setAgentActionEnvelope(action);
       setAgentToolHandoff(handoff);
       setPlanPhase("review");
-      setStatus("新的本地验证任务已建立；等待独立确认，不会调用付费生成服务。");
+      setStatus(liveRegenerationReady
+        ? "新的外部视频任务已建立；等待独立付费确认，确认前不会提交。"
+        : "新的本地验证任务已建立；等待独立确认，不会调用付费生成服务。");
     } catch {
       setStatus("新的生成确认未能完整持久化；不会执行任务，原结果保持不变。");
     }
@@ -11914,6 +11948,7 @@ export function MinimalAgentPanel({
       className={`minimal-agent-panel ${hasVisibleActionCard ? "has-visible-action-card" : ""}`}
       data-director-turn-mode={agentDirectorTurnProjection.mode}
       data-director-turn-phase={agentDirectorTurnProjection.phase}
+      data-agent-status={status}
     >
       <button
         type="button"

@@ -43,7 +43,7 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-type AcceptanceMethod = "evaluate" | "set_bounds" | "capture_page" | "close";
+type AcceptanceMethod = "evaluate" | "set_bounds" | "capture_page" | "click_at" | "close";
 
 export class PackagedAcceptanceClient {
   private nextId = 1;
@@ -92,6 +92,10 @@ export class PackagedAcceptanceClient {
 
   evaluate<T>(expression: string): Promise<T> {
     return this.send("evaluate", { expression }) as Promise<T>;
+  }
+
+  clickAt(x: number, y: number): Promise<{ x: number; y: number }> {
+    return this.send("click_at", { x, y }) as Promise<{ x: number; y: number }>;
   }
 
   close(): void {

@@ -20,11 +20,13 @@ import {
 } from "../src/ui/director/agentDirectorReviewRegeneration";
 import {
   buildAgentVideoPipelinePlan,
+  buildLiveSeedanceAgentVideoProviderCapabilityRegistry,
   createAgentVideoGenerationJobLedger,
   planAgentVideoProductionAction,
   type AgentVideoGenerationJob,
 } from "../src/core/agentVideoProductionContract";
 import { classifyDirectorAgentAction } from "../src/core/directorAgentAction";
+import { jimengExplicitVip720pProfileFromIntent } from "../src/core/jimengVideoCli";
 
 const identity = {
   projectId: "current_project",
@@ -151,6 +153,37 @@ assert.equal(stagedIndependentCandidate.job?.status, "staged");
 assert.equal(stagedIndependentCandidate.job?.executionMode, "dry_run");
 assert.equal(stagedIndependentCandidate.job?.providerCalled, false);
 
+assert.equal(jimengExplicitVip720pProfileFromIntent(compiledPrompt), undefined);
+const explicitLivePrompt = `${compiledPrompt}\n执行规格：Seedance 2.0 VIP + 720p。`;
+const explicitLiveProfile = jimengExplicitVip720pProfileFromIntent(explicitLivePrompt);
+assert.deepEqual(explicitLiveProfile, {
+  modelVersion: "seedance2.0_vip",
+  videoResolution: "720p",
+});
+assert.equal(jimengExplicitVip720pProfileFromIntent(`${compiledPrompt}\nSeedance 2.0 VIP`), undefined);
+const stagedLiveCandidate = planAgentVideoProductionAction({
+  plan: independentRegenerationPlan,
+  ledger: existingLedger,
+  action: "submit_video",
+  actionId: "agent_action_20260718t090301_prepare_video_submit",
+  executionMode: "live",
+  generatedAt: "2026-07-18T09:03:01.000Z",
+  sourceConfirmationId: "agent_tool_handoff_p11b_live",
+  sourceTimelineId: proposal.proposalId,
+  prompt: explicitLivePrompt,
+  inputAssets: [],
+  outputAssets: [],
+  registry: buildLiveSeedanceAgentVideoProviderCapabilityRegistry({
+    ...explicitLiveProfile!,
+    generatedAt: "2026-07-18T09:03:01.000Z",
+  }),
+});
+assert.equal(stagedLiveCandidate.status, "staged_job");
+assert.equal(stagedLiveCandidate.job?.executionMode, "live");
+assert.equal(stagedLiveCandidate.job?.providerId, "jimeng-seedance");
+assert.equal(stagedLiveCandidate.job?.modelId, "seedance2.0_vip");
+assert.equal(stagedLiveCandidate.job?.providerCalled, false);
+
 const newJob: AgentVideoGenerationJob = {
   jobId: "agent_video_job_minimal_agent_current_task_submit_video_002",
   projectId: identity.projectId,
@@ -228,6 +261,53 @@ assert.equal(agentDirectorReviewRegenerationConfirmationMatchesJob(restoredConfi
   confirmationId: newJob.sourceConfirmationId,
   job: newJob,
 }), false);
+
+const liveConfirmationResult = buildAgentDirectorReviewRegenerationConfirmationTimelineEntries({
+  proposal,
+  job: stagedLiveCandidate.job!,
+  confirmationId: stagedLiveCandidate.job!.sourceConfirmationId,
+  compiledPrompt: explicitLivePrompt,
+  submitProfile: explicitLiveProfile,
+  createdAt: "2026-07-18T09:03:01.000Z",
+});
+assert.equal(liveConfirmationResult.ok, true);
+assert.equal(liveConfirmationResult.confirmation?.executionMode, "live");
+assert.deepEqual(liveConfirmationResult.confirmation?.submitProfile, explicitLiveProfile);
+assert.match(liveConfirmationResult.entries.at(-1)?.body || "", /seedance2\.0_vip 720p/);
+assert.deepEqual(
+  liveConfirmationResult.entries.at(-1)?.facts?.filter((fact) => fact.label === "模型" || fact.label === "清晰度"),
+  [
+    { label: "模型", value: "seedance2.0_vip" },
+    { label: "清晰度", value: "720p" },
+  ],
+);
+const restoredLiveConfirmation = activeAgentDirectorReviewRegenerationConfirmationFromTimeline(
+  [...proposalTimeline, ...liveConfirmationResult.entries],
+  identity,
+);
+assert.equal(restoredLiveConfirmation?.executionMode, "live");
+assert.equal(agentDirectorReviewRegenerationConfirmationMatchesJob(restoredLiveConfirmation, {
+  actionId: stagedLiveCandidate.job!.actionId,
+  confirmationId: stagedLiveCandidate.job!.sourceConfirmationId,
+  job: stagedLiveCandidate.job,
+}), true);
+const missingLiveProfile = buildAgentDirectorReviewRegenerationConfirmationTimelineEntries({
+  proposal,
+  job: stagedLiveCandidate.job!,
+  confirmationId: stagedLiveCandidate.job!.sourceConfirmationId,
+  compiledPrompt: explicitLivePrompt,
+});
+assert.equal(missingLiveProfile.ok, false);
+assert.ok(missingLiveProfile.blockers.includes("review_regeneration_live_submit_profile_required"));
+const wrongLiveModel = buildAgentDirectorReviewRegenerationConfirmationTimelineEntries({
+  proposal,
+  job: { ...stagedLiveCandidate.job!, modelId: "seedance2.0" },
+  confirmationId: stagedLiveCandidate.job!.sourceConfirmationId,
+  compiledPrompt: explicitLivePrompt,
+  submitProfile: explicitLiveProfile,
+});
+assert.equal(wrongLiveModel.ok, false);
+assert.ok(wrongLiveModel.blockers.includes("review_regeneration_live_model_mismatch"));
 assert.deepEqual(identity, originalIdentitySnapshot);
 
 const corruptConfirmationTimeline = confirmationTimeline.map((entry) => (
