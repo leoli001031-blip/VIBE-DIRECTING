@@ -35,6 +35,22 @@ assert(!buildAgentDirectorClarificationTurn({
   hasAttachments: true,
 }), "attachment-backed feedback should stay on the existing intake path");
 
+const explicitClarification = buildAgentDirectorClarificationTurn({
+  userIntent: "还是太直白了，想更含蓄一点。先问我你真正需要知道的，不要直接改。",
+  selectedShotId: "draft-shot-1",
+  targetLabel: "当前草案",
+  createdAt: "2026-07-22T12:00:00.000Z",
+});
+assert(explicitClarification, "an explicit ask to clarify before editing must enter a clarification turn");
+assert(explicitClarification.question.includes("保留现有故事事实"), "explicit clarification should ask which facts are protected");
+assert(explicitClarification.options[0]?.id === "preserve_story_facts", "explicit clarification should offer a fact-preserving direction");
+assert(explicitClarification.options[1]?.id === "allow_story_restructure", "explicit clarification should offer a bounded restructure direction");
+assert(
+  agentDirectorClarificationReplyIntent(explicitClarification, "保留保洁员和发光纸鹤，但不要解释纸鹤为什么发光。")
+    === "保留保洁员和发光纸鹤，但不要解释纸鹤为什么发光。",
+  "a freeform reply to an explicit clarification request must not carry the old meta instruction into the proposal intent",
+);
+
 const entries = buildAgentDirectorClarificationTimelineEntries(clarification, "2026-07-17T01:00:00.000Z");
 const restored = activeAgentDirectorClarificationFromTimeline(entries);
 assert(restored?.id === clarification.id, "an unresolved clarification should restore from the Agent timeline");

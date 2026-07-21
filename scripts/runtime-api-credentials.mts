@@ -104,6 +104,7 @@ export function getAllCredentials(): Record<string, { providerId: string; label?
 }
 
 export function getProviderApiKey(providerId: string): string | undefined {
+  if (envValue("VIBE_DIRECTOR_DISABLE_PROVIDER_CALLS") === "1") return undefined;
   const providers = readCredentials().providers;
   if (providerId === apikeyFunProviderId || apikeyFunProviderAliases.includes(providerId)) {
     const envKey = envValue("VIBE_APIKEY_FUN_API_KEY") || envValue("APIKEY_FUN_API_KEY") || envValue("VIBE_IMAGE2_API_KEY");

@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "phase": "P12-C",
+  "date": "2026-07-22",
+  "observationKind": "internal_proxy",
+  "baselineHead": "47429fd",
+  "status": "pass_after_p0_p1_fixes",
+  "gateLabels": {
+    "internalProxy": "P12-C internal proxy usability PASS",
+    "externalCreator": "External creator usability NOT VERIFIED",
+    "realProvider": "Real Provider execution NOT VERIFIED",
+    "publicDistribution": "Public distribution NOT CLAIMED"
+  },
+  "preregisteredPlan": {
+    "path": "docs/agent-first-p12-c-internal-proxy-observation-plan-20260722.md",
+    "sha256": "d8369361519de2efdcedebeadcfa2124a2bd32269d5a1f5762f5068eff606b9c"
+  },
+  "executionBoundary": {
+    "frontendDevServerStarted": false,
+    "projectSaveConfirmed": false,
+    "referenceGenerationConfirmed": false,
+    "videoGenerationConfirmed": false,
+    "promotionConfirmed": false,
+    "deliveryOrExportConfirmed": false,
+    "mediaProviderCalls": 0,
+    "providerRetryCount": 0,
+    "cleanRerunsUsedIsolatedHome": true,
+    "cleanRerunsUsedProviderLock": true
+  },
+  "providerAudit": {
+    "initialBoundaryBreach": {
+      "severity": "P0",
+      "status": "contained_and_cleanly_retested",
+      "cause": "The first process had fresh profile/projects/runtime roots but inherited the normal HOME, so runtime homedir credential lookup reached the global credential store.",
+      "model": "deepseek-v4-pro",
+      "transport": "chat_completions_stream",
+      "finishReason": "stop",
+      "calls": 1,
+      "mediaCalls": 0,
+      "usage": {
+        "promptTokens": 2453,
+        "completionTokens": 1385,
+        "reasoningTokens": 696,
+        "totalTokens": 3838
+      },
+      "fee": "not_reported_potentially_billable",
+      "rawApiKeyStored": false,
+      "traceDirectory": "/tmp/vibe-director-p12c-task12/runtime/.vibe-runtime/director-storyboard-plan/3e40d5110c79f73a",
+      "traceHashes": {
+        "request.json": "8b6bfbc5a3cdc258e0ebcaa9400c1413cf26b9519a08b92eaab6407b93b25d62",
+        "plan.json": "46a7961d4bac437ee5ed1ea2b85831c81657ea62a46796887ae6010568f77f48",
+        "response.json": "76fc6fd8ac6a6c5e000548cfe53d879eac3807b91c2968105fa5a4eab1e9fdbc"
+      }
+    },
+    "remediation": {
+      "processSwitch": "VIBE_DIRECTOR_DISABLE_PROVIDER_CALLS=1",
+      "credentialResultWhenLocked": "undefined",
+      "cleanRerunTextCalls": 0,
+      "cleanRerunMediaCalls": 0,
+      "cleanRerunProviderTraceFiles": 0
+    }
+  },
+  "packagedLaunch": {
+    "candidate": "release/mac-arm64/Vibe Director Studio.app",
+    "initialDirectLaunch": "amfi_error_-423_on_earlier_candidate",
+    "computerUseObservationBundle": "/tmp/vibe-director-p12c-app-r2/Vibe Director Studio P12C R2.app",
+    "computerUseBundlePreparation": "ditto_copy_xattr_clear_adhoc_resign",
+    "finalDirectLaunchContract": "pass",
+    "finalPackageSmoke": "pass",
+    "distributionClaim": "local_adhoc_only"
+  },
+  "tasks": [
+    {
+      "id": "task_1_open_creative_brief",
+      "firstRouteCorrect": true,
+      "creatorMessagesSent": 1,
+      "visibleClarificationTurns": 0,
+      "confirmationBoundariesReached": 1,
+      "currentRightRailTasksAfterStabilization": 1,
+      "staleTaskVisible": false,
+      "elapsedSeconds": 23.2,
+      "cleanRerunProjectFiles": 0,
+      "cleanRerunRuntimeFiles": 0,
+      "cleanRerunProviderCalls": 0,
+      "result": "p2",
+      "fixedP1": "The delegated instruction '镜头怎么拆你来安排' was initially emitted as a fourth story beat.",
+      "remainingP2": "The third local fallback beat was the weak atmosphere-only phrase '气氛安静'.",
+      "evidence": [
+        "01-task1-new-story-preview.jpeg",
+        "02-task1-meta-shot-p1.jpeg",
+        "03-task1-fixed-three-shot-draft.jpeg"
+      ]
+    },
+    {
+      "id": "task_2_natural_multi_shot_revision",
+      "firstRouteCorrect": true,
+      "creatorMessagesSent": 1,
+      "visibleClarificationTurns": 0,
+      "confirmationBoundariesReached": 1,
+      "currentRightRailTasksAfterStabilization": 1,
+      "staleTaskVisible": false,
+      "elapsedSeconds": 36.5,
+      "cleanRerunProjectFiles": 0,
+      "cleanRerunRuntimeFiles": 0,
+      "cleanRerunProviderCalls": 0,
+      "result": "p2",
+      "remainingP2": "The deterministic multi-shot revision preserved intent but left punctuation residue in the final-shot copy.",
+      "evidence": [
+        "04-task2-multi-shot-preview.jpeg",
+        "05-task2-multi-shot-applied.jpeg"
+      ]
+    },
+    {
+      "id": "task_3_ambiguous_feedback_and_clarification",
+      "firstRouteCorrect": true,
+      "creatorMessagesSent": 3,
+      "visibleClarificationTurns": 1,
+      "confirmationBoundariesReached": 2,
+      "currentRightRailTasksAfterStabilization": 1,
+      "staleTaskVisible": false,
+      "elapsedSeconds": 38.4,
+      "cleanRerunProjectFiles": 0,
+      "cleanRerunRuntimeFiles": 0,
+      "cleanRerunProviderCalls": 0,
+      "result": "pass",
+      "fixedP1": [
+        "The minimum-shot directive was initially emitted as a story beat.",
+        "The explicit request to ask before editing initially routed directly to draft modification.",
+        "The ready draft initially lacked a stable clarification target.",
+        "The freeform clarification reply initially carried the old meta instruction and required an unavailable AI rewrite.",
+        "Natural '结尾停在...' wording was not recognized as a deterministic tail-shot revision."
+      ],
+      "finalState": {
+        "shotCount": 1,
+        "updatedAction": "他把纸鹤放回木马上",
+        "currentTask": "确认这版故事",
+        "clarificationVisible": false,
+        "saveExecuted": false,
+        "generationExecuted": false
+      },
+      "evidence": [
+        "06-task3-minimum-shot-directive-p1.jpeg",
+        "07-task3-fixed-one-shot-draft.jpeg",
+        "08-task3-clarification-missed.jpeg",
+        "09-task3-clarify-pass.jpeg",
+        "10-task3-clarification-recovery-p1.jpeg",
+        "11-task3-clarified-proposal-pass.jpeg"
+      ]
+    }
+  ],
+  "evidenceSha256": {
+    "01-task1-new-story-preview.jpeg": "6c20c0791ecdee2a9cf29eff5ce0951bd9573b4a0885fef21f851d5b38891885",
+    "02-task1-meta-shot-p1.jpeg": "6cb48d99a3f8bf63177161d5dced4d847de38c12e8d8272f20a70d93f92d1838",
+    "03-task1-fixed-three-shot-draft.jpeg": "93bb7ca6bd02a0c9aa302177f84dffdcd246d329176f3f7f2a9b7f22da7f9381",
+    "04-task2-multi-shot-preview.jpeg": "b73cccaaf5f82ae67295c305375294c16546f6b18ecdbbaf3cabb2d5ab3fa4f2",
+    "05-task2-multi-shot-applied.jpeg": "0bed6d3b49e76ac754138d52103b42844b6d0a32c5a030fde4a19ef6ec4f7c09",
+    "06-task3-minimum-shot-directive-p1.jpeg": "7fa158d1d18ce9aba184db49a5596050d3e48793717bd926d2d58bcd7154b13a",
+    "07-task3-fixed-one-shot-draft.jpeg": "6c0b0660f9548299b5a17e52722d66d66213de28e7334a810773de237b2eef5f",
+    "08-task3-clarification-missed.jpeg": "e62dee6adb3654d5949eecdbce123fdf354f42824abb2f6ade4f41f2cb3a16b9",
+    "09-task3-clarify-pass.jpeg": "81e2d1e28362d12c8917c15bcac04e431455b26897ebd9eba79bb2e2db04f39e",
+    "10-task3-clarification-recovery-p1.jpeg": "24ec1dd2db4ae150f40f9ce234c499321d5912535feccf478c26c9b5076942df",
+    "11-task3-clarified-proposal-pass.jpeg": "cc6f3f7203e5dac46a4f4ae15396f7b85630f316139d9a7302ed77faa0bd7695"
+  },
+  "verification": [
+    "npm run agent-director-clarification:test",
+    "npm run director-ai-storyboard-planner:test",
+    "npm run runtime-api-provider-call-lock:test",
+    "npm run director-fresh-draft-intent:test",
+    "npm run project-agent-workspace:test",
+    "npm run new-video-start-contract:test",
+    "npm run minimal-agent-p1:test",
+    "npm run minimal-ui:test",
+    "npm run packaged-launch-contract:test",
+    "npm run package:smoke",
+    "npx tsc --noEmit --pretty false",
+    "git diff --check"
+  ]
+}

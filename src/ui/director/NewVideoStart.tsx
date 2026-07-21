@@ -753,10 +753,17 @@ function storyboardStoryText(text: string) {
   return split.storyText || stripShotCountPlanningInstructions(cleanText(text)) || cleanText(text);
 }
 
+function tailEndingRevisionClause(text: string) {
+  const match = stripDraftRevisionPromptPrefix(text).match(
+    /(?:^|[，,。；;])\s*(?:最后|末尾|结尾|最终)\s*(?:停在|停到|落在|收在|结束在|定格在)\s*([^，,。；;]{2,80})/u,
+  );
+  return cleanText(match?.[1]);
+}
+
 function targetShotRevisionIndex(text: string, rowCount: number): number | undefined {
   const cleaned = stripDraftRevisionPromptPrefix(text);
   const tailMatch = cleaned.match(/(?:把|将|让|请把|请将)?\s*(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu);
-  if (tailMatch && rowCount > 0) return rowCount - 1;
+  if ((tailMatch || tailEndingRevisionClause(cleaned)) && rowCount > 0) return rowCount - 1;
   const match = cleaned.match(new RegExp(String.raw`(?:把|将|让|把现在的|把当前的)?\s*第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`, "iu"));
   const index = match ? parseLocalizedShotNumber(match[1] || "") : undefined;
   if (!index || index < 1 || index > rowCount) return undefined;
@@ -764,7 +771,8 @@ function targetShotRevisionIndex(text: string, rowCount: number): number | undef
 }
 
 function feedbackTargetsTailShot(text: string) {
-  return /(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu.test(stripDraftRevisionPromptPrefix(text));
+  return /(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu.test(stripDraftRevisionPromptPrefix(text))
+    || Boolean(tailEndingRevisionClause(text));
 }
 
 function feedbackTargetsSelectedDraftShot(text: string) {
@@ -791,7 +799,7 @@ function cleanTargetShotRevisionText(text: string) {
   const repetitionControlPattern = new RegExp(String.raw`(?:不要|别|不)(?:再)?重复(?:第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|上一镜|前一镜|这个镜头)[^，,。；;]*`, "giu");
   const leftoverVideoSubmitPattern = /(?:或|和|以及)?\s*(?:提交|发送|生成|生)视频/giu;
   const contentRemovalPattern = /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)[^，,。；;]*(?:怀表|耳机|广告牌|站牌|随身听|小提琴|纸飞机|灯箱|发光鸟|热豆浆|豆浆|发光字|车票|电影票|票根|门票)[^，,。；;]*/giu;
-  const withoutSafetyClauses = stripDraftRevisionPromptPrefix(text)
+  const withoutSafetyClauses = stripDraftRevisionPromptPrefix(tailEndingRevisionClause(text) || text)
     .replace(safetyClausePattern, " ")
     .replace(workflowControlClausePattern, " ")
     .replace(repetitionControlPattern, " ")

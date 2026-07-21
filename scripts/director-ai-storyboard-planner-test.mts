@@ -142,6 +142,19 @@ assert(!delegatedMinimumShotBrief.storyText.includes("你来决定最少需要�
 assert(!delegatedMinimumShotBrief.storyText.includes("不生成任何素材"), "no-material-generation control must not become story content");
 assert(delegatedMinimumShotBrief.directiveText.includes("你来决定最少需要几个镜头"), "delegated shot-count control should remain available as planning preference text");
 
+const delegatedShotArrangementBrief = splitCreativePlanningText("我想拍一个大约 10 秒的短片：深夜公交车到了终点站，一个加班回家的男人透过车窗，看见十年前穿旧校服的自己还坐在最后一排。他没有说话，只把自己的座位让了出来。气氛安静，不要恐怖。镜头怎么拆你来安排。先只整理故事，不生成任何素材。");
+assert(delegatedShotArrangementBrief.storyText.includes("深夜公交车到了终点站"), "inverted delegated shot planning must keep the actual story setting");
+assert(delegatedShotArrangementBrief.storyText.includes("只把自己的座位让了出来"), "inverted delegated shot planning must keep the ending action");
+assert(!delegatedShotArrangementBrief.storyText.includes("镜头怎么拆你来安排"), "inverted delegated shot planning must not become a storyboard beat");
+assert(delegatedShotArrangementBrief.directiveText.includes("镜头怎么拆你来安排"), "inverted delegated shot planning should remain available as planning preference text");
+
+const minimumShotPlanningBrief = splitCreativePlanningText("做一个 8 秒短片：雨停后的游乐园，保洁员在旋转木马下捡到一只还在发光的纸鹤。整理成最少的镜头，先别生成也别保存。");
+assert(minimumShotPlanningBrief.storyText.includes("雨停后的游乐园"), "minimum-shot planning must keep the actual story setting");
+assert(minimumShotPlanningBrief.storyText.includes("捡到一只还在发光的纸鹤"), "minimum-shot planning must keep the actual story action");
+assert(!minimumShotPlanningBrief.storyText.includes("整理成最少的镜头"), "minimum-shot planning must not become a storyboard beat");
+assert(!minimumShotPlanningBrief.storyText.includes("也别保存"), "save boundaries attached to minimum-shot planning must not become story content");
+assert(minimumShotPlanningBrief.directiveText.includes("整理成最少的镜头"), "minimum-shot planning should remain available as planning preference text");
+
 const requestedShotCountBrief = splitCreativePlanningText("做一个 12 秒 90 年代日漫感小短片：雨夜天桥下，戴耳机的女高中生追着一张发光车票跑向最后一班电车。拆成 3 个镜头，先只整理故事和镜头，不生成参考，不提交视频。");
 assert(requestedShotCountBrief.storyText.includes("雨夜天桥下"), "requested shot count wording should keep the real story setting");
 assert(requestedShotCountBrief.storyText.includes("女高中生追着一张发光车票"), "requested shot count wording should keep the real story action");

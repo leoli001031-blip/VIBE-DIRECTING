@@ -7509,14 +7509,17 @@ export function MinimalAgentPanel({
       }
       setActiveComposerTurnIntent(userIntent);
       if (!activeDirectorClarificationTurn && !options.skipClarification) {
-        const clarificationShotId = selectionOverride?.selectedShotId
-          || (selectionOverride?.selectedShotIds?.length === 1 ? selectionOverride.selectedShotIds[0] : undefined)
-          || currentSelectedShotId
-          || shot?.id;
+        const clarificationTargetsPendingDraft = readyNewVideoDraftForAgent && newVideoDraftShotCountForAgent > 0;
+        const clarificationShotId = clarificationTargetsPendingDraft
+          ? "pending-new-video-draft"
+          : selectionOverride?.selectedShotId
+            || (selectionOverride?.selectedShotIds?.length === 1 ? selectionOverride.selectedShotIds[0] : undefined)
+            || currentSelectedShotId
+            || shot?.id;
         const clarificationTurn = buildAgentDirectorClarificationTurn({
           userIntent,
           selectedShotId: clarificationShotId,
-          targetLabel: clarificationShotId,
+          targetLabel: clarificationTargetsPendingDraft ? "当前草案" : clarificationShotId,
           hasAttachments: attachments.length > 0,
           reviewRevision: activeDirectorReviewRevisionIntent
             ? {

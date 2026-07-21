@@ -15,6 +15,8 @@ export type AgentDirectorClarificationOptionId =
   | "hold_and_strengthen"
   | "extend_action"
   | "hold_and_soften"
+  | "preserve_story_facts"
+  | "allow_story_restructure"
   | "apply_as_stated"
   | "strengthen_direction";
 
@@ -58,6 +60,12 @@ function timingConcern(value: string): "early" | "late" | "fast" | undefined {
 
 function alreadyContainsDirection(value: string) {
   return /(?:情绪转折|提前预兆|延后|推迟|提前到|保留(?:当前)?时机|减弱|降低|加强|拉长|改成|改为|调整为|设置为|设为|换成|先[^，。；\n]+再)/u.test(value);
+}
+
+function explicitlyRequestsClarification(value: string) {
+  const asksBeforeActing = /(?:先|请先)[^，。；\n]{0,16}(?:问我|向我提问|澄清|确认)/u.test(value);
+  const blocksDirectAction = /(?:不要|别|先不要|先别)[^，。；\n]{0,10}(?:直接)?(?:改|修改|执行|写入|生成)/u.test(value);
+  return asksBeforeActing && blocksDirectAction;
 }
 
 export function agentDirectorReviewRevisionCanFormProposalDirectly(value: string) {
@@ -142,6 +150,23 @@ function reviewRevisionClarificationOptions(sourceIntent: string): AgentDirector
   ];
 }
 
+function explicitClarificationOptions(sourceIntent: string): AgentDirectorClarificationOption[] {
+  return [
+    {
+      id: "preserve_story_facts",
+      label: "保留故事事实",
+      detail: "保留现有角色、道具和主要动作，只调整表达方式。",
+      resolvedIntent: `${sourceIntent}；保留现有角色、道具和主要动作，只调整镜头表达，不补充原因解释。`,
+    },
+    {
+      id: "allow_story_restructure",
+      label: "允许重排动作",
+      detail: "允许调整主要动作、顺序或结尾落点，但保留核心意图。",
+      resolvedIntent: `${sourceIntent}；允许调整主要动作、镜头顺序或结尾落点，但保留核心意图。`,
+    },
+  ];
+}
+
 export function buildAgentDirectorClarificationTurn(input: {
   userIntent: string;
   selectedShotId?: string;
@@ -155,16 +180,19 @@ export function buildAgentDirectorClarificationTurn(input: {
   if (!sourceIntent || !selectedShotId || input.hasAttachments) return undefined;
   if (input.reviewRevision && validateAgentDirectorReviewIdentity(input.reviewRevision.identity).length) return undefined;
   const concern = timingConcern(sourceIntent);
+  const explicitClarification = explicitlyRequestsClarification(sourceIntent);
   const useReviewRevisionClarification = Boolean(
     input.reviewRevision && (!concern || alreadyContainsDirection(sourceIntent)),
   );
-  if (!concern && !useReviewRevisionClarification) return undefined;
-  if (!input.reviewRevision && alreadyContainsDirection(sourceIntent)) return undefined;
+  if (!concern && !explicitClarification && !useReviewRevisionClarification) return undefined;
+  if (!input.reviewRevision && !explicitClarification && alreadyContainsDirection(sourceIntent)) return undefined;
   const targetLabel = clean(input.targetLabel) || selectedShotId;
   const createdAt = input.createdAt || new Date().toISOString();
   const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase() || "now";
   const question = useReviewRevisionClarification
     ? "你希望按这条修改形成新版本提案，还是在此基础上进一步强化？"
+    : explicitClarification
+      ? "这次修改里，你希望保留现有故事事实、只调整表达方式，还是允许重排主要动作或结尾？"
     : concern === "late"
       ? "你希望把这个变化提前作为主要转折，还是保留当前时机并加强前面的铺垫？"
       : concern === "fast"
@@ -178,6 +206,8 @@ export function buildAgentDirectorClarificationTurn(input: {
     question,
     options: useReviewRevisionClarification
       ? reviewRevisionClarificationOptions(sourceIntent)
+      : explicitClarification
+        ? explicitClarificationOptions(sourceIntent)
       : clarificationOptions(concern!, sourceIntent),
     boundary: "选择只会形成一条待确认提案；不会写项目、调用外部生成服务或导出。",
     reviewRevision: input.reviewRevision,
@@ -345,5 +375,6 @@ export function agentDirectorClarificationReplyIntent(
   const cleanedReply = clean(reply);
   const matched = turn.options.find((option) => option.label === cleanedReply || option.id === cleanedReply);
   if (matched) return matched.resolvedIntent;
+  if (cleanedReply && explicitlyRequestsClarification(turn.sourceIntent)) return cleanedReply;
   return cleanedReply ? `${turn.sourceIntent}；补充：${cleanedReply}` : turn.sourceIntent;
 }
