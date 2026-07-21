@@ -65,7 +65,8 @@ function alreadyContainsDirection(value: string) {
 function explicitlyRequestsClarification(value: string) {
   const asksBeforeActing = /(?:先|请先)[^，。；\n]{0,16}(?:问我|向我提问|澄清|确认)/u.test(value);
   const blocksDirectAction = /(?:不要|别|先不要|先别)[^，。；\n]{0,10}(?:直接)?(?:改|修改|执行|写入|生成)/u.test(value);
-  return asksBeforeActing && blocksDirectAction;
+  const defersActionUntilAfterQuestion = /(?:再|然后再|之后再)\s*(?:动|改|修改|调整|处理|更新|重排)(?:这版|当前)?(?:草案|故事|镜头|分镜)?/u.test(value);
+  return asksBeforeActing && (blocksDirectAction || defersActionUntilAfterQuestion);
 }
 
 export function agentDirectorReviewRevisionCanFormProposalDirectly(value: string) {

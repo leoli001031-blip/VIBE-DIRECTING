@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "phase": "P12-D",
+  "date": "2026-07-22",
+  "observationKind": "internal_owner_dogfooding",
+  "baselineHead": "a0c3f22",
+  "status": "pass_after_p1_fixes",
+  "gateLabels": {
+    "internalDogfooding": "P12-D internal dogfooding PASS",
+    "externalCreator": "External creator usability NOT VERIFIED",
+    "realProvider": "Real Provider execution NOT VERIFIED",
+    "publicDistribution": "Public distribution NOT CLAIMED"
+  },
+  "preregisteredPlan": {
+    "path": "docs/agent-first-p12-d-internal-dogfooding-plan-20260722.md",
+    "sha256": "14c2c7f0d98eab946a25ae82dd8610ccc8fcbdf04a0e9f66b60c43bb6a617b0f"
+  },
+  "executionBoundary": {
+    "frontendDevServerStarted": false,
+    "projectSaveConfirmed": false,
+    "referenceGenerationConfirmed": false,
+    "videoGenerationConfirmed": false,
+    "promotionConfirmed": false,
+    "deliveryOrExportConfirmed": false,
+    "textProviderCalls": 0,
+    "mediaProviderCalls": 0,
+    "providerRetryCount": 0,
+    "isolatedHomeUsed": true,
+    "providerLockUsed": true,
+    "providerTraceFiles": 0
+  },
+  "packagedLaunch": {
+    "candidate": "release/mac-arm64/Vibe Director Studio.app",
+    "computerUseBundle": "release/mac-arm64/Vibe Director Studio.app",
+    "launchPreparation": "local_adhoc_package_then_xattr_clear",
+    "appAsarSha256": "3b73eab7833945c9b6947ee198d59b5658fc2def17f9b517631b8a35db090ada",
+    "mainExecutableSha256": "6834f0da651f3067dfacec4a80c132b124586471c4f9e239a330b4be1d0ffde9",
+    "packagedLaunchContract": "pass",
+    "packageSmoke": "pass",
+    "distributionClaim": "local_adhoc_only"
+  },
+  "tasks": [
+    {
+      "id": "d1_restrained_visual_metaphor",
+      "creatorMessagesSent": 2,
+      "visibleClarificationTurns": 0,
+      "confirmationBoundariesReached": 1,
+      "currentRightRailTasksAfterStabilization": 1,
+      "staleTaskVisible": false,
+      "elapsedSeconds": null,
+      "elapsedMeasurement": "not_instrumented",
+      "cleanRerunProjectFiles": 0,
+      "cleanRerunRuntimeFiles": 0,
+      "cleanRerunProviderCalls": 0,
+      "result": "pass_after_p1_fixes",
+      "fixedP1": [
+        "Compact style language and delegated shot-count planning were initially emitted as story beats.",
+        "The natural two-target revision initially collapsed the second-shot and final-shot requirements into one row.",
+        "A visibility constraint was initially previewed as deleting the word 'appears'."
+      ],
+      "finalState": {
+        "shotCount": 3,
+        "secondShot": "blue reflected light passes over the clothes without showing a complete beach",
+        "finalShot": "the girl does not light the match and returns it to her pocket",
+        "currentTask": "确认这版故事",
+        "saveExecuted": false,
+        "generationExecuted": false
+      },
+      "remainingP2": [
+        "The second-shot local scene label still resolves to 海边 instead of the laundry reflection context.",
+        "The wet match is not surfaced in the structured props field."
+      ],
+      "evidence": [
+        "01-d1-new-story-preview.jpeg",
+        "02-d1-style-and-planning-leak-p1.jpeg",
+        "03-d1-parser-fix-packaged-pass.jpeg",
+        "04-d1-multi-target-collapse-p1.jpeg",
+        "05-d1-multi-target-preview-pass.jpeg",
+        "06-d1-multi-target-result-pass.jpeg"
+      ]
+    },
+    {
+      "id": "d2_memory_like_ambiguity",
+      "creatorMessagesSent": 3,
+      "visibleClarificationTurns": 1,
+      "confirmationBoundariesReached": 2,
+      "currentRightRailTasksAfterStabilization": 1,
+      "staleTaskVisible": false,
+      "elapsedSeconds": null,
+      "elapsedMeasurement": "not_instrumented",
+      "cleanRerunProjectFiles": 0,
+      "cleanRerunRuntimeFiles": 0,
+      "cleanRerunProviderCalls": 0,
+      "result": "pass_after_p1_fixes",
+      "fixedP1": [
+        "The delegated phrase 镜头怎么拆你决定 initially leaked into the story draft.",
+        "The natural request 先问我一个关键问题，再动草案 initially routed directly to draft modification instead of Clarify.",
+        "The clarified ending initially replaced the protected basket-shadow action.",
+        "The phrase 天空倒影 was initially misclassified as the unrelated scene 山路上空."
+      ],
+      "finalState": {
+        "shotCount": 2,
+        "clarificationMode": "conversation_only",
+        "updatedAction": "用菜篮挡光，鱼就看不见了，水洼只剩天空倒影",
+        "currentTask": "确认这版故事",
+        "clarificationVisible": false,
+        "saveExecuted": false,
+        "generationExecuted": false
+      },
+      "remainingP2": [
+        "The local draft does not yet identify 菜市场 as a structured scene.",
+        "The basket and transparent fish are not surfaced as structured prop candidates."
+      ],
+      "evidence": [
+        "07-d2-delegated-shot-leak-p1.jpeg",
+        "08-d2-natural-clarify-misroute-p1.jpeg",
+        "09-d2-natural-clarify-pass.jpeg",
+        "10-d2-freeform-proposal-result.jpeg",
+        "11-d2-protected-action-pass.jpeg"
+      ]
+    },
+    {
+      "id": "d3_selected_shot_deictic_revision",
+      "creatorMessagesSent": 2,
+      "visibleClarificationTurns": 0,
+      "confirmationBoundariesReached": 1,
+      "currentRightRailTasksAfterStabilization": 1,
+      "staleTaskVisible": false,
+      "elapsedSeconds": null,
+      "elapsedMeasurement": "not_instrumented",
+      "cleanRerunProjectFiles": 0,
+      "cleanRerunRuntimeFiles": 0,
+      "cleanRerunProviderCalls": 0,
+      "result": "pass_with_p2_copy_friction",
+      "finalState": {
+        "shotCount": 2,
+        "selectedShot": "1-1",
+        "updatedShot": "1-1",
+        "updatedAction": "他擦完窗后停一下，不要让倒影立刻消失",
+        "unchangedFinalAction": "最后只剩他自己的倒影，但现实车厢从头到尾都是空的",
+        "currentTask": "确认这版故事",
+        "saveExecuted": false,
+        "generationExecuted": false
+      },
+      "remainingP2": [
+        "The pre-send summary describes the temporal constraint as 去掉：让倒影立刻消失 even though the applied edit is correct.",
+        "The applied action retains the command prefix 只改动作：."
+      ],
+      "evidence": [
+        "12-d3-selected-shot-before.jpeg",
+        "13-d3-preview-copy-p2.jpeg",
+        "14-d3-selected-shot-pass.jpeg"
+      ]
+    }
+  ],
+  "evidenceSha256": {
+    "01-d1-new-story-preview.jpeg": "865e5af6b15d046f4dcfdb7b67bac7e0d2afe7846a931b29fbd93598523232e8",
+    "02-d1-style-and-planning-leak-p1.jpeg": "d1c5d4b5a4344887d3a16af0eb29b83f95c04d59a055ec8d301b0cefad7a5d6b",
+    "03-d1-parser-fix-packaged-pass.jpeg": "76d4dcf5203c2e86c21cb0f1b3a550ffed06db35fb347ae564c12b95b5097d7e",
+    "04-d1-multi-target-collapse-p1.jpeg": "e083e3a7645b6110b5c39fc7c12f09c2687e6fe351d72470dde9800fdd71075c",
+    "05-d1-multi-target-preview-pass.jpeg": "68addca2a1da3a6ec7195669ec434defc8eed2b0a3baaff8f2da6d292bde7fe2",
+    "06-d1-multi-target-result-pass.jpeg": "89d009652f2a4277698ae83d0c6b1c45e05b72de917b563d40e6ab081bf4889b",
+    "07-d2-delegated-shot-leak-p1.jpeg": "82310f3adf903e3e2540e540dc2902dd8cbe030dc0ad21be50c253c6fc332faf",
+    "08-d2-natural-clarify-misroute-p1.jpeg": "2f3aeaca4543bd3fa06b0be3924ea02c141b16fd3daff1817ed1a693b79e71b7",
+    "09-d2-natural-clarify-pass.jpeg": "978f38e12a327846c878551cf383d2a8639826d7cfc199a62a0da8bd1ee0df0e",
+    "10-d2-freeform-proposal-result.jpeg": "99e7fd8cc74ed3616731409d1386480941cbaa2114ab1e95edb2c27894f40abf",
+    "11-d2-protected-action-pass.jpeg": "3446c6879309d5e650128831891f57dd5189f2ccda52f99b40d7a3fdd9ec2dd3",
+    "12-d3-selected-shot-before.jpeg": "b13174a635e8a8492ef930f1268c83bbfaea7598ad26f56a6fd00f328f2f0617",
+    "13-d3-preview-copy-p2.jpeg": "c28b9d7e5ea24f5dc70ad40d587ddfdb3df31ae4bf4713d6d7975fcdfb24cb4f",
+    "14-d3-selected-shot-pass.jpeg": "229abbfa5d04c21056b17f62c34d7d286012accee2d799974c622db6d3a715d4"
+  },
+  "verification": [
+    "npm run director-ai-storyboard-planner:test",
+    "npm run agent-director-clarification:test",
+    "npm run new-video-start-contract:test",
+    "npm run minimal-agent-p1:test",
+    "npm run minimal-ui:test",
+    "npm run runtime-api-provider-call-lock:test",
+    "npm run current-project-ui-closed-loop:test",
+    "npm run packaged-launch-contract:test",
+    "npm run package:smoke",
+    "npx tsc --noEmit --pretty false",
+    "git diff --check"
+  ]
+}

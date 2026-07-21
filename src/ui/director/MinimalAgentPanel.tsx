@@ -3021,21 +3021,26 @@ function parseReadyDraftTargetShotNumber(value: string) {
 function cleanReadyDraftTargetShotRevisionText(value: string) {
   const targetShotPattern = String.raw`(?:第\s*${readyDraftTargetShotNumberToken}|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`;
   const targetPrefixPattern = new RegExp(String.raw`^(?:(?:这个|这段|这一镜|这镜|这里)?\s*(?:不对|不行|不准确|不太对)\s*[，,。；;\s]*)?(?:把|将|让|请把|请将)?\s*${targetShotPattern}\s*(?:放到|放在|移到|移至|挪到|换到|换至|改成|改为|调整成|调整为|换成|替换成|变成|变为|做成)?\s*`, "iu");
+  const inlineTargetPattern = new RegExp(String.raw`([，,；;]\s*)(?:只在|在)?\s*${targetShotPattern}\s*`, "iu");
   const selectedTargetPrefixPattern = /^(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?\s*(?:(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)\s*)?[，,。；;\s]*(?:场景|地点|环境)?\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)?\s*/iu;
   const sceneOnlyControlPattern = /(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/giu;
   const safetyClausePattern = /(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:参考图|参考|视频|提交|发送|生成)[^，,。；;]*/giu;
   const workflowControlClausePattern = /(?:先)?(?:形成|进入|给出|给我|等待)?\s*(?:修改)?确认(?:流程|卡|状态)?|(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:保存|写入|素材|导出)[^，,。；;]*/giu;
+  const audioControlClausePattern = /(?:不要|别|不|不用|不加|别加|不要加)\s*(?:旁白|配音|解说|字幕|音乐|BGM)[^，,。；;]*/giu;
   const repetitionControlPattern = new RegExp(String.raw`(?:不要|别|不)(?:再)?重复(?:第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|上一镜|前一镜|这个镜头)[^，,。；;]*`, "giu");
   return cleanStoryText(stripDirectorAgentPermissionControlPhrases(value))
     .replace(safetyClausePattern, " ")
     .replace(workflowControlClausePattern, " ")
     .replace(repetitionControlPattern, " ")
     .replace(targetPrefixPattern, " ")
+    .replace(inlineTargetPattern, "$1")
+    .replace(/^(?:最后|末尾|结尾|最终)\s*(?:只)?(?:保留|保持|留下|留下来)\s*/u, " ")
     .replace(selectedTargetPrefixPattern, " ")
     .replace(sceneOnlyControlPattern, " ")
     .replace(/^(?:场景|地点|环境)\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
     .replace(/^(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
     .replace(/(?:^|[，,。；;\s])(?:图或|参考图或|参考或)(?=$|[，,。；;\s])/giu, " ")
+    .replace(audioControlClausePattern, " ")
     .replace(/[，,]\s*[，,]+/gu, "，")
     .replace(/^[，,。；;\s]+|[，,。；;\s]+$/gu, "")
     .trim();
@@ -3052,6 +3057,7 @@ function readyDraftRemovalTargetFromText(value: string) {
     if (/(?:只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/iu.test(clause)) continue;
     const match = clause.match(/(?:不要再提|不要|别|不用|去掉|移除|删掉|删除)\s*([^，,。；;!?！？\s]{1,16})/u);
     const target = cleanStoryText(match?.[1] || "").replace(/^(?:这?个|那?个)/u, "");
+    if (/^(?:完整)?出现$/u.test(target)) continue;
     if (target) return target;
   }
   return "";
@@ -3099,7 +3105,8 @@ function readyDraftSelectedShotTargetFromAgentContext(context?: {
 function readyDraftTargetShotRevisionFromIntent(value: string, shotCount: number, selectedTarget?: { targetLabel: string; targetFact: string }) {
   const text = cleanStoryText(value);
   if (!text) return undefined;
-  const tailMatch = text.match(/(?:把|将|让|请把|请将)?\s*(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu);
+  const tailMatch = text.match(/(?:把|将|让|请把|请将)?\s*(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu)
+    || text.match(/(?:^|[，,。；;])\s*(?:最后|末尾|结尾|最终)(?=\s*(?:只)?(?:保留|保持|留下|留下来))/u);
   const ordinalMatch = text.match(new RegExp(String.raw`(?:把|将|让|请把|请将)?\s*第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`, "iu"));
   const ordinalNumber = ordinalMatch ? parseReadyDraftTargetShotNumber(ordinalMatch[1] || "") : undefined;
   const selectedMatch = selectedTarget && readyDraftIntentTargetsSelectedShot(text);
@@ -3118,7 +3125,10 @@ function readyDraftTargetShotRevisionFromIntent(value: string, shotCount: number
     : tailMatch && shotCount > 0
       ? `${targetLabel}（第 ${shotCount} 镜）`
       : targetLabel;
-  const changeFact = revisionText
+  const preserveTargetShot = /^(?:最后|末尾|结尾|最终)\s*(?:只)?(?:保留|保持|留下|留下来)/u.test(text);
+  const changeFact = preserveTargetShot
+    ? "保留原镜头"
+    : revisionText
     ? removalOnly
       ? `去掉：${removalTarget}`
       : sceneMove
@@ -3144,7 +3154,7 @@ function readyDraftTargetShotRevisionFromIntent(value: string, shotCount: number
 
 function readyDraftExplicitMultiTargetShotRevisionClauses(value: string, shotCount: number) {
   const text = cleanStoryText(value);
-  const markerPattern = new RegExp(String.raw`(?:把|将|让|请把|请将)?\s*(?:第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜))`, "giu");
+  const markerPattern = new RegExp(String.raw`(?:把|将|让|请把|请将)?\s*(?:(?:只在|在)?\s*第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)(?=\s*(?:只)?(?:保留|保持|留下|留下来)))`, "giu");
   const markers = Array.from(text.matchAll(markerPattern))
     .filter((match) => {
       const start = match.index ?? 0;
@@ -3166,7 +3176,7 @@ function readyDraftExplicitMultiTargetShotRevisionClauses(value: string, shotCou
   if (new Set(markers.map((marker) => marker.targetNumber)).size < 2) return [];
   return markers.map((marker, index) => ({
     targetNumber: marker.targetNumber,
-    text: cleanStoryText(text.slice(marker.start, markers[index + 1]?.start)
+    text: cleanStoryText(text.slice(index === 0 ? 0 : marker.start, markers[index + 1]?.start)
       .replace(/^[，,。；;!?！？\s]+|[，,。；;!?！？\s]+$/gu, "")),
   })).filter((clause) => clause.text);
 }

@@ -51,6 +51,16 @@ assert(
   "a freeform reply to an explicit clarification request must not carry the old meta instruction into the proposal intent",
 );
 
+const naturalDeferredClarification = buildAgentDirectorClarificationTurn({
+  userIntent: "我还没想清楚“像记忆”应该靠光线还是动作。你先问我一个关键问题，再动草案。",
+  selectedShotId: "pending-new-video-draft",
+  targetLabel: "当前草案",
+  createdAt: "2026-07-22T12:10:00.000Z",
+});
+assert(naturalDeferredClarification, "a natural ask to question first and edit afterward must enter clarification");
+assert(naturalDeferredClarification.selectedShotId === "pending-new-video-draft", "pending draft clarification must keep its draft target");
+assert(naturalDeferredClarification.boundary.includes("不会写项目"), "natural deferred clarification must preserve the conversation-only boundary");
+
 const entries = buildAgentDirectorClarificationTimelineEntries(clarification, "2026-07-17T01:00:00.000Z");
 const restored = activeAgentDirectorClarificationFromTimeline(entries);
 assert(restored?.id === clarification.id, "an unresolved clarification should restore from the Agent timeline");

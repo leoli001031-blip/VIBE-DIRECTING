@@ -148,6 +148,22 @@ assert(delegatedShotArrangementBrief.storyText.includes("只把自己的座位�
 assert(!delegatedShotArrangementBrief.storyText.includes("镜头怎么拆你来安排"), "inverted delegated shot planning must not become a storyboard beat");
 assert(delegatedShotArrangementBrief.directiveText.includes("镜头怎么拆你来安排"), "inverted delegated shot planning should remain available as planning preference text");
 
+const internalDogfoodLaundryBrief = splitCreativePlanningText("我想拍一个 12 秒短片：凌晨自助洗衣店，女孩把一根被雨淋湿的火柴放进烘干机。滚筒转起来后，墙上短暂掠过夏日海边的光影。她没有点火，只把火柴收回口袋。安静、克制，不要解释。镜头数量由你决定，先只整理故事，不保存也不生成。");
+assert(internalDogfoodLaundryBrief.storyText.includes("女孩把一根被雨淋湿的火柴放进烘干机"), "internal dogfood brief must keep the opening action");
+assert(internalDogfoodLaundryBrief.storyText.includes("墙上短暂掠过夏日海边的光影"), "internal dogfood brief must keep the reflected-light beat");
+assert(internalDogfoodLaundryBrief.storyText.includes("只把火柴收回口袋"), "internal dogfood brief must keep the ending action");
+assert(!internalDogfoodLaundryBrief.storyText.includes("安静、克制"), "compact style direction must not become a storyboard beat");
+assert(!internalDogfoodLaundryBrief.storyText.includes("镜头数量由你决定"), "delegated shot quantity must not become a storyboard beat");
+assert(!internalDogfoodLaundryBrief.storyText.includes("不保存也不生成"), "save and generation boundaries must not become storyboard content");
+assert(internalDogfoodLaundryBrief.directiveText.includes("安静、克制"), "compact style direction should remain available as planning preference text");
+assert(internalDogfoodLaundryBrief.directiveText.includes("镜头数量由你决定"), "delegated shot quantity should remain available as planning preference text");
+
+const internalDogfoodMarketBrief = splitCreativePlanningText("做一个 8 秒短片：清晨菜市场收摊，老人看到一尾透明的小鱼在水洼里游。他用空菜篮挡住阳光，鱼就看不见了。不要解释成魔法。镜头怎么拆你决定，先只整理故事，不保存也不生成。");
+assert(internalDogfoodMarketBrief.storyText.includes("老人看到一尾透明的小鱼在水洼里游"), "natural delegated-shot brief must keep the opening action");
+assert(internalDogfoodMarketBrief.storyText.includes("他用空菜篮挡住阳光，鱼就看不见了"), "natural delegated-shot brief must keep the second action");
+assert(!internalDogfoodMarketBrief.storyText.includes("镜头怎么拆你决定"), "delegated shot planning without 来 must not become a storyboard beat");
+assert(internalDogfoodMarketBrief.directiveText.includes("镜头怎么拆你决定"), "delegated shot planning without 来 should remain available as planning preference text");
+
 const minimumShotPlanningBrief = splitCreativePlanningText("做一个 8 秒短片：雨停后的游乐园，保洁员在旋转木马下捡到一只还在发光的纸鹤。整理成最少的镜头，先别生成也别保存。");
 assert(minimumShotPlanningBrief.storyText.includes("雨停后的游乐园"), "minimum-shot planning must keep the actual story setting");
 assert(minimumShotPlanningBrief.storyText.includes("捡到一只还在发光的纸鹤"), "minimum-shot planning must keep the actual story action");

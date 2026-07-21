@@ -536,9 +536,14 @@ check(
   /function targetedShotRevisionSummary\(rows: NewVideoStoryboardShot\[\], feedbackText: string,\s*selectedRowId\?: string\)/.test(newVideoStartSource)
     && /targetShotRevisionIndexForRows\(feedbackText,\s*rows,\s*selectedRowId\)/.test(targetedShotRevisionSummary)
     && /cleanTargetShotRevisionText\(feedbackText\)/.test(targetedShotRevisionSummary)
+    && /function protectedShotActionFromFeedback[\s\S]*保留\|保持\|留下\|留下来[\s\S]*用\|把\|将\|让[\s\S]*动作/.test(newVideoStartSource)
+    && /function revisionTextWithProtectedAction[\s\S]*currentAction\.includes\(protectedAction\)[\s\S]*currentAction && !revisionText\.includes\(currentAction\)/.test(newVideoStartSource)
+    && /const protectedAction = protectedShotActionFromFeedback\(feedbackText\)[\s\S]*revisionTextWithProtectedAction\(rawRevisionText, cleanText\(row\.primaryAction\), protectedAction\)/.test(applyTargetedShotRevisionRows)
+    && /const primaryAction = sceneOnlyRevision[\s\S]*protectedAction[\s\S]*\? revisionText[\s\S]*primaryActionFromText\(revisionText\)/.test(applyTargetedShotRevisionRows)
+    && /revisionTextWithProtectedAction\([\s\S]*cleanText\(rows\[targetIndex\]\?\.primaryAction\)[\s\S]*protectedShotActionFromFeedback\(feedbackText\)/.test(targetedShotRevisionSummary)
     && /const scene = removalRequest \|\| !feedbackExplicitlyRequestsSceneRevision\(feedbackText,\s*revisionText\)[\s\S]*sceneFromShotText\(revisionText,\s*sceneLabels,\s*targetIndex\)/.test(targetedShotRevisionSummary)
     && /targetLabel = `第 \$\{targetIndex \+ 1\} 镜`/.test(targetedShotRevisionSummary)
-    && /changeLabel = scene[\s\S]*场景改到\$\{scene\}/.test(targetedShotRevisionSummary)
+    && /changeLabel = preserveTargetShot[\s\S]*保留原镜头[\s\S]*scene[\s\S]*场景改到\$\{scene\}/.test(targetedShotRevisionSummary)
     && /feedbackRequestsPreserveShotAction\(feedbackText\)/.test(targetedShotRevisionSummary)
     && /保留原动作/.test(targetedShotRevisionSummary)
     && /removalChangeLabel[\s\S]*去掉\$\{excludedProps\.join\("、"\)\}/.test(targetedShotRevisionSummary)
@@ -551,6 +556,12 @@ check(
   failures,
 );
 check(
+  !/\[\/天空\|航拍\|山顶方向\/u, "山路上空"\]/.test(newVideoStartSource)
+    && /山路\|弯道\|发卡弯\|护栏[\s\S]*天空[\s\S]*山路上空/.test(newVideoStartSource),
+  "A generic sky reflection must not be misclassified as a mountain-road aerial scene.",
+  failures,
+);
+check(
   /matchAll\(markerPattern\)/.test(explicitMultiTargetShotRevisionClauses)
     && /start === 0 \|\| [^\n]*\.test\(cleaned\[start - 1\]/.test(explicitMultiTargetShotRevisionClauses)
     && /new Set\(markers\.map\(\(marker\) => marker\.targetIndex\)\)\.size < 2/.test(explicitMultiTargetShotRevisionClauses)
@@ -560,7 +571,11 @@ check(
     && /summaries\.map\(\(summary\) => `\$\{summary\.targetLabel\}：\$\{summary\.changeLabel\}`\)/.test(multiTargetedShotRevisionSummary)
     && /不会把后一个镜头的要求写进前一个镜头/.test(multiTargetedShotRevisionSummary)
     && /workflowControlClausePattern/.test(cleanTargetShotRevisionText)
-    && /repetitionControlPattern/.test(cleanTargetShotRevisionText),
+    && /repetitionControlPattern/.test(cleanTargetShotRevisionText)
+    && /(?:只在\|在)/.test(explicitMultiTargetShotRevisionClauses)
+    && /保留\|保持\|留下/.test(explicitMultiTargetShotRevisionClauses)
+    && /index === 0 \? 0 : marker\.start/.test(explicitMultiTargetShotRevisionClauses)
+    && /feedbackOnlyPreservesTargetShot/.test(applyTargetedShotRevisionRows),
   "Explicit multi-shot feedback must isolate each target clause, suppress workflow/repetition controls, and report every changed shot without inventing a scene move.",
   failures,
 );
