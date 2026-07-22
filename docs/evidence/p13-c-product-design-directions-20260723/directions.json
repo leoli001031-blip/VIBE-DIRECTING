@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "vibe_director_p13_c_design_directions/1.0.0",
+  "generatedAt": "2026-07-23",
+  "status": "visual_options_ready",
+  "productionUiImplementationStarted": false,
+  "appProviderCalls": 0,
+  "productDesignImageGenCalls": 3,
+  "targetSurface": "macOS desktop app",
+  "targetState": {
+    "projectId": "p13_provider_canary",
+    "shotId": "P13S01",
+    "currentTaskStep": "submit_video",
+    "currentTaskLabel": "复核视频",
+    "mediaStatus": "needs_review",
+    "approved": false,
+    "promoted": false,
+    "delivered": false,
+    "exported": false
+  },
+  "references": [
+    "docs/evidence/p10-d-clarification-proposal-20260717/01-packaged-clarification.png",
+    "docs/evidence/p10-d-clarification-proposal-20260717/02-packaged-proposal.png",
+    "docs/evidence/p10-d-paid-confirmation-running-20260717/02-packaged-running.png",
+    "docs/evidence/p13-a-provider-canary-20260723/packaged-needs-review.png",
+    "docs/evidence/p13-a-provider-canary-20260723/P13S01-image2-reference-1280x720.png"
+  ],
+  "directions": [
+    {
+      "displayOrder": 1,
+      "id": "turn_ledger",
+      "name": "Turn Ledger",
+      "file": "01-turn-ledger.png",
+      "width": 1487,
+      "height": 1058,
+      "sha256": "6bd1968247c8fda79ce5ad7330ecd4826a178e6132b4176dc99ed8ec0cdd7c7c",
+      "primaryIdea": "A continuous Director conversation with the current bounded decision first and prior turns compressed into evidence history."
+    },
+    {
+      "displayOrder": 2,
+      "id": "artifact_dock",
+      "name": "Artifact Dock",
+      "file": "02-artifact-dock.png",
+      "width": 1487,
+      "height": 1058,
+      "sha256": "c2dc90187a71769ac54393cfcd89d0d6cfe35d1f9a24821f2e69213c8595fd37",
+      "primaryIdea": "A media-first artifact canvas with passive project facts and one context-bound Director decision dock."
+    },
+    {
+      "displayOrder": 3,
+      "id": "session_timeline",
+      "name": "Session Timeline",
+      "file": "03-session-timeline.png",
+      "width": 1487,
+      "height": 1058,
+      "sha256": "b78a101f2c74070aac1735f664d461a5a386f0996de606714f9324181e64ec68",
+      "primaryIdea": "A directing-session phase line where only the current structured turn expands and future gates stay visibly separate."
+    }
+  ],
+  "selectionRequiredBeforeImplementation": true
+}
