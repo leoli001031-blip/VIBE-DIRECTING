@@ -5,6 +5,7 @@ let runtimeApiBaseUrl = runtimeApiBaseUrlArg?.split("=").slice(1).join("=") || "
 let runtimeApiToken = "";
 let runtimeApiBaseUrlStarting: Promise<string> | null = null;
 const currentProjectBindingArg = process.argv.find((arg) => arg.startsWith("--vibe-current-project-binding="));
+const browserDraftBootstrapArg = process.argv.find((arg) => arg.startsWith("--vibe-browser-draft-bootstrap="));
 
 function currentProjectBindingBootstrap() {
   if (!currentProjectBindingArg) return undefined;
@@ -16,6 +17,19 @@ function currentProjectBindingBootstrap() {
     return undefined;
   }
 }
+
+function initialBrowserDraftBootstrap() {
+  if (!browserDraftBootstrapArg) return {};
+  try {
+    const encoded = browserDraftBootstrapArg.split("=").slice(1).join("=");
+    const parsed = JSON.parse(decodeURIComponent(encoded)) as Record<string, unknown>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+let browserDraftRecoveryPointers = initialBrowserDraftBootstrap();
 
 async function ensureRuntimeApiBaseUrl() {
   if (runtimeApiBaseUrl) return runtimeApiBaseUrl;
@@ -52,6 +66,17 @@ contextBridge.exposeInMainWorld("vibeRuntime", {
   createLocalProject: (input?: { displayName?: string }) => ipcRenderer.invoke("project:createLocal", input),
   rememberProject: (projectRoot: string) => ipcRenderer.invoke("project:remember", projectRoot),
   forgetProject: (projectRoot: string) => ipcRenderer.invoke("project:forget", projectRoot),
+  browserDraftBootstrap: () => ({ ...browserDraftRecoveryPointers }),
+  browserDraftFileExists: (input: { storageKey: string; path: string }) => ipcRenderer.invoke("browserDraft:fileExists", input),
+  browserDraftReadFile: (input: { storageKey: string; path: string }) => ipcRenderer.invoke("browserDraft:readFile", input),
+  browserDraftWriteFile: (input: { storageKey: string; path: string; content: string }) => ipcRenderer.invoke("browserDraft:writeFile", input),
+  browserDraftDeleteFile: (input: { storageKey: string; path: string }) => ipcRenderer.invoke("browserDraft:deleteFile", input),
+  browserDraftForget: (storageKey: string) => ipcRenderer.invoke("browserDraft:forget", storageKey),
+  browserDraftRememberPointer: async (input: { kind: "active_project" | "pending_intake"; storageKey?: string }) => {
+    const result = await ipcRenderer.invoke("browserDraft:rememberPointer", input) as Record<string, unknown>;
+    browserDraftRecoveryPointers = result && typeof result === "object" ? result : {};
+    return { ...browserDraftRecoveryPointers };
+  },
   exportDiagnostics: () => ipcRenderer.invoke("diagnostics:export"),
   sandboxWatch: (watchDir: string) => ipcRenderer.invoke("sandbox:watch", watchDir),
   sandboxUnwatch: (watchId: string) => ipcRenderer.invoke("sandbox:unwatch", watchId),

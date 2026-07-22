@@ -155,14 +155,18 @@ import {
 import type { AgentVideoExecutionReceipt } from "./core/agentVideoExecutionAdapter";
 import { EXPORT_DELIVERY_CONFIRMATION_SCHEMA_VERSION } from "./core/exportDeliveryGate";
 import { buildProviderReviewPromotionTransaction } from "./core/providerReviewPromotion";
+import { recoverPendingNewVideoIntake } from "./core/newVideoIntakeRecovery";
 import {
   browserProjectVibeDraftStorageKeyPrefix as browserProjectDraftStorageKeyPrefix,
-  forgetActiveBrowserProjectVibeDraftStorageKey,
-  forgetBrowserProjectVibeDraft,
+  clearPersistedActiveBrowserProjectVibeDraftStorageKey,
+  clearPersistedPendingBrowserNewVideoIntakeStorageKey,
+  forgetBrowserProjectVibeDraftPersisted,
   openProjectVibeDraft,
+  persistActiveBrowserProjectVibeDraftStorageKey,
+  persistPendingBrowserNewVideoIntakeStorageKey,
   projectVibeDraftTargetId as buildProjectVibeDraftTargetId,
   readActiveBrowserProjectVibeDraftStorageKey,
-  rememberActiveBrowserProjectVibeDraftStorageKey,
+  readPendingBrowserNewVideoIntakeStorageKey,
   saveProjectVibeDraft,
   type ProjectVibeDraftTarget,
 } from "./project/projectVibeDraftStore";
@@ -1956,23 +1960,28 @@ function projectIdFromLocalRoot(projectRoot?: string) {
   return `${slug || "local_project"}_${suffix || "0"}`;
 }
 
-function initialBrowserProjectDraftStorageKey() {
-  if (typeof window === "undefined") return `${browserProjectDraftStorageKeyPrefix}:session`;
+function initialBrowserProjectDraftSession(): {
+  storageKey: string;
+  recoveryMode?: "confirmed_project" | "pending_intake";
+} {
+  if (typeof window === "undefined") return { storageKey: `${browserProjectDraftStorageKeyPrefix}:session` };
   const params = new URLSearchParams(window.location.search);
   const caseId = params.get("case")?.trim();
   const explicitFresh = isFreshProjectSessionRequested();
   const explicitSession = caseId || explicitFresh || params.has("ts") || params.has("session");
   if (!explicitSession) {
     const activeStorageKey = readActiveBrowserProjectVibeDraftStorageKey();
-    if (activeStorageKey) return activeStorageKey;
+    if (activeStorageKey) return { storageKey: activeStorageKey, recoveryMode: "confirmed_project" };
+    const pendingIntakeStorageKey = readPendingBrowserNewVideoIntakeStorageKey();
+    if (pendingIntakeStorageKey) return { storageKey: pendingIntakeStorageKey, recoveryMode: "pending_intake" };
   }
   const sessionId = explicitFresh
     ? String(Date.now())
     : params.get("ts")?.trim() || params.get("session")?.trim() || String(Date.now());
   if (explicitSession) {
-    return `${browserProjectDraftStorageKeyPrefix}:session:${caseId || "fresh"}:${sessionId}`;
+    return { storageKey: `${browserProjectDraftStorageKeyPrefix}:session:${caseId || "fresh"}:${sessionId}` };
   }
-  return `${browserProjectDraftStorageKeyPrefix}:session:${sessionId}`;
+  return { storageKey: `${browserProjectDraftStorageKeyPrefix}:session:${sessionId}` };
 }
 
 function isFreshProjectSessionRequested() {
@@ -2487,7 +2496,9 @@ function App() {
   const [recentProjectSelections, setRecentProjectSelections] = useState<RememberedProjectSelection[]>(() => readRecentProjectSelections());
   const rememberedProjectRestoreAttemptedRef = useRef(false);
   const freshProjectSessionResetAttemptedRef = useRef(false);
-  const browserProjectDraftStorageKeyRef = useRef(initialBrowserProjectDraftStorageKey());
+  const initialBrowserProjectDraftSessionRef = useRef(initialBrowserProjectDraftSession());
+  const browserProjectDraftStorageKeyRef = useRef(initialBrowserProjectDraftSessionRef.current.storageKey);
+  const browserProjectDraftRecoveryModeRef = useRef(initialBrowserProjectDraftSessionRef.current.recoveryMode);
   const selectedProjectIsBrowserDraft = projectFileSelection.status === "selected" && isBrowserDraftProjectRoot(projectFileSelection.projectRoot);
   const selectedProjectIsLocalProject = projectFileSelection.status === "selected" && !selectedProjectIsBrowserDraft;
   const runtimeBindingIsBrowserDraft = runtimeProjectBinding.status === "bound" && isBrowserDraftProjectRoot(runtimeProjectBinding.projectRoot);
@@ -2498,7 +2509,11 @@ function App() {
   const freshProjectSessionPendingSelection = freshProjectSessionRequested && projectFileSelection.status !== "selected";
   const selectedProjectMatchesRuntimeBinding = projectFileSelection.status === "selected"
     && normalizeProjectRootForUiCompare(projectFileSelection.projectRoot) === normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot);
-  const selectedProjectUsesBrowserDraftStorage = selectedProjectIsBrowserDraft
+  const browserProjectDraftColdRestoreActive = Boolean(browserProjectDraftRecoveryModeRef.current)
+    && projectFileSelection.status !== "selected"
+    && runtimeProjectBinding.status !== "loading"
+    && !runtimeBindingIsLocalProject;
+  const selectedProjectUsesBrowserDraftStorage = (selectedProjectIsBrowserDraft || browserProjectDraftColdRestoreActive)
     && !(runtimeBindingIsLocalProject && selectedProjectMatchesRuntimeBinding);
   const browserDraftHasNoLocalProject = !runtimeBindingIsLocalProject
     && (
@@ -3389,6 +3404,22 @@ function App() {
           projectRoot: undefined,
         });
         if (cancelled) return;
+        if (browserProjectDraftRecoveryModeRef.current === "pending_intake") {
+          const pendingIntakeRecovery = timelineOpen.ok
+            ? recoverPendingNewVideoIntake(timelineOpen.timeline.entries)
+            : { status: "invalid" as const, reason: timelineOpen.status };
+          if (pendingIntakeRecovery.status !== "restorable") {
+            await clearPersistedPendingBrowserNewVideoIntakeStorageKey(prototypeProjectDraftTarget.storageKey);
+            if (cancelled) return;
+            browserProjectDraftRecoveryModeRef.current = undefined;
+            setRestoredAgentStagedPlanDraft(undefined);
+            setRestoredAgentActionLog([]);
+            setRestoredAgentTimelineEntries([]);
+            setRestoredAgentGenerationJobLedger(undefined);
+            setRestoredAgentReviewSelectionLedger(undefined);
+            return;
+          }
+        }
         const generationLedgerOpen = await openProjectAgentGenerationJobLedger(
           prototypeProjectDraftTarget,
           projectAgentGenerationLedgerIdentity(browserDraftProject, undefined),
@@ -3409,7 +3440,7 @@ function App() {
         }
         setRestoredAgentStagedPlanDraft(projectAgentStagedPlanDraftForProjection(stagedPlanRestore));
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
-        setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
+        setRestoredAgentTimelineEntries(timelineOpen.ok ? timelineOpen.timeline.entries : []);
         setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
         setRestoredAgentReviewSelectionLedger(reviewSelectionLedgerOpen.ok ? reviewSelectionLedgerOpen.ledger : undefined);
       }
@@ -4264,8 +4295,10 @@ function App() {
     if (!saveResult.ok) {
       throw new Error(saveResult.errors[0] || "草案保存失败");
     }
+    await clearPersistedPendingBrowserNewVideoIntakeStorageKey();
+    browserProjectDraftRecoveryModeRef.current = undefined;
     if (projectDraftUsesBrowserStorage(draftTarget, saveResult.mode)) {
-      rememberActiveBrowserProjectVibeDraftStorageKey(draftTarget.storageKey);
+      await persistActiveBrowserProjectVibeDraftStorageKey(draftTarget.storageKey);
     }
     setLoadedPrototypeProjectDraftTargetId(draftTargetId);
     if (draftTarget.projectRoot) {
@@ -5159,6 +5192,14 @@ function App() {
         console.warn("Failed to save Agent timeline entries", saveAgentTimelineResult.errors[0]);
         throw new Error(saveAgentTimelineResult.errors[0] || "agent_timeline_write_failed");
       }
+      if (!prototypeProjectDraftTarget.projectRoot) {
+        const pendingIntakeRecovery = recoverPendingNewVideoIntake(nextTimeline.entries);
+        if (pendingIntakeRecovery.status === "restorable") {
+          await persistPendingBrowserNewVideoIntakeStorageKey(prototypeProjectDraftTarget.storageKey);
+        } else {
+          await clearPersistedPendingBrowserNewVideoIntakeStorageKey(prototypeProjectDraftTarget.storageKey);
+        }
+      }
       setRestoredAgentTimelineEntries(nextTimeline.entries);
     });
   }
@@ -5313,6 +5354,7 @@ function App() {
   function agentTimelineEntriesAreContextOnly(entries: VibeAgentTimelineEntry[]) {
     return entries.every((entry) =>
       entry.id.startsWith("selection_context_")
+      || entry.id.startsWith("draft_selection_context_")
       || entry.id.startsWith("execution_boundary_")
     );
   }
@@ -5856,7 +5898,8 @@ function App() {
       throw new Error(saveResult.errors[0] || "故事保存位置没有准备成功。");
     }
     if (!prototypeProjectDraftTarget.projectRoot) {
-      forgetActiveBrowserProjectVibeDraftStorageKey(prototypeProjectDraftTarget.storageKey);
+      await clearPersistedActiveBrowserProjectVibeDraftStorageKey(prototypeProjectDraftTarget.storageKey);
+      await clearPersistedPendingBrowserNewVideoIntakeStorageKey(prototypeProjectDraftTarget.storageKey);
     }
 
     setProjectPathInput(selection.projectRoot);
@@ -6290,6 +6333,7 @@ function App() {
     if (!freshProjectSessionRequested || freshProjectSessionResetAttemptedRef.current) return undefined;
     freshProjectSessionResetAttemptedRef.current = true;
     rememberedProjectRestoreAttemptedRef.current = true;
+    browserProjectDraftRecoveryModeRef.current = undefined;
     resetAllProjectState();
     setProjectPathInput("");
     setProjectSelectionStatus("idle");
@@ -6299,6 +6343,8 @@ function App() {
 
     let cancelled = false;
     async function resetFreshProjectSession() {
+      await clearPersistedPendingBrowserNewVideoIntakeStorageKey();
+      if (cancelled) return;
       try {
         await forgetCurrentProject();
       } catch {
@@ -6338,8 +6384,9 @@ function App() {
         // Runtime binding and local remembered state are still cleared below.
       }
     } else {
-      forgetActiveBrowserProjectVibeDraftStorageKey(draftTargetToForget.storageKey);
-      forgetBrowserProjectVibeDraft(draftTargetToForget);
+      await clearPersistedActiveBrowserProjectVibeDraftStorageKey(draftTargetToForget.storageKey);
+      await clearPersistedPendingBrowserNewVideoIntakeStorageKey(draftTargetToForget.storageKey);
+      await forgetBrowserProjectVibeDraftPersisted(draftTargetToForget);
     }
     setRecentProjectSelections(clearRememberedProjectRoot(projectRootToForget));
   }

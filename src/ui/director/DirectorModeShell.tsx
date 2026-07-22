@@ -498,6 +498,7 @@ function restoredNewVideoDraftStatus(restored?: { title: string; shotCount?: num
 
 function isNewVideoSurfaceAgentTimelineEntry(entry: VibeAgentTimelineEntry) {
   return isVibeAgentIntakeTimelineEntry(entry)
+    || entry.id.startsWith("draft_selection_context_")
     || entry.id.startsWith("local_agent_")
     || entry.id.startsWith("local_project_setup_")
     || entry.id.startsWith("new_video_draft_committed_");

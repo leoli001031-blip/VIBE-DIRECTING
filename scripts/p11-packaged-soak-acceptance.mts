@@ -25,10 +25,11 @@ import {
 
 const minimumDurationMs = 60 * 60 * 1000;
 const preflightMode = process.env.VIBE_P11_SOAK_PREFLIGHT === "1";
-const requiredRestarts = preflightMode ? 2 : 10;
-const requiredStateAdvances = preflightMode ? 4 : 20;
+const p12ThirtyMinuteMode = !preflightMode && process.env.VIBE_P12_SOAK_30_MINUTES === "1";
+const requiredRestarts = preflightMode ? 2 : p12ThirtyMinuteMode ? 6 : 10;
+const requiredStateAdvances = preflightMode ? 4 : p12ThirtyMinuteMode ? 10 : 20;
 const sampleIntervalMs = preflightMode ? 5_000 : 30_000;
-const requiredDurationMs = preflightMode ? 30_000 : minimumDurationMs;
+const requiredDurationMs = preflightMode ? 30_000 : p12ThirtyMinuteMode ? 30 * 60 * 1000 : minimumDurationMs;
 
 async function sha256(path: string): Promise<string> {
   return createHash("sha256").update(await readFile(path)).digest("hex");
@@ -112,7 +113,7 @@ const durationMs = Number.isFinite(configuredDurationMs) ? Math.floor(configured
 assertAcceptance(await pathExists(executablePath), `packaged App executable is missing: ${executablePath}`);
 assertAcceptance(projectRoot.startsWith("/tmp/") || projectRoot.startsWith("/private/tmp/"), "P11-A soak project must be an isolated /tmp fixture");
 assertAcceptance(await pathExists(projectRoot), `P11-A soak project is missing: ${projectRoot}`);
-assertAcceptance(durationMs >= requiredDurationMs, `P11-A ${preflightMode ? "preflight" : "soak"} must run at least ${requiredDurationMs}ms`);
+assertAcceptance(durationMs >= requiredDurationMs, `${p12ThirtyMinuteMode ? "P12-F" : "P11-A"} ${preflightMode ? "preflight" : "soak"} must run at least ${requiredDurationMs}ms`);
 
 const projectPath = await findProjectPath(projectRoot);
 const project = JSON.parse(await readFile(projectPath, "utf8"));
@@ -229,7 +230,7 @@ async function persistEvidence(status: "running" | "preflight_pass" | "pass" | "
   await writeFile(evidencePath, `${JSON.stringify({
     schemaVersion: "p11_a_packaged_soak/1.0.0",
     status,
-    mode: preflightMode ? "preflight" : "acceptance",
+    mode: preflightMode ? "preflight" : p12ThirtyMinuteMode ? "p12_30_minute" : "acceptance",
     startedAt,
     updatedAt: new Date().toISOString(),
     elapsedMs: Date.now() - startedAtMs,
@@ -373,10 +374,15 @@ await persistEvidence(failure ? "failed" : preflightMode ? "preflight_pass" : "p
     elapsedAtLeastRequiredDuration: Date.now() - startedAtMs >= durationMs,
     forcedRestartsAtLeastRequired: restartCount >= requiredRestarts,
     stateAdvancesAtLeastRequired: stateAdvanceCount >= requiredStateAdvances,
-    ...(!preflightMode ? {
+    ...(!preflightMode && !p12ThirtyMinuteMode ? {
       elapsedAtLeast60Minutes: Date.now() - startedAtMs >= minimumDurationMs,
       forcedRestartsAtLeast10: restartCount >= 10,
       stateAdvancesAtLeast20: stateAdvanceCount >= 20,
+    } : {}),
+    ...(p12ThirtyMinuteMode ? {
+      elapsedAtLeast30Minutes: Date.now() - startedAtMs >= requiredDurationMs,
+      forcedRestartsAtLeast6: restartCount >= 6,
+      stateAdvancesAtLeast10: stateAdvanceCount >= 10,
     } : {}),
     oneCurrentTaskAtEveryObservation: observations.every((item) => item.duplicateCurrentTask === false),
     noProjectStateDrift: !projectStateDrift,
@@ -387,7 +393,7 @@ await persistEvidence(failure ? "failed" : preflightMode ? "preflight_pass" : "p
   },
 });
 
-if (failure) throw new Error(`P11-A packaged soak failed: ${failure}. Evidence: ${evidencePath}`);
+if (failure) throw new Error(`${p12ThirtyMinuteMode ? "P12-F" : "P11-A"} packaged soak failed: ${failure}. Evidence: ${evidencePath}`);
 console.log(JSON.stringify({
   status: preflightMode ? "preflight_pass" : "pass",
   evidencePath,

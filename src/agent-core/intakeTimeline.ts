@@ -26,6 +26,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
   draftScript?: string;
   draftStyle?: string;
   projectTargetMode?: string;
+  draftStoryboardRows?: unknown[];
 }): VibeAgentTimelineEntry[] {
   const suffix = compactId(input.createdAt);
   const userMessage = clean(input.userMessage) || "继续";
@@ -101,7 +102,10 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
         { label: "镜头", value: shotCount ? `${shotCount} 个` : "待拆分" },
         { label: "权限", value: permissionLabel(input.permissionMode) },
       ],
-      details,
+      details: {
+        ...details,
+        ...(input.draftStoryboardRows?.length ? { draftStoryboardRows: input.draftStoryboardRows } : {}),
+      },
     },
     {
       id: `new_video_assistant_${suffix}`,

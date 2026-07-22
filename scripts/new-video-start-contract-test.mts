@@ -96,6 +96,7 @@ const generatedAt = "2026-05-18T12:00:00.000Z";
 const newVideoStartPath = "src/ui/director/NewVideoStart.tsx";
 const newVideoStartSource = stripComments(readText(newVideoStartPath));
 const intakeTimelineSource = stripComments(readText("src/agent-core/intakeTimeline.ts"));
+const intakeRecoverySource = stripComments(readText("src/core/newVideoIntakeRecovery.ts"));
 const agentPanelProjectionSource = stripComments(readText("src/ui/director/agentPanelProjection.ts"));
 const directorAgentActionSource = stripComments(readText("src/core/directorAgentAction.ts"));
 const draftRevisionIntentSource = stripComments(readText("src/core/draftRevisionIntent.ts"));
@@ -714,8 +715,9 @@ check(
   failures,
 );
 check(
-  /function restoredReadyDraftConfirmationState\(\)[\s\S]*entry\.type === "confirmation_request"[\s\S]*entry\.status === "waiting"[\s\S]*entry\.details\?\.intakePhase === "planning_ready"[\s\S]*entry\.details\?\.intakePhase === "draft_confirmed"[\s\S]*entry\.createdAt >= latestConfirmation\.createdAt[\s\S]*entry\.type === "user_message"[\s\S]*entry\.createdAt <= latestConfirmation\.createdAt[\s\S]*buildDraftConfirmationState/.test(newVideoStartSource),
-  "Restored ready-draft confirmation must recover only the latest unconfirmed planning-ready turn from the Agent timeline.",
+  /function restoredReadyDraftConfirmationState\(\)[\s\S]*recoverPendingNewVideoIntake\(restoredAgentTimelineEntries \|\| \[\]\)[\s\S]*recovery\.status !== "restorable"[\s\S]*buildDraftConfirmationState/.test(newVideoStartSource)
+    && /const latestCreatedAt = phasedEntries\.reduce[\s\S]*latestPhase === "draft_confirmed"[\s\S]*latestPhase === "planning_ready"[\s\S]*entry\.type === "confirmation_request" && entry\.status === "waiting"/.test(intakeRecoverySource),
+  "Restored draft confirmation must use the shared recovery parser and only accept its latest unconfirmed recoverable turn.",
   failures,
 );
 check(
@@ -737,7 +739,7 @@ check(
   failures,
 );
 check(
-  /const draftTimelineDetails = \{[\s\S]*draftScript:\s*draftToSubmit\.script[\s\S]*draftStyle:\s*draftToSubmit\.style[\s\S]*projectTargetMode:\s*draftToSubmit\.projectTargetMode/.test(prepareDraft)
+  /const draftTimelineDetails = \{[\s\S]*draftScript:\s*draftToSubmit\.script[\s\S]*draftStyle:\s*draftToSubmit\.style[\s\S]*projectTargetMode:\s*draftToSubmit\.projectTargetMode[\s\S]*draftStoryboardRows:\s*localStoryboardRows/.test(prepareDraft)
     && /buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*"planning_started"[\s\S]*\.\.\.draftTimelineDetails/.test(prepareDraft)
     && /buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*"planning_ready"[\s\S]*\.\.\.draftTimelineDetails/.test(prepareDraft)
     && /buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*"planning_blocked"[\s\S]*\.\.\.draftTimelineDetails/.test(prepareDraft),
@@ -745,7 +747,7 @@ check(
   failures,
 );
 check(
-  /const feedbackTimelineDetails = \{[\s\S]*draftScript:\s*currentDraftScriptForFeedback\(planningDraft,\s*rowsForFeedbackPlanning\) \|\| planningDraft\.script \|\| feedbackText[\s\S]*draftStyle:\s*planningDraft\.style[\s\S]*projectTargetMode:\s*planningDraft\.projectTargetMode/.test(sendDiscussionFeedback)
+  /const feedbackTimelineDetails = \{[\s\S]*draftScript:\s*currentDraftScriptForFeedback\(planningDraft,\s*rowsForFeedbackPlanning\) \|\| planningDraft\.script \|\| feedbackText[\s\S]*draftStyle:\s*planningDraft\.style[\s\S]*projectTargetMode:\s*planningDraft\.projectTargetMode[\s\S]*draftStoryboardRows:\s*feedbackLocalStoryboardRows\.length \? feedbackLocalStoryboardRows : rowsForFeedbackPlanning/.test(sendDiscussionFeedback)
     && /buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*"planning_started"[\s\S]*\.\.\.feedbackTimelineDetails/.test(sendDiscussionFeedback)
     && /buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*"planning_ready"[\s\S]*\.\.\.feedbackTimelineDetails/.test(sendDiscussionFeedback)
     && /buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*feedbackLocalStoryboardRows\.length \? "planning_ready" : "planning_blocked"[\s\S]*\.\.\.feedbackTimelineDetails/.test(sendDiscussionFeedback),
@@ -753,11 +755,11 @@ check(
   failures,
 );
 check(
-  /const restoredScript = timelineDetailText\(latestConfirmation,\s*"draftScript"\)[\s\S]*\|\| restoredDraftScriptFromTimelineEntry\(userEntry\)/.test(restoredReadyDraftConfirmationState)
-    && /if \(!restoredDraftScriptIsConfirmable\(restoredScript\)\) return undefined/.test(restoredReadyDraftConfirmationState)
-    && /const restoredStyle = timelineDetailText\(latestConfirmation,\s*"draftStyle"\)[\s\S]*\|\| timelineDetailText\(userEntry,\s*"draftStyle"\)/.test(restoredReadyDraftConfirmationState)
-    && /const restoredTargetMode = timelineDetailText\(latestConfirmation,\s*"projectTargetMode"\)[\s\S]*\|\| timelineDetailText\(userEntry,\s*"projectTargetMode"\)/.test(restoredReadyDraftConfirmationState),
-  "Restored ready-draft confirmation must read draft details before falling back to visible user-message text.",
+  /recovery\.status !== "restorable" \|\| !restoredDraftScriptIsConfirmable\(recovery\.draftScript\)/.test(restoredReadyDraftConfirmationState)
+    && /script: recovery\.draftScript[\s\S]*style: recovery\.draftStyle[\s\S]*projectTargetMode: recovery\.projectTargetMode/.test(restoredReadyDraftConfirmationState)
+    && /const restoredRows = recovery\.storyboardRows \|\| restoredState\.storyboardRows[\s\S]*storyboardRows: restoredRows[\s\S]*storyboardBaselineRows: restoredRows/.test(restoredReadyDraftConfirmationState)
+    && /const draftScript = latestDetailText\(latestEntries, "draftScript"\)[\s\S]*if \(!draftScript\) return \{ status: "invalid", reason: "draft_script_missing" \}/.test(intakeRecoverySource),
+  "Restored draft confirmation must fail closed unless structured draft details are present.",
   failures,
 );
 check(

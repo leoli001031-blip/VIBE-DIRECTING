@@ -66,49 +66,146 @@ export interface ProjectVibeSidecarTextResult {
 }
 
 type BrowserStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type BrowserDraftRecoveryPointerKind = "active_project" | "pending_intake";
 
 export const browserProjectVibeDraftStorageKeyPrefix = "vibe-director:project-vibe:browser-draft";
 const activeBrowserProjectVibeDraftStorageKey = `${browserProjectVibeDraftStorageKeyPrefix}:active`;
+const pendingBrowserNewVideoIntakeStorageKey = `${browserProjectVibeDraftStorageKeyPrefix}:pending-intake`;
 
 function validBrowserProjectVibeDraftStorageKey(value?: string | null): string | undefined {
   const storageKey = value?.trim();
-  if (!storageKey || storageKey === activeBrowserProjectVibeDraftStorageKey) return undefined;
+  if (
+    !storageKey
+    || storageKey === activeBrowserProjectVibeDraftStorageKey
+    || storageKey === pendingBrowserNewVideoIntakeStorageKey
+  ) return undefined;
   return storageKey.startsWith(`${browserProjectVibeDraftStorageKeyPrefix}:`) ? storageKey : undefined;
 }
 
-export function readActiveBrowserProjectVibeDraftStorageKey(): string | undefined {
+function browserDraftBootstrapStorageKey(kind: BrowserDraftRecoveryPointerKind): string | undefined {
+  const bootstrap = electronBridge()?.browserDraftBootstrap?.();
+  return validBrowserProjectVibeDraftStorageKey(
+    kind === "active_project" ? bootstrap?.activeStorageKey : bootstrap?.pendingIntakeStorageKey,
+  );
+}
+
+function readLocalBrowserDraftPointer(pointerKey: string): string | undefined {
   const storage = browserStorage();
   if (!storage) return undefined;
   try {
-    return validBrowserProjectVibeDraftStorageKey(storage.getItem(activeBrowserProjectVibeDraftStorageKey));
+    return validBrowserProjectVibeDraftStorageKey(storage.getItem(pointerKey));
   } catch {
     return undefined;
   }
 }
 
-export function rememberActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): boolean {
+function rememberLocalBrowserDraftPointer(pointerKey: string, storageKey?: string): boolean {
   const validStorageKey = validBrowserProjectVibeDraftStorageKey(storageKey);
   const storage = browserStorage();
   if (!validStorageKey || !storage) return false;
   try {
-    storage.setItem(activeBrowserProjectVibeDraftStorageKey, validStorageKey);
+    storage.setItem(pointerKey, validStorageKey);
     return true;
   } catch {
     return false;
   }
 }
 
-export function forgetActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): boolean {
+function forgetLocalBrowserDraftPointer(pointerKey: string, storageKey?: string): boolean {
   const storage = browserStorage();
   if (!storage) return false;
   try {
-    const activeStorageKey = readActiveBrowserProjectVibeDraftStorageKey();
-    if (storageKey && activeStorageKey !== validBrowserProjectVibeDraftStorageKey(storageKey)) return false;
-    storage.removeItem(activeBrowserProjectVibeDraftStorageKey);
+    const currentStorageKey = readLocalBrowserDraftPointer(pointerKey);
+    if (storageKey && currentStorageKey !== validBrowserProjectVibeDraftStorageKey(storageKey)) return false;
+    storage.removeItem(pointerKey);
     return true;
   } catch {
     return false;
   }
+}
+
+async function persistBrowserDraftRecoveryPointer(
+  kind: BrowserDraftRecoveryPointerKind,
+  storageKey?: string,
+): Promise<boolean> {
+  const validStorageKey = validBrowserProjectVibeDraftStorageKey(storageKey);
+  if (!validStorageKey) return false;
+  const bridge = electronBridge();
+  let persisted = false;
+  if (bridge?.browserDraftRememberPointer) {
+    await bridge.browserDraftRememberPointer({ kind, storageKey: validStorageKey });
+    persisted = true;
+  }
+  const pointerKey = kind === "active_project"
+    ? activeBrowserProjectVibeDraftStorageKey
+    : pendingBrowserNewVideoIntakeStorageKey;
+  return rememberLocalBrowserDraftPointer(pointerKey, validStorageKey) || persisted;
+}
+
+async function clearPersistedBrowserDraftRecoveryPointer(
+  kind: BrowserDraftRecoveryPointerKind,
+  storageKey?: string,
+): Promise<boolean> {
+  const expectedStorageKey = storageKey ? validBrowserProjectVibeDraftStorageKey(storageKey) : undefined;
+  if (storageKey && !expectedStorageKey) return false;
+  const currentStorageKey = kind === "active_project"
+    ? readActiveBrowserProjectVibeDraftStorageKey()
+    : readPendingBrowserNewVideoIntakeStorageKey();
+  if (expectedStorageKey && currentStorageKey !== expectedStorageKey) return false;
+  const bridge = electronBridge();
+  let persisted = false;
+  if (bridge?.browserDraftRememberPointer) {
+    await bridge.browserDraftRememberPointer({ kind });
+    persisted = true;
+  }
+  const pointerKey = kind === "active_project"
+    ? activeBrowserProjectVibeDraftStorageKey
+    : pendingBrowserNewVideoIntakeStorageKey;
+  return forgetLocalBrowserDraftPointer(pointerKey, expectedStorageKey) || persisted;
+}
+
+export function readActiveBrowserProjectVibeDraftStorageKey(): string | undefined {
+  const bridge = electronBridge();
+  if (bridge?.browserDraftBootstrap) return browserDraftBootstrapStorageKey("active_project");
+  return readLocalBrowserDraftPointer(activeBrowserProjectVibeDraftStorageKey);
+}
+
+export function rememberActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): boolean {
+  return rememberLocalBrowserDraftPointer(activeBrowserProjectVibeDraftStorageKey, storageKey);
+}
+
+export function forgetActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): boolean {
+  return forgetLocalBrowserDraftPointer(activeBrowserProjectVibeDraftStorageKey, storageKey);
+}
+
+export function persistActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): Promise<boolean> {
+  return persistBrowserDraftRecoveryPointer("active_project", storageKey);
+}
+
+export function clearPersistedActiveBrowserProjectVibeDraftStorageKey(storageKey?: string): Promise<boolean> {
+  return clearPersistedBrowserDraftRecoveryPointer("active_project", storageKey);
+}
+
+export function readPendingBrowserNewVideoIntakeStorageKey(): string | undefined {
+  const bridge = electronBridge();
+  if (bridge?.browserDraftBootstrap) return browserDraftBootstrapStorageKey("pending_intake");
+  return readLocalBrowserDraftPointer(pendingBrowserNewVideoIntakeStorageKey);
+}
+
+export function rememberPendingBrowserNewVideoIntakeStorageKey(storageKey?: string): boolean {
+  return rememberLocalBrowserDraftPointer(pendingBrowserNewVideoIntakeStorageKey, storageKey);
+}
+
+export function forgetPendingBrowserNewVideoIntakeStorageKey(storageKey?: string): boolean {
+  return forgetLocalBrowserDraftPointer(pendingBrowserNewVideoIntakeStorageKey, storageKey);
+}
+
+export function persistPendingBrowserNewVideoIntakeStorageKey(storageKey?: string): Promise<boolean> {
+  return persistBrowserDraftRecoveryPointer("pending_intake", storageKey);
+}
+
+export function clearPersistedPendingBrowserNewVideoIntakeStorageKey(storageKey?: string): Promise<boolean> {
+  return clearPersistedBrowserDraftRecoveryPointer("pending_intake", storageKey);
 }
 
 export function projectVibeDraftTargetId(target: ProjectVibeDraftTarget = {}): string {
@@ -163,6 +260,16 @@ export function forgetBrowserProjectVibeDraft(target: ProjectVibeDraftTarget = {
   if (!storage) return false;
   storage.removeItem(browserStorageKey(target));
   return true;
+}
+
+export async function forgetBrowserProjectVibeDraftPersisted(target: ProjectVibeDraftTarget = {}): Promise<boolean> {
+  const storageKey = validBrowserProjectVibeDraftStorageKey(target.storageKey);
+  const bridge = electronBridge();
+  let persisted = false;
+  if (!target.projectRoot && storageKey && bridge?.browserDraftForget) {
+    persisted = (await bridge.browserDraftForget(storageKey)).forgotten;
+  }
+  return forgetBrowserProjectVibeDraft(target) || persisted;
 }
 
 export async function readProjectVibeSidecarText(
@@ -818,6 +925,30 @@ function createProjectVibeDraftStorageAdapter(target: ProjectVibeDraftTarget): {
         },
         async writeFile(path: string, content: string) {
           await bridge.sandboxWriteFile(resolveElectronProjectFilePath(target.projectRoot!, path), content);
+        },
+      },
+    };
+  }
+
+  const profileStorageKey = validBrowserProjectVibeDraftStorageKey(target.storageKey);
+  if (
+    !target.projectRoot
+    && profileStorageKey
+    && bridge?.browserDraftFileExists
+    && bridge.browserDraftReadFile
+    && bridge.browserDraftWriteFile
+  ) {
+    return {
+      mode: "browser_local",
+      adapter: {
+        async existsFile(path: string) {
+          return (await bridge.browserDraftFileExists!({ storageKey: profileStorageKey, path })).exists;
+        },
+        async readFile(path: string) {
+          return (await bridge.browserDraftReadFile!({ storageKey: profileStorageKey, path })).content;
+        },
+        async writeFile(path: string, content: string) {
+          await bridge.browserDraftWriteFile!({ storageKey: profileStorageKey, path, content });
         },
       },
     };

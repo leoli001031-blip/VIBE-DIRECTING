@@ -1,0 +1,381 @@
+{
+  "schemaVersion": "p11_a_packaged_soak/1.0.0",
+  "status": "preflight_pass",
+  "mode": "preflight",
+  "startedAt": "2026-07-22T21:22:32.612Z",
+  "updatedAt": "2026-07-22T21:23:02.986Z",
+  "elapsedMs": 30374,
+  "required": {
+    "minimumDurationMs": 30000,
+    "configuredDurationMs": 30000,
+    "fullSoakMinimumDurationMs": 3600000,
+    "restartCount": 2,
+    "stateAdvanceCount": 4,
+    "sampleIntervalMs": 5000
+  },
+  "fixture": {
+    "root": "/tmp/vibe-director-p11-a-soak-fKZvW4",
+    "projectRoot": "/tmp/vibe-director-p10-e-20260719-W1vfkR/projects/p10-e-packaged-director-workflow",
+    "projectId": "p10_e_packaged_project",
+    "appPath": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app"
+  },
+  "counts": {
+    "launchCount": 3,
+    "sampleCount": 5,
+    "restartCount": 2,
+    "stateAdvanceCount": 4
+  },
+  "rss": {
+    "sampleCount": 15,
+    "firstKb": 182640,
+    "lastKb": 182528,
+    "minKb": 181264,
+    "maxKb": 182928,
+    "deltaKb": -112
+  },
+  "observations": [
+    {
+      "label": "initial",
+      "observedAt": "2026-07-22T21:22:35.589Z",
+      "elapsedMs": 2977,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 182640,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_1",
+      "observedAt": "2026-07-22T21:22:35.633Z",
+      "elapsedMs": 3021,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 182640,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_1_export",
+      "observedAt": "2026-07-22T21:22:40.677Z",
+      "elapsedMs": 8065,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 182928,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_2",
+      "observedAt": "2026-07-22T21:22:40.707Z",
+      "elapsedMs": 8095,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 182928,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_1_before",
+      "observedAt": "2026-07-22T21:22:42.646Z",
+      "elapsedMs": 10034,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 182928,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_1_after",
+      "observedAt": "2026-07-22T21:22:46.343Z",
+      "elapsedMs": 13731,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 181264,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_2_preview",
+      "observedAt": "2026-07-22T21:22:48.408Z",
+      "elapsedMs": 15796,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 182560,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_3",
+      "observedAt": "2026-07-22T21:22:48.437Z",
+      "elapsedMs": 15825,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 182560,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_3_export",
+      "observedAt": "2026-07-22T21:22:52.681Z",
+      "elapsedMs": 20069,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 182624,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_2_before",
+      "observedAt": "2026-07-22T21:22:52.709Z",
+      "elapsedMs": 20097,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 182848,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_2_after",
+      "observedAt": "2026-07-22T21:22:56.212Z",
+      "elapsedMs": 23600,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 181280,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_4",
+      "observedAt": "2026-07-22T21:22:56.241Z",
+      "elapsedMs": 23629,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 181280,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_4_preview",
+      "observedAt": "2026-07-22T21:22:58.681Z",
+      "elapsedMs": 26069,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 182592,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_5",
+      "observedAt": "2026-07-22T21:23:01.246Z",
+      "elapsedMs": 28634,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 182528,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "final",
+      "observedAt": "2026-07-22T21:23:02.643Z",
+      "elapsedMs": 30031,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 182528,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    }
+  ],
+  "restarts": [
+    {
+      "index": 1,
+      "atElapsedMs": 13731,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    },
+    {
+      "index": 2,
+      "atElapsedMs": 23600,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    }
+  ],
+  "stateAdvances": [
+    {
+      "index": 1,
+      "atElapsedMs": 8065,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 2,
+      "atElapsedMs": 15796,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 3,
+      "atElapsedMs": 20069,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 4,
+      "atElapsedMs": 26069,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    }
+  ],
+  "providerCalls": 0,
+  "completedAt": "2026-07-22T21:23:02.986Z",
+  "projectStateDrift": false,
+  "finalStagingFiles": [],
+  "runtimeOrphanPids": [],
+  "logs": {
+    "files": [
+      {
+        "path": "packaged-app-50898.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-50919.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-50961.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      }
+    ],
+    "knownWarningCount": 3,
+    "unexpectedErrorCount": 0
+  },
+  "invariants": {
+    "elapsedAtLeastRequiredDuration": true,
+    "forcedRestartsAtLeastRequired": true,
+    "stateAdvancesAtLeastRequired": true,
+    "oneCurrentTaskAtEveryObservation": true,
+    "noProjectStateDrift": true,
+    "noResidualStaging": true,
+    "noRuntimeOrphans": true,
+    "noUnexpectedErrors": true,
+    "providerCalls": 0
+  }
+}

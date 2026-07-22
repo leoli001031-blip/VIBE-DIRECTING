@@ -744,7 +744,7 @@ try {
   assertSingleFocusedTurn(stages.revision as Record<string, any>, "当前视频修改意图");
   assert(!(stages.revision as any).bodyText.includes("预览已通过"), "needs-change must not approve the returned media");
 
-  const feedback = "纸飞机亮得太早了。让机器人接稳以后再亮，保留女孩递出动作和中远景连续性。";
+  const feedback = "纸飞机亮得太早了。";
   await setTextarea(launch.client, feedback);
   await waitFor(async () => {
     const enabled = await launch!.client.evaluate<boolean>(`Boolean(document.querySelector('button[aria-label="发送"]:not(:disabled)'))`);
@@ -758,6 +758,19 @@ try {
   stages.clarify = await observeTurns(launch.client);
   assertSingleFocusedTurn(stages.clarify as Record<string, any>, "当前导演澄清");
   assert((stages.clarify as any).turnPhase === "clarification", "Clarify must own the Agent turn phase");
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+    launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+    await setBounds(launch.client, 1440, 900);
+    await openVideoView(launch.client);
+    await waitFor(async () => {
+      const visible = await launch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="当前导演澄清"]'))`);
+      return visible ? true : undefined;
+    }, "forced restart did not restore Clarify");
+    stages.clarifyForcedRestore = await observeTurns(launch.client);
+    assertSingleFocusedTurn(stages.clarifyForcedRestore as Record<string, any>, "当前导演澄清");
+    assert((stages.clarifyForcedRestore as any).turnPhase === "clarification", "restored Clarify must retain the clarification phase");
+  }
 
   const selectedOption = await launch.client.evaluate<string>(`(() => {
     const button = document.querySelector('[aria-label="导演意图选项"] button');
@@ -774,6 +787,20 @@ try {
   assertSingleFocusedTurn(stages.proposal as Record<string, any>, "当前导演提案");
   assert((stages.proposal as any).turnPhase === "proposal", "Proposal must own the Agent turn phase");
   assert((stages.proposal as any).bodyText.includes("确认重新生成提案"), "regeneration Proposal must expose its explicit confirmation copy");
+  if (forceRestartStages) {
+    await forceClosePackagedApp(launch);
+    launch = await launchPackagedApp({ appPath, executablePath, profileRoot, projectsRoot, runtimeRoot, bindingPath });
+    await setBounds(launch.client, 1440, 900);
+    await openVideoView(launch.client);
+    await waitFor(async () => {
+      const visible = await launch!.client.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="当前导演提案"]'))`);
+      return visible ? true : undefined;
+    }, "forced restart did not restore Proposal");
+    stages.proposalForcedRestore = await observeTurns(launch.client);
+    assertSingleFocusedTurn(stages.proposalForcedRestore as Record<string, any>, "当前导演提案");
+    assert((stages.proposalForcedRestore as any).turnPhase === "proposal", "restored Proposal must retain the proposal phase");
+    assert((stages.proposalForcedRestore as any).bodyText.includes("确认重新生成提案"), "restored Proposal lost its explicit confirmation copy");
+  }
 
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
   await clickButton(launch.client, "当前导演提案", "确认重新生成提案");

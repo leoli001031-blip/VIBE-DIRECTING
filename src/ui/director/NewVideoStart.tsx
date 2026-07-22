@@ -71,6 +71,7 @@ import {
   type AgentWebSearchSettings,
 } from "../../core/agentWebSearchClient";
 import { classifyDirectorAgentAction } from "../../core/directorAgentAction";
+import { recoverPendingNewVideoIntake, type NewVideoIntakeRecoveryPhase } from "../../core/newVideoIntakeRecovery";
 import {
   buildDraftRevisionPreview,
   parseDraftRevisionIntent,
@@ -2959,6 +2960,8 @@ export function NewVideoStart({
     discussionWorkspace?: StoryDiscussionWorkspace;
     storyboardRows: NewVideoStoryboardShot[];
     storyboardBaselineRows: NewVideoStoryboardShot[];
+    restoredPhase?: NewVideoIntakeRecoveryPhase;
+    selectedShotNo?: string;
   };
   function buildDraftConfirmationState(draftToConfirm: NewVideoStartDraft): DraftConfirmationState {
     const planningDraft = draftForPlanning(draftToConfirm);
@@ -2977,13 +2980,6 @@ export function NewVideoStart({
       storyboardBaselineRows: nextRows,
     };
   }
-  function timelineDetailText(entry: VibeAgentTimelineEntry | undefined, key: string) {
-    const value = entry?.details?.[key];
-    return typeof value === "string" ? cleanText(value) : "";
-  }
-  function restoredDraftScriptFromTimelineEntry(entry: VibeAgentTimelineEntry | undefined) {
-    return timelineDetailText(entry, "draftScript") || cleanText(entry?.body || "");
-  }
   function restoredDraftScriptIsConfirmable(scriptText: string) {
     if (!scriptText) return false;
     if (isDraftConfirmationIntent(scriptText)) return false;
@@ -2992,39 +2988,54 @@ export function NewVideoStart({
     return true;
   }
   function restoredReadyDraftConfirmationState() {
-    const intakeEntries = (restoredAgentTimelineEntries || []).filter(isVibeAgentIntakeTimelineEntry);
-    const latestConfirmation = [...intakeEntries].reverse().find((entry) => (
-      entry.type === "confirmation_request"
-      && entry.status === "waiting"
-      && entry.details?.intakePhase === "planning_ready"
-    ));
-    if (!latestConfirmation) return undefined;
-    const confirmedAfter = intakeEntries.some((entry) => (
-      entry.details?.intakePhase === "draft_confirmed"
-      && entry.createdAt >= latestConfirmation.createdAt
-    ));
-    if (confirmedAfter) return undefined;
-    const userEntry = [...intakeEntries].reverse().find((entry) => (
-      entry.type === "user_message"
-      && entry.createdAt <= latestConfirmation.createdAt
-    ));
-    const restoredScript = timelineDetailText(latestConfirmation, "draftScript")
-      || restoredDraftScriptFromTimelineEntry(userEntry);
-    if (!restoredDraftScriptIsConfirmable(restoredScript)) return undefined;
-    const restoredStyle = timelineDetailText(latestConfirmation, "draftStyle")
-      || timelineDetailText(userEntry, "draftStyle");
-    const restoredTargetMode = timelineDetailText(latestConfirmation, "projectTargetMode")
-      || timelineDetailText(userEntry, "projectTargetMode");
-    return buildDraftConfirmationState({
-      script: restoredScript,
-      style: restoredStyle,
-      references,
-      audio,
-      audioRole,
-      agentBoundaryMode: activeVideoPermissionContract.mode,
-      projectTargetMode: restoredTargetMode === "new_project" ? "new_project" : "current_project",
-    });
+    const recovery = recoverPendingNewVideoIntake(restoredAgentTimelineEntries || []);
+    if (recovery.status !== "restorable" || !restoredDraftScriptIsConfirmable(recovery.draftScript)) return undefined;
+    const restoredState = buildDraftConfirmationState({
+        script: recovery.draftScript,
+        style: recovery.draftStyle,
+        references,
+        audio,
+        audioRole,
+        agentBoundaryMode: activeVideoPermissionContract.mode,
+        projectTargetMode: recovery.projectTargetMode,
+      });
+    const restoredRows = recovery.storyboardRows || restoredState.storyboardRows;
+    return {
+      ...restoredState,
+      storyboardRows: restoredRows,
+      storyboardBaselineRows: restoredRows,
+      restoredPhase: recovery.phase,
+      selectedShotNo: recovery.selectedShotNo,
+    };
   }
+  useEffect(() => {
+    if (confirmed || projection || submittedDraft || storyboardRows.length > 0) return;
+    const restoredState = restoredReadyDraftConfirmationState();
+    if (!restoredState) return;
+    setSubmittedDraft(restoredState.draft);
+    setProjection(restoredState.projection);
+    setDirectorSession(restoredState.directorSession);
+    setStyleResearchPreflight(restoredState.styleResearchPreflight);
+    setDiscussionWorkspace(restoredState.discussionWorkspace);
+    setStoryboardRows(restoredState.storyboardRows);
+    setStoryboardBaselineRows(restoredState.storyboardBaselineRows);
+    setStoryboardPlanningSource("local_structure");
+    setStoryboardPlanningStatus("ready");
+    setStoryboardPlanningStartedAt(undefined);
+    setStoryboardPlanningElapsedSeconds(0);
+    setStoryboardPlanningMessage(restoredState.restoredPhase === "planning_ready"
+      ? "已从本地恢复记录恢复待确认草案。"
+      : "上次整理被中断，已用本地结构恢复为待确认草案。");
+    setDiscussionFeedback("");
+    setConfirmError("");
+    setConfirmed(false);
+    setIsOpen(true);
+    const selectedRow = restoredState.selectedShotNo
+      ? restoredState.storyboardRows.find((row) => row.shotNo === restoredState.selectedShotNo)
+      : undefined;
+    selectedStoryboardShotNoRef.current = selectedRow?.shotNo || "";
+    setSelectedStoryboardRowId(selectedRow?.id || "");
+  }, [restoredAgentTimelineEntries]);
   useEffect(() => {
     if (storyboardPlanningStatus !== "running" || !storyboardPlanningStartedAt) {
       setStoryboardPlanningElapsedSeconds(0);
@@ -3087,6 +3098,8 @@ export function NewVideoStart({
       ],
       details: {
         next: "直接说改法，或确认这版故事。",
+        selectedShotId: row.id,
+        selectedShotNo: row.shotNo,
       },
     }]);
   }
@@ -3507,6 +3520,7 @@ export function NewVideoStart({
       draftScript: draftToSubmit.script,
       draftStyle: draftToSubmit.style,
       projectTargetMode: draftToSubmit.projectTargetMode,
+      draftStoryboardRows: localStoryboardRows,
     };
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
       createdAt: timelineCreatedAt,
@@ -3541,6 +3555,7 @@ export function NewVideoStart({
         phase: "planning_ready",
         userMessage: userMessageFromNewVideoDraft(draftToSubmit),
         ...draftTimelineDetails,
+        draftStoryboardRows: fallbackRows,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
@@ -3586,6 +3601,7 @@ export function NewVideoStart({
         phase: "planning_ready",
         userMessage: userMessageFromNewVideoDraft(draftToSubmit),
         ...draftTimelineDetails,
+        draftStoryboardRows: aiRows,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
@@ -3783,6 +3799,7 @@ export function NewVideoStart({
       draftScript: currentDraftScriptForFeedback(planningDraft, rowsForFeedbackPlanning) || planningDraft.script || feedbackText,
       draftStyle: planningDraft.style,
       projectTargetMode: planningDraft.projectTargetMode,
+      draftStoryboardRows: feedbackLocalStoryboardRows.length ? feedbackLocalStoryboardRows : rowsForFeedbackPlanning,
     };
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
       createdAt: feedbackTimelineCreatedAt,
@@ -3830,6 +3847,7 @@ export function NewVideoStart({
           phase: "planning_ready",
           userMessage: feedbackText,
           ...feedbackTimelineDetails,
+          draftStoryboardRows: fallbackRows,
           materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
           imageCount: planningDraft.references.length,
           audioCount: planningDraft.audio ? 1 : 0,
@@ -3892,6 +3910,7 @@ export function NewVideoStart({
         phase: "planning_ready",
         userMessage: feedbackText,
         ...feedbackTimelineDetails,
+        draftStoryboardRows: aiRows,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,

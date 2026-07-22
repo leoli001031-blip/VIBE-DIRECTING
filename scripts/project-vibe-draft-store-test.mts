@@ -1,12 +1,20 @@
 import { createProjectVibe, hashProjectVibeFacts, projectVibeFileName } from "../src/project";
 import {
   browserProjectVibeDraftStorageKeyPrefix,
+  clearPersistedActiveBrowserProjectVibeDraftStorageKey,
+  clearPersistedPendingBrowserNewVideoIntakeStorageKey,
   forgetActiveBrowserProjectVibeDraftStorageKey,
+  forgetPendingBrowserNewVideoIntakeStorageKey,
+  forgetBrowserProjectVibeDraftPersisted,
   openProjectVibeDraft,
+  persistActiveBrowserProjectVibeDraftStorageKey,
+  persistPendingBrowserNewVideoIntakeStorageKey,
   projectVibeDraftTargetId,
   readProjectVibeSidecarText,
   readActiveBrowserProjectVibeDraftStorageKey,
+  readPendingBrowserNewVideoIntakeStorageKey,
   rememberActiveBrowserProjectVibeDraftStorageKey,
+  rememberPendingBrowserNewVideoIntakeStorageKey,
   saveProjectVibeDraft,
   writeProjectVibeSidecarText,
 } from "../src/project/projectVibeDraftStore";
@@ -128,6 +136,21 @@ try {
   );
   assert(!readActiveBrowserProjectVibeDraftStorageKey(), "an abandoned browser draft must not restore again");
 
+  assert(
+    rememberPendingBrowserNewVideoIntakeStorageKey(browserTarget.storageKey),
+    "an unconfirmed intake should register a separate recovery pointer",
+  );
+  assert(
+    readPendingBrowserNewVideoIntakeStorageKey() === browserTarget.storageKey,
+    "the unconfirmed intake pointer should restore its exact browser storage key",
+  );
+  assert(!rememberPendingBrowserNewVideoIntakeStorageKey(`${browserProjectVibeDraftStorageKeyPrefix}:pending-intake`), "the pointer key must not point to itself");
+  assert(
+    forgetPendingBrowserNewVideoIntakeStorageKey(browserTarget.storageKey),
+    "confirming or abandoning the intake should clear its recovery pointer",
+  );
+  assert(!readPendingBrowserNewVideoIntakeStorageKey(), "a cleared intake pointer must not restore again");
+
   const missingOpen = await openProjectVibeDraft({ storageKey: "test:missing-draft" });
   assert(!missingOpen.ok && missingOpen.status === "missing", "missing browser draft should be classified as missing");
 
@@ -139,6 +162,53 @@ try {
   );
   const browserSidecarRead = await readProjectVibeSidecarText(browserTarget, ".vibe-runtime/test-sidecar.json");
   assert(browserSidecarRead.ok && browserSidecarRead.content === "{\"ok\":true}", "browser sidecar read should restore content");
+
+  const profileStorage = new Map<string, Map<string, string>>();
+  const profilePointers: { activeStorageKey?: string; pendingIntakeStorageKey?: string } = {};
+  const profileLocalStorage = createLocalStorageShim();
+  installWindowShim({
+    localStorage: profileLocalStorage.storage,
+    vibeRuntime: {
+      browserDraftBootstrap: () => ({ ...profilePointers }),
+      browserDraftFileExists: async ({ storageKey, path }: { storageKey: string; path: string }) => ({
+        exists: profileStorage.get(storageKey)?.has(path) || false,
+        path,
+      }),
+      browserDraftReadFile: async ({ storageKey, path }: { storageKey: string; path: string }) => {
+        const content = profileStorage.get(storageKey)?.get(path);
+        if (content == null) throw new Error(`missing profile draft: ${path}`);
+        return { content, path };
+      },
+      browserDraftWriteFile: async ({ storageKey, path, content }: { storageKey: string; path: string; content: string }) => {
+        const files = profileStorage.get(storageKey) || new Map<string, string>();
+        files.set(path, content);
+        profileStorage.set(storageKey, files);
+        return { written: true, path };
+      },
+      browserDraftRememberPointer: async ({ kind, storageKey }: { kind: "active_project" | "pending_intake"; storageKey?: string }) => {
+        if (kind === "active_project") profilePointers.activeStorageKey = storageKey;
+        else profilePointers.pendingIntakeStorageKey = storageKey;
+        return { ...profilePointers };
+      },
+      browserDraftForget: async (storageKey: string) => ({ forgotten: profileStorage.delete(storageKey) }),
+    },
+  });
+  const profileTarget = { storageKey: `${browserProjectVibeDraftStorageKeyPrefix}:electron-profile-draft-store` };
+  const profileSave = await saveProjectVibeDraft(profileTarget, browserProject);
+  assert(profileSave.ok && profileSave.mode === "browser_local", "Electron browser draft should retain the browser-local contract mode");
+  assert(profileStorage.get(profileTarget.storageKey)?.has("project.vibe"), "Electron browser draft should use the durable profile store");
+  assert(!profileLocalStorage.values.has(`${profileTarget.storageKey}:project.vibe`), "Electron browser draft must not duplicate its document into localStorage");
+  const profileOpen = await openProjectVibeDraft(profileTarget);
+  assert(profileOpen.ok && profileOpen.project?.shots.length === 1, "durable Electron browser draft should reopen through the bridge");
+  assert(await persistPendingBrowserNewVideoIntakeStorageKey(profileTarget.storageKey), "pending pointer should persist through the Electron bridge");
+  assert(readPendingBrowserNewVideoIntakeStorageKey() === profileTarget.storageKey, "Electron bootstrap should expose the durable pending pointer");
+  assert(await clearPersistedPendingBrowserNewVideoIntakeStorageKey(profileTarget.storageKey), "durable pending pointer should clear exactly once");
+  assert(!readPendingBrowserNewVideoIntakeStorageKey(), "cleared durable pending pointer must not fall back to stale localStorage");
+  assert(await persistActiveBrowserProjectVibeDraftStorageKey(profileTarget.storageKey), "active pointer should persist through the Electron bridge");
+  assert(readActiveBrowserProjectVibeDraftStorageKey() === profileTarget.storageKey, "Electron bootstrap should expose the durable active pointer");
+  assert(await clearPersistedActiveBrowserProjectVibeDraftStorageKey(profileTarget.storageKey), "durable active pointer should clear exactly once");
+  assert(await forgetBrowserProjectVibeDraftPersisted(profileTarget), "durable browser draft should be removable through the bridge");
+  assert(!profileStorage.has(profileTarget.storageKey), "forgotten durable browser draft should not retain profile files");
 
   const runtimeStorage = createLocalStorageShim();
   previousFetch = (globalThis as { fetch?: unknown }).fetch;

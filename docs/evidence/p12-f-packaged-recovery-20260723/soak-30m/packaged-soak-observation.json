@@ -1,0 +1,1610 @@
+{
+  "schemaVersion": "p11_a_packaged_soak/1.0.0",
+  "status": "pass",
+  "mode": "p12_30_minute",
+  "startedAt": "2026-07-22T21:23:19.726Z",
+  "updatedAt": "2026-07-22T21:53:20.197Z",
+  "elapsedMs": 1800471,
+  "required": {
+    "minimumDurationMs": 1800000,
+    "configuredDurationMs": 1800000,
+    "fullSoakMinimumDurationMs": 3600000,
+    "restartCount": 6,
+    "stateAdvanceCount": 10,
+    "sampleIntervalMs": 30000
+  },
+  "fixture": {
+    "root": "/tmp/vibe-director-p11-a-soak-pe9pES",
+    "projectRoot": "/tmp/vibe-director-p10-e-20260719-W1vfkR/projects/p10-e-packaged-director-workflow",
+    "projectId": "p10_e_packaged_project",
+    "appPath": "/Users/lichenhao/Desktop/new vibe directing/release/mac-arm64/Vibe Director Studio.app"
+  },
+  "counts": {
+    "launchCount": 7,
+    "sampleCount": 60,
+    "restartCount": 6,
+    "stateAdvanceCount": 10
+  },
+  "rss": {
+    "sampleCount": 84,
+    "firstKb": 182704,
+    "lastKb": 180240,
+    "minKb": 178480,
+    "maxKb": 184192,
+    "deltaKb": -2464
+  },
+  "observations": [
+    {
+      "label": "initial",
+      "observedAt": "2026-07-22T21:23:22.704Z",
+      "elapsedMs": 2978,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 182704,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_1",
+      "observedAt": "2026-07-22T21:23:22.746Z",
+      "elapsedMs": 3020,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 182704,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_2",
+      "observedAt": "2026-07-22T21:23:52.752Z",
+      "elapsedMs": 33026,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 179712,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_3",
+      "observedAt": "2026-07-22T21:24:22.754Z",
+      "elapsedMs": 63028,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 179744,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_4",
+      "observedAt": "2026-07-22T21:24:52.753Z",
+      "elapsedMs": 93027,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 179760,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_5",
+      "observedAt": "2026-07-22T21:25:22.756Z",
+      "elapsedMs": 123030,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 179920,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_6",
+      "observedAt": "2026-07-22T21:25:52.756Z",
+      "elapsedMs": 153030,
+      "launchCount": 1,
+      "view": "preview",
+      "rssKb": 179936,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_1_export",
+      "observedAt": "2026-07-22T21:26:05.429Z",
+      "elapsedMs": 165703,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 180224,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_7",
+      "observedAt": "2026-07-22T21:26:22.757Z",
+      "elapsedMs": 183031,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 180272,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_8",
+      "observedAt": "2026-07-22T21:26:52.758Z",
+      "elapsedMs": 213032,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 180304,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_9",
+      "observedAt": "2026-07-22T21:27:22.760Z",
+      "elapsedMs": 243034,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 180320,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_1_before",
+      "observedAt": "2026-07-22T21:27:36.902Z",
+      "elapsedMs": 257176,
+      "launchCount": 1,
+      "view": "export",
+      "rssKb": 180352,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_1_after",
+      "observedAt": "2026-07-22T21:27:40.747Z",
+      "elapsedMs": 261021,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 181552,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_10",
+      "observedAt": "2026-07-22T21:27:52.761Z",
+      "elapsedMs": 273035,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 181648,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_11",
+      "observedAt": "2026-07-22T21:28:22.763Z",
+      "elapsedMs": 303037,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 178576,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_2_preview",
+      "observedAt": "2026-07-22T21:28:49.060Z",
+      "elapsedMs": 329334,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 179936,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_12",
+      "observedAt": "2026-07-22T21:28:52.769Z",
+      "elapsedMs": 333043,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 179968,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_13",
+      "observedAt": "2026-07-22T21:29:22.765Z",
+      "elapsedMs": 363039,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 179952,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_14",
+      "observedAt": "2026-07-22T21:29:52.765Z",
+      "elapsedMs": 393039,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180080,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_15",
+      "observedAt": "2026-07-22T21:30:22.773Z",
+      "elapsedMs": 423047,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180128,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_16",
+      "observedAt": "2026-07-22T21:30:52.769Z",
+      "elapsedMs": 453043,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180160,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_17",
+      "observedAt": "2026-07-22T21:31:22.771Z",
+      "elapsedMs": 483045,
+      "launchCount": 2,
+      "view": "preview",
+      "rssKb": 180192,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_3_export",
+      "observedAt": "2026-07-22T21:31:32.697Z",
+      "elapsedMs": 492971,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180464,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_18",
+      "observedAt": "2026-07-22T21:31:52.995Z",
+      "elapsedMs": 513269,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180496,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_2_before",
+      "observedAt": "2026-07-22T21:31:54.046Z",
+      "elapsedMs": 514320,
+      "launchCount": 2,
+      "view": "export",
+      "rssKb": 180560,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_2_after",
+      "observedAt": "2026-07-22T21:31:58.006Z",
+      "elapsedMs": 518280,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 181376,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_19",
+      "observedAt": "2026-07-22T21:32:22.992Z",
+      "elapsedMs": 543266,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 181440,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_20",
+      "observedAt": "2026-07-22T21:32:52.995Z",
+      "elapsedMs": 573269,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 178480,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_21",
+      "observedAt": "2026-07-22T21:33:22.995Z",
+      "elapsedMs": 603269,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 178544,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_22",
+      "observedAt": "2026-07-22T21:33:52.999Z",
+      "elapsedMs": 633273,
+      "launchCount": 3,
+      "view": "export",
+      "rssKb": 178528,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_4_preview",
+      "observedAt": "2026-07-22T21:34:16.334Z",
+      "elapsedMs": 656608,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 179936,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_23",
+      "observedAt": "2026-07-22T21:34:22.997Z",
+      "elapsedMs": 663271,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 179968,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_24",
+      "observedAt": "2026-07-22T21:34:53.000Z",
+      "elapsedMs": 693274,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 179968,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_25",
+      "observedAt": "2026-07-22T21:35:23.005Z",
+      "elapsedMs": 723279,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 179984,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_26",
+      "observedAt": "2026-07-22T21:35:53.004Z",
+      "elapsedMs": 753278,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180016,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_3_before",
+      "observedAt": "2026-07-22T21:36:11.188Z",
+      "elapsedMs": 771462,
+      "launchCount": 3,
+      "view": "preview",
+      "rssKb": 180048,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_3_after",
+      "observedAt": "2026-07-22T21:36:14.848Z",
+      "elapsedMs": 775122,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 182752,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_27",
+      "observedAt": "2026-07-22T21:36:23.011Z",
+      "elapsedMs": 783285,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 182800,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_28",
+      "observedAt": "2026-07-22T21:36:53.005Z",
+      "elapsedMs": 813279,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 179440,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_5_export",
+      "observedAt": "2026-07-22T21:36:59.977Z",
+      "elapsedMs": 820251,
+      "launchCount": 4,
+      "view": "export",
+      "rssKb": 179744,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_29",
+      "observedAt": "2026-07-22T21:37:23.006Z",
+      "elapsedMs": 843280,
+      "launchCount": 4,
+      "view": "export",
+      "rssKb": 179792,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_30",
+      "observedAt": "2026-07-22T21:37:53.006Z",
+      "elapsedMs": 873280,
+      "launchCount": 4,
+      "view": "export",
+      "rssKb": 179824,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_31",
+      "observedAt": "2026-07-22T21:38:23.008Z",
+      "elapsedMs": 903282,
+      "launchCount": 4,
+      "view": "export",
+      "rssKb": 179984,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_32",
+      "observedAt": "2026-07-22T21:38:53.010Z",
+      "elapsedMs": 933284,
+      "launchCount": 4,
+      "view": "export",
+      "rssKb": 180000,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_33",
+      "observedAt": "2026-07-22T21:39:23.011Z",
+      "elapsedMs": 963285,
+      "launchCount": 4,
+      "view": "export",
+      "rssKb": 180032,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_6_preview",
+      "observedAt": "2026-07-22T21:39:43.610Z",
+      "elapsedMs": 983884,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 180320,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_34",
+      "observedAt": "2026-07-22T21:39:53.013Z",
+      "elapsedMs": 993287,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 180352,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_35",
+      "observedAt": "2026-07-22T21:40:23.013Z",
+      "elapsedMs": 1023287,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 180368,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_4_before",
+      "observedAt": "2026-07-22T21:40:28.333Z",
+      "elapsedMs": 1028607,
+      "launchCount": 4,
+      "view": "preview",
+      "rssKb": 180416,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_4_after",
+      "observedAt": "2026-07-22T21:40:32.015Z",
+      "elapsedMs": 1032289,
+      "launchCount": 5,
+      "view": "preview",
+      "rssKb": 184080,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_36",
+      "observedAt": "2026-07-22T21:40:53.016Z",
+      "elapsedMs": 1053290,
+      "launchCount": 5,
+      "view": "preview",
+      "rssKb": 184192,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_37",
+      "observedAt": "2026-07-22T21:41:23.016Z",
+      "elapsedMs": 1083290,
+      "launchCount": 5,
+      "view": "preview",
+      "rssKb": 181248,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_38",
+      "observedAt": "2026-07-22T21:41:53.017Z",
+      "elapsedMs": 1113291,
+      "launchCount": 5,
+      "view": "preview",
+      "rssKb": 181296,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_39",
+      "observedAt": "2026-07-22T21:42:23.018Z",
+      "elapsedMs": 1143292,
+      "launchCount": 5,
+      "view": "preview",
+      "rssKb": 181328,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_7_export",
+      "observedAt": "2026-07-22T21:42:27.243Z",
+      "elapsedMs": 1147517,
+      "launchCount": 5,
+      "view": "export",
+      "rssKb": 181600,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_40",
+      "observedAt": "2026-07-22T21:42:53.020Z",
+      "elapsedMs": 1173294,
+      "launchCount": 5,
+      "view": "export",
+      "rssKb": 181744,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_41",
+      "observedAt": "2026-07-22T21:43:23.022Z",
+      "elapsedMs": 1203296,
+      "launchCount": 5,
+      "view": "export",
+      "rssKb": 181776,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_42",
+      "observedAt": "2026-07-22T21:43:53.022Z",
+      "elapsedMs": 1233296,
+      "launchCount": 5,
+      "view": "export",
+      "rssKb": 181792,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_43",
+      "observedAt": "2026-07-22T21:44:23.024Z",
+      "elapsedMs": 1263298,
+      "launchCount": 5,
+      "view": "export",
+      "rssKb": 181824,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_5_before",
+      "observedAt": "2026-07-22T21:44:45.474Z",
+      "elapsedMs": 1285748,
+      "launchCount": 5,
+      "view": "export",
+      "rssKb": 181872,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_5_after",
+      "observedAt": "2026-07-22T21:44:49.158Z",
+      "elapsedMs": 1289432,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 181312,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_44",
+      "observedAt": "2026-07-22T21:44:53.026Z",
+      "elapsedMs": 1293300,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 181456,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_8_preview",
+      "observedAt": "2026-07-22T21:45:10.884Z",
+      "elapsedMs": 1311158,
+      "launchCount": 6,
+      "view": "preview",
+      "rssKb": 182432,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_45",
+      "observedAt": "2026-07-22T21:45:23.028Z",
+      "elapsedMs": 1323302,
+      "launchCount": 6,
+      "view": "preview",
+      "rssKb": 179344,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_46",
+      "observedAt": "2026-07-22T21:45:53.031Z",
+      "elapsedMs": 1353305,
+      "launchCount": 6,
+      "view": "preview",
+      "rssKb": 179392,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_47",
+      "observedAt": "2026-07-22T21:46:23.032Z",
+      "elapsedMs": 1383306,
+      "launchCount": 6,
+      "view": "preview",
+      "rssKb": 179424,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_48",
+      "observedAt": "2026-07-22T21:46:53.032Z",
+      "elapsedMs": 1413306,
+      "launchCount": 6,
+      "view": "preview",
+      "rssKb": 179552,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_49",
+      "observedAt": "2026-07-22T21:47:23.032Z",
+      "elapsedMs": 1443306,
+      "launchCount": 6,
+      "view": "preview",
+      "rssKb": 179584,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_9_export",
+      "observedAt": "2026-07-22T21:47:54.517Z",
+      "elapsedMs": 1474791,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 179840,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_50",
+      "observedAt": "2026-07-22T21:47:54.545Z",
+      "elapsedMs": 1474819,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 179872,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_51",
+      "observedAt": "2026-07-22T21:48:24.551Z",
+      "elapsedMs": 1504825,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 179920,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_52",
+      "observedAt": "2026-07-22T21:48:54.554Z",
+      "elapsedMs": 1534828,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 179952,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_6_before",
+      "observedAt": "2026-07-22T21:49:02.618Z",
+      "elapsedMs": 1542892,
+      "launchCount": 6,
+      "view": "export",
+      "rssKb": 179984,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "restart_6_after",
+      "observedAt": "2026-07-22T21:49:06.113Z",
+      "elapsedMs": 1546387,
+      "launchCount": 7,
+      "view": "export",
+      "rssKb": 181296,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_53",
+      "observedAt": "2026-07-22T21:49:24.554Z",
+      "elapsedMs": 1564828,
+      "launchCount": 7,
+      "view": "export",
+      "rssKb": 181360,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_54",
+      "observedAt": "2026-07-22T21:49:54.555Z",
+      "elapsedMs": 1594829,
+      "launchCount": 7,
+      "view": "export",
+      "rssKb": 178608,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_55",
+      "observedAt": "2026-07-22T21:50:24.557Z",
+      "elapsedMs": 1624831,
+      "launchCount": 7,
+      "view": "export",
+      "rssKb": 178672,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "state_advance_10_preview",
+      "observedAt": "2026-07-22T21:50:38.151Z",
+      "elapsedMs": 1638425,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 179888,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_56",
+      "observedAt": "2026-07-22T21:50:54.558Z",
+      "elapsedMs": 1654832,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 179984,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_57",
+      "observedAt": "2026-07-22T21:51:24.560Z",
+      "elapsedMs": 1684834,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 180128,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_58",
+      "observedAt": "2026-07-22T21:51:54.560Z",
+      "elapsedMs": 1714834,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 180160,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_59",
+      "observedAt": "2026-07-22T21:52:24.563Z",
+      "elapsedMs": 1744837,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 180192,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "sample_60",
+      "observedAt": "2026-07-22T21:52:54.564Z",
+      "elapsedMs": 1774838,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 180208,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    },
+    {
+      "label": "final",
+      "observedAt": "2026-07-22T21:53:19.856Z",
+      "elapsedMs": 1800130,
+      "launchCount": 7,
+      "view": "preview",
+      "rssKb": 180240,
+      "task": {
+        "step": "idle",
+        "source": "pipeline_plan",
+        "label": "继续描述想法",
+        "identity": "idle::pipeline_plan::继续描述想法"
+      },
+      "duplicateCurrentTask": false,
+      "stagingFileCount": 0
+    }
+  ],
+  "restarts": [
+    {
+      "index": 1,
+      "atElapsedMs": 261021,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    },
+    {
+      "index": 2,
+      "atElapsedMs": 518280,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    },
+    {
+      "index": 3,
+      "atElapsedMs": 775122,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "preview",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    },
+    {
+      "index": 4,
+      "atElapsedMs": 1032289,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "preview",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    },
+    {
+      "index": 5,
+      "atElapsedMs": 1289432,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    },
+    {
+      "index": 6,
+      "atElapsedMs": 1546387,
+      "signal": "SIGKILL",
+      "runtimeOrphansAfterKill": 0,
+      "view": "export",
+      "taskIdentityBefore": "idle::pipeline_plan::继续描述想法",
+      "taskIdentityAfter": "idle::pipeline_plan::继续描述想法",
+      "drift": false
+    }
+  ],
+  "stateAdvances": [
+    {
+      "index": 1,
+      "atElapsedMs": 165703,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 2,
+      "atElapsedMs": 329334,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 3,
+      "atElapsedMs": 492971,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 4,
+      "atElapsedMs": 656608,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 5,
+      "atElapsedMs": 820251,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 6,
+      "atElapsedMs": 983884,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 7,
+      "atElapsedMs": 1147517,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 8,
+      "atElapsedMs": 1311158,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 9,
+      "atElapsedMs": 1474791,
+      "kind": "packaged_view_state",
+      "from": "preview",
+      "to": "export",
+      "activeView": "export",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    },
+    {
+      "index": 10,
+      "atElapsedMs": 1638425,
+      "kind": "packaged_view_state",
+      "from": "export",
+      "to": "preview",
+      "activeView": "preview",
+      "taskIdentity": "idle::pipeline_plan::继续描述想法"
+    }
+  ],
+  "providerCalls": 0,
+  "completedAt": "2026-07-22T21:53:20.196Z",
+  "projectStateDrift": false,
+  "finalStagingFiles": [],
+  "runtimeOrphanPids": [],
+  "logs": {
+    "files": [
+      {
+        "path": "packaged-app-51025.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-51685.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-52358.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-53042.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-53716.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-54449.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      },
+      {
+        "path": "packaged-app-55248.stderr.log",
+        "lineCount": 1,
+        "knownWarningCount": 1,
+        "unexpectedErrorCount": 0,
+        "unexpectedTail": []
+      }
+    ],
+    "knownWarningCount": 7,
+    "unexpectedErrorCount": 0
+  },
+  "invariants": {
+    "elapsedAtLeastRequiredDuration": true,
+    "forcedRestartsAtLeastRequired": true,
+    "stateAdvancesAtLeastRequired": true,
+    "elapsedAtLeast30Minutes": true,
+    "forcedRestartsAtLeast6": true,
+    "stateAdvancesAtLeast10": true,
+    "oneCurrentTaskAtEveryObservation": true,
+    "noProjectStateDrift": true,
+    "noResidualStaging": true,
+    "noRuntimeOrphans": true,
+    "noUnexpectedErrors": true,
+    "providerCalls": 0
+  }
+}

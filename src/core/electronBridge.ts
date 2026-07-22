@@ -28,6 +28,22 @@ export interface ElectronBridge {
     displayName?: string;
   }>;
   forgetProject?(projectRoot: string): Promise<{ forgotten: boolean }>;
+  browserDraftBootstrap?(): {
+    activeStorageKey?: string;
+    pendingIntakeStorageKey?: string;
+  };
+  browserDraftFileExists?(input: { storageKey: string; path: string }): Promise<{ exists: boolean; path: string }>;
+  browserDraftReadFile?(input: { storageKey: string; path: string }): Promise<{ content: string; path: string }>;
+  browserDraftWriteFile?(input: { storageKey: string; path: string; content: string }): Promise<{ written: boolean; path: string }>;
+  browserDraftDeleteFile?(input: { storageKey: string; path: string }): Promise<{ deleted: boolean; path: string }>;
+  browserDraftForget?(storageKey: string): Promise<{ forgotten: boolean }>;
+  browserDraftRememberPointer?(input: {
+    kind: "active_project" | "pending_intake";
+    storageKey?: string;
+  }): Promise<{
+    activeStorageKey?: string;
+    pendingIntakeStorageKey?: string;
+  }>;
   exportDiagnostics?(): Promise<{
     cancelled: boolean;
     filePath?: string;

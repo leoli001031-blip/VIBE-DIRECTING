@@ -528,7 +528,7 @@ checkMessage(requireWithin(appBody, /<MinimalTopNav\b/, "App must mount extracte
 checkMessage(requireWithin(appBody, /const\s+\[selectedShotId,\s*setSelectedShotId\]\s*=\s*useState\(""\)/, "App must start without a synthetic selected shot before a project is loaded"));
 checkMessage(requireWithin(appBody, /const\s+\[selectedShotIds,\s*setSelectedShotIds\]\s*=\s*useState<string\[\]>\(\[\]\)/, "App must start without synthetic selected shot ids before a project is loaded"));
 check(!/useState\(["']A1_01["']\)/.test(appBody), "App must not seed the old A1_01 fixture as a default selected shot");
-checkMessage(requireWithin(appSource, /browserProjectDraftStorageKeyPrefix[\s\S]*function\s+initialBrowserProjectDraftStorageKey[\s\S]*Date\.now\(\)/, "Browser draft entry must use an ephemeral session key instead of restoring an old fixed current draft"));
+checkMessage(requireWithin(appSource, /browserProjectDraftStorageKeyPrefix[\s\S]*function\s+initialBrowserProjectDraftSession[\s\S]*Date\.now\(\)/, "Browser draft entry must use an ephemeral session key unless a valid confirmed-project or pending-intake recovery pointer exists"));
 check(!/useRef\(["']vibe-director:project-vibe:current["']\)/.test(appBody), "Browser draft entry must not reuse the old fixed current draft storage key");
 checkMessage(requireWithin(appBody, /const\s+workbenchSelectedShotId\s*=\s*useMemo[\s\S]*if\s*\(shotIds\.has\(selectedShotId\)\)\s*return\s+selectedShotId[\s\S]*projectedDefault[\s\S]*shotIds\.has\(projectedDefault\)[\s\S]*return\s+sourceShots\[0\]\?\.id\s*\|\|\s*""/, "Workbench selected shot must resolve only from existing project shots"));
 checkMessage(requireWithin(minimalAgentPanelSource, /function\s+MinimalAgentPanel\s*\(/, "MinimalAgentPanel component"));

@@ -9,6 +9,7 @@ import { createProjectRootScope, spawnAllowed } from "./projectScope.mts";
 import { createRuntimeSessionToken } from "./runtimeSessionToken.mts";
 import { isSafeExternalUrl, isTrustedDocumentUrl, isTrustedRendererSender, runtimeLoopbackHost } from "./securityPolicy.mts";
 import { exportDiagnosticBundle } from "./diagnosticBundle.mts";
+import { createBrowserDraftProfileStore, type BrowserDraftRecoveryPointerKind } from "./browserDraftProfileStore.mts";
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = electron;
 app.setName("Vibe Director Studio");
@@ -17,6 +18,7 @@ const explicitUserDataDir = (process.env.VIBE_DIRECTOR_USER_DATA_DIR || process.
 if (explicitUserDataDir) {
   app.setPath("userData", path.resolve(explicitUserDataDir));
 }
+const browserDraftProfileStore = createBrowserDraftProfileStore({ userDataRoot: app.getPath("userData") });
 if (process.platform === "darwin") {
   // Local-first app: avoid Chromium touching macOS keychain storage during normal use.
   app.commandLine.appendSwitch("use-mock-keychain");
@@ -341,6 +343,12 @@ function currentProjectBindingBootstrapArg() {
   const binding = payload?.currentProject?.binding;
   if (!binding) return undefined;
   return `--vibe-current-project-binding=${encodeURIComponent(JSON.stringify(binding))}`;
+}
+
+function browserDraftBootstrapArg() {
+  const payload = browserDraftProfileStore.bootstrap();
+  if (!payload.activeStorageKey && !payload.pendingIntakeStorageKey) return undefined;
+  return `--vibe-browser-draft-bootstrap=${encodeURIComponent(JSON.stringify(payload))}`;
 }
 
 function safeProjectFolderName(displayName?: string) {
@@ -683,6 +691,37 @@ function registerIpcHandlers() {
       rootToWatchers.delete(resolved);
     }
     return { forgotten: existed };
+  });
+
+  handleTrustedIpc("browserDraft:fileExists", async (_event, input: { storageKey: string; path: string }) => ({
+    exists: browserDraftProfileStore.fileExists(input?.storageKey, input?.path),
+    path: input?.path,
+  }));
+
+  handleTrustedIpc("browserDraft:readFile", async (_event, input: { storageKey: string; path: string }) => (
+    browserDraftProfileStore.readFile(input?.storageKey, input?.path)
+  ));
+
+  handleTrustedIpc("browserDraft:writeFile", async (_event, input: { storageKey: string; path: string; content: string }) => (
+    browserDraftProfileStore.writeFile(input?.storageKey, input?.path, input?.content)
+  ));
+
+  handleTrustedIpc("browserDraft:deleteFile", async (_event, input: { storageKey: string; path: string }) => (
+    browserDraftProfileStore.deleteFile(input?.storageKey, input?.path)
+  ));
+
+  handleTrustedIpc("browserDraft:forget", async (_event, storageKey: string) => (
+    browserDraftProfileStore.forget(storageKey)
+  ));
+
+  handleTrustedIpc("browserDraft:rememberPointer", async (_event, input: {
+    kind: BrowserDraftRecoveryPointerKind;
+    storageKey?: string;
+  }) => {
+    if (input?.kind !== "active_project" && input?.kind !== "pending_intake") {
+      throw new Error("Invalid browser draft recovery pointer kind.");
+    }
+    return browserDraftProfileStore.rememberPointer(input.kind, input.storageKey);
   });
 
   handleTrustedIpc("diagnostics:export", async () => {
@@ -1080,6 +1119,7 @@ async function createWindow() {
   const rendererDocumentUrl = trustedRendererDocumentUrl();
   const additionalArguments = [
     currentProjectBindingBootstrapArg(),
+    browserDraftBootstrapArg(),
   ].filter((argument): argument is string => Boolean(argument));
   const win = new BrowserWindow({
     width: 1400,
