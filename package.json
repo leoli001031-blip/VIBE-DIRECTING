@@ -321,6 +321,8 @@
     "package:mac": "npm run build && tsx scripts/package-electron-local.mts --mac",
     "package:p11-local-beta": "npm run build && tsx scripts/package-electron-local.mts --mac dmg zip && tsx scripts/p11-local-beta-package.mts",
     "p11-c-local-beta:test": "tsx scripts/p11-local-beta-package.mts",
+    "package:p13-local-beta": "npm run build && tsx scripts/package-electron-local.mts --mac dmg zip && VIBE_LOCAL_BETA_RELEASE_ID=p13-local-beta VIBE_LOCAL_BETA_STAGE=P13-B tsx scripts/p11-local-beta-package.mts",
+    "p13-b-local-beta:test": "VIBE_LOCAL_BETA_RELEASE_ID=p13-local-beta VIBE_LOCAL_BETA_STAGE=P13-B tsx scripts/p11-local-beta-package.mts",
     "package:all": "npm run build && tsx scripts/package-electron-local.mts",
     "package:release:contract:test": "tsx scripts/package-release-contract-test.mts",
     "package:release:preflight": "tsx scripts/package-release-signing-preflight.mts",

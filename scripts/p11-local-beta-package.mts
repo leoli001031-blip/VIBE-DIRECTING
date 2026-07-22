@@ -10,9 +10,16 @@ import {
   waitForAcceptance,
 } from "./lib/packaged-acceptance-harness.mts";
 
+const releaseId = process.env.VIBE_LOCAL_BETA_RELEASE_ID?.trim() || "p11-local-beta";
+const acceptanceStage = process.env.VIBE_LOCAL_BETA_STAGE?.trim() || "P11-C";
+const fixtureTag = releaseId.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "local-beta";
+const p13ProviderCanaryAccepted = releaseId === "p13-local-beta";
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
+
+assert(/^[a-z0-9][a-z0-9_-]*$/i.test(releaseId), "Local Beta release id must be a simple folder name");
 
 function run(command: string, args: string[], label: string) {
   const result = spawnSync(command, args, { encoding: "utf8" });
@@ -28,7 +35,7 @@ async function newestArtifact(extension: string) {
   const candidates = (await readdir(releaseRoot))
     .filter((name) => name.toLowerCase().endsWith(extension))
     .map((name) => join(releaseRoot, name));
-  assert(candidates.length > 0, `P11-C ${extension} artifact is missing under release/`);
+  assert(candidates.length > 0, `${acceptanceStage} ${extension} artifact is missing under release/`);
   const rows = await Promise.all(candidates.map(async (filePath) => ({ filePath, mtimeMs: (await stat(filePath)).mtimeMs })));
   return rows.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]!.filePath;
 }
@@ -47,7 +54,7 @@ function packageRelevantDirtyPaths() {
 }
 
 async function writeExampleProject(exampleRoot: string) {
-  const createdAt = "2026-07-20T10:00:00.000Z";
+  const createdAt = p13ProviderCanaryAccepted ? "2026-07-23T10:00:00.000Z" : "2026-07-20T10:00:00.000Z";
   const project = createProjectVibe({
     projectId: "vibe_director_beta_sample",
     title: "内部 Beta 示例",
@@ -80,7 +87,7 @@ async function writeExampleProject(exampleRoot: string) {
         propAssetIds: [],
         durationSeconds: 4,
         status: "planned",
-        sourceRefs: ["p11-c-local-beta-sample"],
+        sourceRefs: [`${fixtureTag}-sample`],
       },
       {
         id: "S02",
@@ -95,7 +102,7 @@ async function writeExampleProject(exampleRoot: string) {
         propAssetIds: [],
         durationSeconds: 4,
         status: "planned",
-        sourceRefs: ["p11-c-local-beta-sample"],
+        sourceRefs: [`${fixtureTag}-sample`],
       },
     ],
     assets: [],
@@ -125,7 +132,7 @@ async function appInside(root: string): Promise<string> {
 
 const repoRoot = resolve(process.cwd());
 const releaseRoot = join(repoRoot, "release");
-const betaRoot = join(releaseRoot, "p11-local-beta");
+const betaRoot = join(releaseRoot, releaseId);
 const evidenceRoot = join(betaRoot, "evidence");
 const exampleRoot = join(betaRoot, "example-project");
 const version = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8")).version as string;
@@ -145,17 +152,17 @@ await writeExampleProject(exampleRoot);
 
 run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], "ad-hoc app codesign verification");
 const signature = run("/usr/bin/codesign", ["-dv", "--verbose=4", appPath], "app signature inspection");
-assert(`${signature.stdout}${signature.stderr}`.includes("Signature=adhoc"), "P11-C app is not ad-hoc signed");
+assert(`${signature.stdout}${signature.stderr}`.includes("Signature=adhoc"), `${acceptanceStage} app is not ad-hoc signed`);
 run("/usr/bin/hdiutil", ["verify", dmgPath], "DMG verification");
 
-const tempRoot = await mkdtemp("/tmp/vibe-director-p11-c-");
+const tempRoot = await mkdtemp(`/tmp/vibe-director-${fixtureTag}-`);
 let packagedLaunch: Awaited<ReturnType<typeof launchPackagedAcceptanceApp>> | undefined;
 try {
   const zipExtractRoot = join(tempRoot, "zip-extracted");
   await mkdir(zipExtractRoot, { recursive: true });
   run("/usr/bin/ditto", ["-x", "-k", zipPath, zipExtractRoot], "ZIP extraction");
   const extractedAppPath = await appInside(zipExtractRoot);
-  assert(extractedAppPath, "P11-C ZIP does not contain the packaged App");
+  assert(extractedAppPath, `${acceptanceStage} ZIP does not contain the packaged App`);
   const extractedExecutable = join(extractedAppPath, "Contents", "MacOS", "Vibe Director Studio");
   run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", extractedAppPath], "extracted app codesign verification");
 
@@ -187,10 +194,10 @@ try {
   await waitForAcceptance(async () => {
     const body = await packagedLaunch!.client.evaluate<string>("document.body.innerText");
     return body.includes("内部 Beta 示例") && body.includes("2 镜头") ? body : undefined;
-  }, "P11-C extracted App did not open the example project", 60_000);
+  }, `${acceptanceStage} extracted App did not open the example project`, 60_000);
   const diagnosticResult = await packagedLaunch.client.evaluate<any>("window.vibeRuntime.exportDiagnostics()");
-  assert(diagnosticResult?.cancelled === false, "P11-C packaged diagnostic export was cancelled");
-  assert(diagnosticResult?.fileName === basename(diagnosticOutputPath), "P11-C packaged diagnostic export returned the wrong file");
+  assert(diagnosticResult?.cancelled === false, `${acceptanceStage} packaged diagnostic export was cancelled`);
+  assert(diagnosticResult?.fileName === basename(diagnosticOutputPath), `${acceptanceStage} packaged diagnostic export returned the wrong file`);
   await closePackagedAcceptanceApp(packagedLaunch);
   packagedLaunch = undefined;
 
@@ -200,15 +207,19 @@ try {
   const diagnosticManifestPath = join(diagnosticExtractRoot, "Vibe Director Diagnostics", "diagnostics.json");
   const diagnosticManifestText = await readFile(diagnosticManifestPath, "utf8");
   const diagnosticManifest = JSON.parse(diagnosticManifestText);
-  assert(diagnosticManifest.privacy.credentialsIncluded === false, "P11-C diagnostic bundle included credentials");
-  assert(diagnosticManifest.privacy.mediaIncluded === false, "P11-C diagnostic bundle included media");
-  assert(!diagnosticManifestText.includes(acceptanceProjectRoot), "P11-C diagnostic bundle leaked the project path");
-  assert(!diagnosticManifestText.includes(profileRoot), "P11-C diagnostic bundle leaked the profile path");
+  assert(diagnosticManifest.privacy.credentialsIncluded === false, `${acceptanceStage} diagnostic bundle included credentials`);
+  assert(diagnosticManifest.privacy.mediaIncluded === false, `${acceptanceStage} diagnostic bundle included media`);
+  assert(!diagnosticManifestText.includes(acceptanceProjectRoot), `${acceptanceStage} diagnostic bundle leaked the project path`);
+  assert(!diagnosticManifestText.includes(profileRoot), `${acceptanceStage} diagnostic bundle leaked the profile path`);
 
   await writeFile(join(evidenceRoot, "packaged-acceptance.json"), `${JSON.stringify({
-    schemaVersion: "p11_local_beta_packaged_acceptance/1.0.0",
+    schemaVersion: releaseId === "p11-local-beta"
+      ? "p11_local_beta_packaged_acceptance/1.0.0"
+      : "vibe_director_local_beta_packaged_acceptance/1.0.0",
     generatedAt: buildTime,
     status: "pass",
+    stage: acceptanceStage,
+    releaseId,
     zipExtracted: true,
     extractedAppLaunched: true,
     exampleProjectOpened: true,
@@ -237,6 +248,8 @@ const relevantDirtyPaths = packageRelevantDirtyPaths();
 const manifest = {
   schemaVersion: "vibe_director_local_beta_release/1.0.0",
   product: "Vibe Director Studio",
+  stage: acceptanceStage,
+  releaseId,
   version,
   commit,
   buildTime,
@@ -263,10 +276,21 @@ const manifest = {
     diagnosticExported: true,
     providerCalls: 0,
   },
+  providerCanary: p13ProviderCanaryAccepted ? {
+    stage: "P13-A",
+    status: "needs_review",
+    image2GenerationRequests: 1,
+    seedanceVideoSubmissions: 1,
+    automaticRetries: 0,
+    approved: false,
+    promoted: false,
+    delivered: false,
+    exported: false,
+  } : undefined,
 };
 await writeFile(join(betaRoot, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 await writeFile(join(betaRoot, "README.md"), [
-  "# Vibe Director Studio 本地 Beta",
+  `# Vibe Director Studio ${acceptanceStage} 本地 Beta`,
   "",
   "这是内部、本机使用的 ad-hoc macOS arm64 包，不是 App Store 或公开发行版本。",
   "",
@@ -301,13 +325,19 @@ await writeFile(join(betaRoot, "BACKUP-UPGRADE-ROLLBACK.md"), [
   "3. 不要用旧版覆盖已经由新版修改的唯一项目副本。",
   "",
 ].join("\n"), "utf8");
+const providerLimitations = p13ProviderCanaryAccepted
+  ? [
+      "- P13-A 已验证一次 Image2 请求和一次 Seedance `seedance2.0_vip` 提交；返回媒体仍为 `needs_review`。",
+      "- 单次 Provider Canary 不是规模化稳定性、质量通过或成本稳定性证明。",
+    ]
+  : ["- P11-B 的单次真实视频 Canary 在 Seedance 调用前失败；真实视频 Provider 执行仍未验证。"];
 await writeFile(join(betaRoot, "KNOWN-LIMITATIONS.md"), [
   "# 已知限制",
   "",
   "- 仅验证 macOS arm64 本地 Beta。",
   "- 使用 ad-hoc 签名，没有 Developer ID，也没有 notarization。",
   "- Gatekeeper 可能显示未验证开发者提示。",
-  "- P11-B 的单次真实视频 Canary 在 Seedance 调用前失败；真实视频 Provider 执行仍未验证。",
+  ...providerLimitations,
   "- Provider 任务不会自动重试，Review、晋级和 Delivery 仍是独立确认边界。",
   "- 这不是公开发行或规模化 Provider 稳定性证明。",
   "",
@@ -317,6 +347,8 @@ console.log(JSON.stringify({
   status: "pass",
   betaRoot,
   manifestPath: join(betaRoot, "release-manifest.json"),
+  stage: acceptanceStage,
+  releaseId,
   version,
   commit,
   sourceState: manifest.sourceState,

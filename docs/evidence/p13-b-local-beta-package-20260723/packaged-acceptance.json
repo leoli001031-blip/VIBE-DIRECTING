@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "vibe_director_local_beta_packaged_acceptance/1.0.0",
+  "generatedAt": "2026-07-22T22:47:03.257Z",
+  "status": "pass",
+  "stage": "P13-B",
+  "releaseId": "p13-local-beta",
+  "zipExtracted": true,
+  "extractedAppLaunched": true,
+  "exampleProjectOpened": true,
+  "diagnosticExported": true,
+  "diagnosticPrivacy": {
+    "credentialsIncluded": false,
+    "tokensIncluded": false,
+    "fullProjectFilesIncluded": false,
+    "mediaIncluded": false,
+    "absolutePathsIncluded": false
+  },
+  "providerCalls": 0,
+  "publicDistributionClaimed": false
+}

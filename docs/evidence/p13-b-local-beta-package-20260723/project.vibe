@@ -1,0 +1,108 @@
+{
+  "kind": "project_vibe_document",
+  "modelVersion": "project_vibe_minimal_v1",
+  "manifest": {
+    "projectId": "vibe_director_beta_sample",
+    "title": "内部 Beta 示例",
+    "version": "1.0.0",
+    "createdAt": "2026-07-23T10:00:00.000Z",
+    "updatedAt": "2026-07-23T10:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "portableRoot": "project_root",
+    "runtimeFixtureAuthority": false
+  },
+  "storyFlow": {
+    "id": "sample_story_flow",
+    "updatedAt": "2026-07-23T10:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "sections": [
+      {
+        "id": "sample_section",
+        "title": "雨后递灯",
+        "summary": "女孩把发光纸飞机递给机器人保安。",
+        "sequenceIndex": 0,
+        "shotIds": [
+          "S01",
+          "S02"
+        ]
+      }
+    ],
+    "shotOrder": [
+      "S01",
+      "S02"
+    ]
+  },
+  "visualMemory": {
+    "id": "sample_visual_memory",
+    "updatedAt": "2026-07-23T10:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "referencePolicy": {
+      "temporaryOutputsMayBecomeAuthority": false,
+      "runtimeFixturesMayBecomeAuthority": false,
+      "lockedAssetsRequiredForGeneration": true
+    },
+    "entries": []
+  },
+  "shots": [
+    {
+      "id": "S01",
+      "sectionId": "sample_section",
+      "title": "雨夜便利店门口",
+      "intent": "女孩走到机器人保安面前，拿出纸飞机。",
+      "camera": "中远景轻推",
+      "executionMode": "relationship_wide",
+      "referenceStrategy": "omni_reference",
+      "sceneAssetIds": [],
+      "characterAssetIds": [],
+      "propAssetIds": [],
+      "durationSeconds": 4,
+      "status": "planned",
+      "sourceRefs": [
+        "p13-local-beta-sample"
+      ]
+    },
+    {
+      "id": "S02",
+      "sectionId": "sample_section",
+      "title": "纸飞机亮起",
+      "intent": "机器人接过纸飞机，蓝光在灯箱下亮起。",
+      "camera": "手部动作特写后回到双人关系",
+      "executionMode": "action_insert",
+      "referenceStrategy": "omni_reference",
+      "sceneAssetIds": [],
+      "characterAssetIds": [],
+      "propAssetIds": [],
+      "durationSeconds": 4,
+      "status": "planned",
+      "sourceRefs": [
+        "p13-local-beta-sample"
+      ]
+    }
+  ],
+  "assets": [],
+  "runs": [],
+  "receipts": {
+    "scriptPlanningReceipts": [],
+    "promptKeyframePlanningReceipts": [],
+    "batchReceipts": [],
+    "reviewReceipts": []
+  },
+  "sourceIndex": {
+    "id": "source_index_current",
+    "updatedAt": "2026-07-23T10:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "manifestRef": "project.vibe#manifest",
+    "storyFlowRef": "project.vibe#storyFlow",
+    "visualMemoryRef": "project.vibe#visualMemory",
+    "shotRefs": [
+      "project.vibe#shots/S01",
+      "project.vibe#shots/S02"
+    ],
+    "assetRefs": [],
+    "runReceiptRefs": [],
+    "scriptPlanningReceiptRefs": [],
+    "promptKeyframePlanningReceiptRefs": [],
+    "batchReceiptRefs": [],
+    "reviewReceiptRefs": []
+  }
+}

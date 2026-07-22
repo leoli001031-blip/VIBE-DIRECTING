@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "vibe_director_local_beta_release/1.0.0",
+  "product": "Vibe Director Studio",
+  "stage": "P13-B",
+  "releaseId": "p13-local-beta",
+  "version": "0.0.1",
+  "commit": "5b16466de4541f493d1cbff4321e484737147446",
+  "buildTime": "2026-07-22T22:47:03.257Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "sourceState": "dirty",
+  "relevantDirtyPaths": [
+    "electron-runtime/local-runtime-api-server.mjs",
+    "package.json",
+    "scripts/p11-local-beta-package.mts"
+  ],
+  "signature": "ad_hoc",
+  "notarized": false,
+  "publicDistributionClaimed": false,
+  "artifacts": [
+    {
+      "kind": "dmg",
+      "path": "../Vibe Director Studio-0.0.1-arm64.dmg",
+      "fileName": "Vibe Director Studio-0.0.1-arm64.dmg",
+      "sizeBytes": 119166145,
+      "sha256": "87a9f31975a5a90aa09b4b4ccc7349738dc4935142ddef5d99944b8eb80717b6"
+    },
+    {
+      "kind": "zip",
+      "path": "../Vibe Director Studio-0.0.1-arm64-mac.zip",
+      "fileName": "Vibe Director Studio-0.0.1-arm64-mac.zip",
+      "sizeBytes": 115215039,
+      "sha256": "a8a67ae6074197ab41ce48a63c4ddcb9fe52197fd05daa463f52be05d96b3a38"
+    }
+  ],
+  "exampleProject": {
+    "path": "example-project/project.vibe",
+    "sha256": "fe7c65ed8d1b9c4992dd0937f2a4aa7b493635826f5c23bcdc4c03f3d7449963",
+    "credentialsIncluded": false,
+    "mediaIncluded": false
+  },
+  "acceptance": {
+    "codesignVerified": true,
+    "dmgVerified": true,
+    "zipExtracted": true,
+    "extractedAppLaunched": true,
+    "exampleProjectOpened": true,
+    "diagnosticExported": true,
+    "providerCalls": 0
+  },
+  "providerCanary": {
+    "stage": "P13-A",
+    "status": "needs_review",
+    "image2GenerationRequests": 1,
+    "seedanceVideoSubmissions": 1,
+    "automaticRetries": 0,
+    "approved": false,
+    "promoted": false,
+    "delivered": false,
+    "exported": false
+  }
+}
