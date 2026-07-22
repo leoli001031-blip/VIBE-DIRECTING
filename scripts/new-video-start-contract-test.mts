@@ -98,6 +98,7 @@ const newVideoStartSource = stripComments(readText(newVideoStartPath));
 const intakeTimelineSource = stripComments(readText("src/agent-core/intakeTimeline.ts"));
 const agentPanelProjectionSource = stripComments(readText("src/ui/director/agentPanelProjection.ts"));
 const directorAgentActionSource = stripComments(readText("src/core/directorAgentAction.ts"));
+const draftRevisionIntentSource = stripComments(readText("src/core/draftRevisionIntent.ts"));
 const directorModeSource = stripComments(readText("src/ui/director/DirectorModeShell.tsx"));
 const directorCssSource = stripComments(readText("src/styles/director.css"));
 const newVideoStart = findFunctionBody(newVideoStartSource, "NewVideoStart");
@@ -125,11 +126,13 @@ const feedbackShouldPreserveCurrentDraftScript = findFunctionBody(newVideoStartS
 const stripDraftRevisionPromptPrefix = findFunctionBody(newVideoStartSource, "stripDraftRevisionPromptPrefix");
 const currentDraftScriptForFeedback = findFunctionBody(newVideoStartSource, "currentDraftScriptForFeedback");
 const stripShotCountPlanningInstructions = findFunctionBody(newVideoStartSource, "stripShotCountPlanningInstructions");
-const targetShotRevisionIndex = findFunctionBody(newVideoStartSource, "targetShotRevisionIndex");
-const targetShotRevisionIndexForRows = findFunctionBody(newVideoStartSource, "targetShotRevisionIndexForRows");
-const explicitMultiTargetShotRevisionClauses = findFunctionBody(newVideoStartSource, "explicitMultiTargetShotRevisionClauses");
-const cleanTargetShotRevisionText = findFunctionBody(newVideoStartSource, "cleanTargetShotRevisionText");
-const excludedPropLabelsFromFeedback = findFunctionBody(newVideoStartSource, "excludedPropLabelsFromFeedback");
+const parseDraftRevisionIntent = findFunctionBody(draftRevisionIntentSource, "parseDraftRevisionIntent");
+const cleanDraftRevisionText = findFunctionBody(draftRevisionIntentSource, "cleanRevisionText");
+const draftRevisionRemovalTargets = findFunctionBody(draftRevisionIntentSource, "removalTargetsFromText");
+const explicitMultiTargetDraftRevisionClauses = findFunctionBody(draftRevisionIntentSource, "explicitMultiTargetClauses");
+const buildDraftRevisionPreview = findFunctionBody(draftRevisionIntentSource, "buildDraftRevisionPreview");
+const draftRevisionIntentForRows = findFunctionBody(newVideoStartSource, "draftRevisionIntentForRows");
+const targetShotRevisionIndexForItem = findFunctionBody(newVideoStartSource, "targetShotRevisionIndexForItem");
 const cleanStoryboardFeedbackControlClauses = findFunctionBody(newVideoStartSource, "cleanStoryboardFeedbackControlClauses");
 const feedbackExplicitStoryboardSegments = findFunctionBody(newVideoStartSource, "feedbackExplicitStoryboardSegments");
 const feedbackGlobalRevisionNote = findFunctionBody(newVideoStartSource, "feedbackGlobalRevisionNote");
@@ -137,9 +140,10 @@ const finalShotIsolationBeat = findFunctionBody(newVideoStartSource, "finalShotI
 const normalizeFinalShotIsolationSegments = findFunctionBody(newVideoStartSource, "normalizeFinalShotIsolationSegments");
 const isolateFinalShotFeedbackSegments = findFunctionBody(newVideoStartSource, "isolateFinalShotFeedbackSegments");
 const applyExplicitShotCountFeedbackRows = findFunctionBody(newVideoStartSource, "applyExplicitShotCountFeedbackRows");
+const applyDraftRevisionItemRows = findFunctionBody(newVideoStartSource, "applyDraftRevisionItemRows");
 const applyTargetedShotRevisionRows = findFunctionBody(newVideoStartSource, "applyTargetedShotRevisionRows");
 const applyMultiTargetedShotRevisionRows = findFunctionBody(newVideoStartSource, "applyMultiTargetedShotRevisionRows");
-const feedbackExplicitlyRequestsSceneRevision = findFunctionBody(newVideoStartSource, "feedbackExplicitlyRequestsSceneRevision");
+const draftRevisionSummary = findFunctionBody(newVideoStartSource, "draftRevisionSummary");
 const targetedShotRevisionSummary = findFunctionBody(newVideoStartSource, "targetedShotRevisionSummary");
 const multiTargetedShotRevisionSummary = findFunctionBody(newVideoStartSource, "multiTargetedShotRevisionSummary");
 const shotCountRevisionSummary = findFunctionBody(newVideoStartSource, "shotCountRevisionSummary");
@@ -313,8 +317,9 @@ check(
 check(
   /修改这版草案\|修改当前草案\|继续修改草案\|继续改草案/.test(stripDraftRevisionPromptPrefix)
     && /\^\(\?:修改这版草案\|修改当前草案\|继续修改草案\|继续改草案\)\\s\*\[：:\]\\s\*/.test(stripDraftRevisionPromptPrefix)
-    && /targetShotRevisionIndex\(text: string[\s\S]*const cleaned = stripDraftRevisionPromptPrefix\(text\)[\s\S]*cleaned\.match/.test(newVideoStartSource)
-    && /function cleanTargetShotRevisionText\(text: string\)[\s\S]*const withoutSafetyClauses = stripDraftRevisionPromptPrefix\(text\)/.test(newVideoStartSource)
+    && /parseDraftRevisionIntent/.test(newVideoStartSource)
+    && /stripPromptPrefix\(input\.text\)/.test(parseDraftRevisionIntent)
+    && /tailEndingRevisionText\(text\) \|\| stripPromptPrefix\(text\)/.test(cleanDraftRevisionText)
     && /function cleanStoryboardFeedbackControlClauses\(text: string\)[\s\S]*const withoutSafetyClauses = stripDraftRevisionPromptPrefix\(text\)/.test(newVideoStartSource),
   "Draft-edit composer helper copy such as '修改这版草案：' must be stripped before feedback is parsed or written into storyboard rows.",
   failures,
@@ -458,61 +463,37 @@ check(
   failures,
 );
 check(
-  /targetShotRevisionIndexForRows\(feedbackText,\s*rows,\s*selectedRowId\)/.test(applyTargetedShotRevisionRows)
-    && /最后\|末尾\|结尾\|最终/.test(targetShotRevisionIndex)
-    && /那\|这\|那一\|这一\|一/.test(targetShotRevisionIndex)
-    && /镜头\|分镜\|视频段\|片段\|段落\|幕\|镜/.test(targetShotRevisionIndex)
-    && /return rowCount - 1/.test(targetShotRevisionIndex)
-    && /function tailEndingRevisionClause\(text: string\)/.test(newVideoStartSource)
-    && /停在\|停到\|落在\|收在\|结束在\|定格在/.test(newVideoStartSource)
-    && /tailEndingRevisionClause\(cleaned\)/.test(targetShotRevisionIndex)
-    && /function feedbackTargetsTailShot\(text: string\)/.test(newVideoStartSource)
-    && /Boolean\(tailEndingRevisionClause\(text\)\)/.test(newVideoStartSource)
-    && /function feedbackTargetsSelectedDraftShot\(text: string\)/.test(newVideoStartSource)
-    && /这个\(\?!\\s\*\(\?:故事\|草案\|项目\|短片\|视频\)\)/.test(newVideoStartSource)
-    && /function selectedDraftShotIndex\(rows: NewVideoStoryboardShot\[\],\s*selectedRowId\?: string\)/.test(newVideoStartSource)
-    && /function targetShotRevisionIndexForRows\(text: string,\s*rows: NewVideoStoryboardShot\[\],\s*selectedRowId\?: string\)/.test(newVideoStartSource)
-    && /const selectedIndex = feedbackTargetsSelectedDraftShot\(text\) \? selectedDraftShotIndex\(rows,\s*selectedRowId\) : undefined/.test(targetShotRevisionIndexForRows)
-    && /excludedPropLabelsFromFeedback\(text\)/.test(targetShotRevisionIndexForRows)
-    && /feedbackTargetsTailShot\(text\)/.test(targetShotRevisionIndexForRows)
-    && /rowText\.includes\(label\)/.test(targetShotRevisionIndexForRows)
-    && /targetShotPattern/.test(cleanTargetShotRevisionText)
-    && /selectedTargetPrefixPattern/.test(cleanTargetShotRevisionText)
-    && /sceneOnlyControlPattern/.test(cleanTargetShotRevisionText)
-    && /只改场景不要改动作\|只改场景/.test(cleanTargetShotRevisionText)
-    && /放到\|放在\|移到\|移至\|挪到/.test(cleanTargetShotRevisionText)
-    && /换到\|换至/.test(cleanTargetShotRevisionText)
-    && /replace\(\/\^\(\?:改到\|改为\|改成/.test(cleanTargetShotRevisionText)
-    && /const withoutSafetyClauses = stripDraftRevisionPromptPrefix\(tailEndingRevisionClause\(text\) \|\| text\)[\s\S]*replace\(safetyClausePattern,\s*" "\)[\s\S]*stripDirectorAgentPermissionControlPhrases\(withoutSafetyClauses\)/.test(cleanTargetShotRevisionText)
-    && /leftoverVideoSubmitPattern/.test(cleanTargetShotRevisionText)
-    && /contentRemovalPattern/.test(cleanTargetShotRevisionText)
-    && /stripDraftRevisionPromptPrefix\(tailEndingRevisionClause\(text\) \|\| text\)/.test(cleanTargetShotRevisionText)
-    && /\(\?:只\)\?\(\?:保留\|留下\|留下来\)/.test(cleanTargetShotRevisionText)
-    && /\^\\s\*\(\?:改得\|改得更/.test(cleanTargetShotRevisionText)
-    && /月亮/.test(excludedPropLabelsFromFeedback)
-    && /怀表/.test(excludedPropLabelsFromFeedback)
-    && /negativeClauses/.test(excludedPropLabelsFromFeedback)
+  /parseDraftRevisionIntent/.test(draftRevisionIntentForRows)
+    && /selectedShotNumber:\s*selectedDraftShotNumber\(rows,\s*selectedRowId\)/.test(draftRevisionIntentForRows)
+    && /parseSingleRevision/.test(parseDraftRevisionIntent)
+    && /targetForText/.test(draftRevisionIntentSource)
+    && /tailEndingRevisionText/.test(draftRevisionIntentSource)
+    && /最后\|末尾\|结尾\|最终/.test(draftRevisionIntentSource)
+    && /selectedShotNumber && intentTargetsSelectedShot/.test(draftRevisionIntentSource)
+    && /第\\s\*\$\{localizedShotNumberToken\}/.test(draftRevisionIntentSource)
+    && /selectedTargetPrefixPattern/.test(cleanDraftRevisionText)
+    && /sceneOnlyControlPattern/.test(cleanDraftRevisionText)
+    && /actionOnlyControlPattern/.test(cleanDraftRevisionText)
+    && /只改场景不要改动作\|只改场景/.test(cleanDraftRevisionText)
+    && /(?:改\|修改\|调整)/.test(cleanDraftRevisionText)
+    && /stripDirectorAgentPermissionControlPhrases/.test(cleanDraftRevisionText)
+    && /月亮/.test(draftRevisionIntentSource)
+    && /怀表/.test(draftRevisionIntentSource)
+    && /\(\?!让\|使\|把\|将\|完整\|完全\|立刻\|立即\|马上\)/.test(draftRevisionRemovalTargets)
     && /function removeExcludedLabelsFromText\(text: string,\s*excludedLabels: string\[\]\)/.test(newVideoStartSource)
     && /function textMentionsExcludedProps\(text: string,\s*excludedProps: string\[\]\)/.test(newVideoStartSource)
-    && /cleanText\(stripShotCountPlanningInstructions\(cleanTargetShotRevisionText\(feedbackText\)\)/.test(applyTargetedShotRevisionRows)
-    && /\[：:，,。；;\\s\]\+/.test(applyTargetedShotRevisionRows)
-    && /excludedPropLabelsFromFeedback\(feedbackText\)/.test(applyTargetedShotRevisionRows)
-    && /const removalRequest = Boolean\(excludedProps\.length\)[\s\S]*不要\|别\|不\|不用\|去掉\|移除\|删掉\|删除\|不要再提/.test(applyTargetedShotRevisionRows)
-    && /const scene = removalRequest \? "" : sceneFromShotText\(revisionText,\s*sceneLabels,\s*index\)/.test(applyTargetedShotRevisionRows)
-    && /sceneFromShotText\(revisionText,\s*sceneLabels,\s*index\)/.test(applyTargetedShotRevisionRows)
-    && /sceneOnlyStoryboardSegment\(cleanedRevisionText\)/.test(applyTargetedShotRevisionRows)
-    && /cleanedRevisionText === scene/.test(applyTargetedShotRevisionRows)
-    && /removalOnlyRevision/.test(applyTargetedShotRevisionRows)
-    && /removeExcludedLabelsFromText\(row\.visualDescription \|\| primaryAction \|\| row\.title,\s*excludedProps\)/.test(applyTargetedShotRevisionRows)
-    && /场景改到\$\{scene\}/.test(applyTargetedShotRevisionRows)
-    && /scene:\s*scene \|\| row\.scene/.test(applyTargetedShotRevisionRows)
-    && /const actionTrigger = textMentionsExcludedProps\(row\.actionTrigger,\s*excludedProps\)[\s\S]*fallbackActionTrigger/.test(applyTargetedShotRevisionRows)
-    && /const microReaction = textMentionsExcludedProps\(row\.microReaction,\s*excludedProps\)[\s\S]*fallbackMicroReaction/.test(applyTargetedShotRevisionRows)
-    && /actionReactionQa:\s*buildActionReactionQa\(\{[\s\S]*primaryAction[\s\S]*actionTrigger[\s\S]*microReaction/.test(applyTargetedShotRevisionRows)
-    && /rhythmReason:\s*textMentionsExcludedProps\(row\.rhythmReason,\s*excludedProps\)/.test(applyTargetedShotRevisionRows)
-    && /propsFromShotText\(revisionText,\s*fallbackProps\)/.test(applyTargetedShotRevisionRows)
-    && /props:\s*propLabels\.join\("、"\) \|\| "无"/.test(applyTargetedShotRevisionRows)
-    && /primaryAction/.test(applyTargetedShotRevisionRows)
+    && /targetShotRevisionIndexForItem\(item,\s*rows\)/.test(applyDraftRevisionItemRows)
+    && /item\.operation === "preserve_target"/.test(applyDraftRevisionItemRows)
+    && /item\.removalTargets\.length > 0/.test(applyDraftRevisionItemRows)
+    && /item\.operation === "move_scene"/.test(applyDraftRevisionItemRows)
+    && /const requestedRevisionText = revisionTextWithProtectedAction\(item,\s*cleanText\(row\.primaryAction\)\)[\s\S]*const cleanedRevisionText = cleanText\(requestedRevisionText\)[\s\S]*const revisionText = cleanedRevisionText \|\| "按反馈更新这一镜头"[\s\S]*const removalOnlyRevision = removalRequest && !cleanedRevisionText/.test(applyDraftRevisionItemRows)
+    && /sceneFromShotText\(revisionText,\s*sceneLabels,\s*index\) \|\| cleanedRevisionText/.test(applyDraftRevisionItemRows)
+    && /removeExcludedLabelsFromText\(row\.visualDescription \|\| primaryAction \|\| row\.title,\s*excludedProps\)/.test(applyDraftRevisionItemRows)
+    && /scene:\s*scene \|\| row\.scene/.test(applyDraftRevisionItemRows)
+    && /actionReactionQa:\s*buildActionReactionQa/.test(applyDraftRevisionItemRows)
+    && /propsFromShotText\(revisionText,\s*fallbackProps\)/.test(applyDraftRevisionItemRows)
+    && /const intent = draftRevisionIntentForRows\(feedbackText,\s*rows,\s*selectedRowId\)/.test(applyTargetedShotRevisionRows)
+    && /intent\.items\.length !== 1/.test(applyTargetedShotRevisionRows)
     && /const multiTargetedFeedbackStoryboardRows = \(!requestedFeedbackShotCount \|\| requestedFeedbackShotCount === storyboardRows\.length\)[\s\S]*applyMultiTargetedShotRevisionRows\(storyboardRows,\s*feedbackText\)/.test(sendDiscussionFeedback)
     && /const targetedFeedbackStoryboardRows = !multiTargetedFeedbackStoryboardRows[\s\S]*applyTargetedShotRevisionRows\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)/.test(sendDiscussionFeedback)
     && /const explicitFeedbackStoryboardRows = multiTargetedFeedbackStoryboardRows \|\| targetedFeedbackStoryboardRows \? undefined : requestedFeedbackShotCount/.test(sendDiscussionFeedback)
@@ -523,8 +504,9 @@ check(
   failures,
 );
 check(
-  /targetShotRevisionIndexForRows\(feedbackText,\s*fallbackRows\.length \? fallbackRows : rows,\s*selectedRowId\)/.test(applyTargetedFeedbackGuardsToAiRows)
-    && /excludedPropLabelsFromFeedback\(feedbackText\)/.test(applyTargetedFeedbackGuardsToAiRows)
+  /const intent = draftRevisionIntentForRows\(feedbackText,\s*identityRows,\s*selectedRowId\)/.test(applyTargetedFeedbackGuardsToAiRows)
+    && /item\.removalTargets\.length/.test(applyTargetedFeedbackGuardsToAiRows)
+    && /targetShotRevisionIndexForItem\(candidate,\s*identityRows\) === index/.test(applyTargetedFeedbackGuardsToAiRows)
     && /row\.title[\s\S]*row\.visualDescription[\s\S]*row\.primaryAction[\s\S]*row\.actionTrigger[\s\S]*row\.microReaction[\s\S]*row\.props[\s\S]*row\.actionBeats/.test(applyTargetedFeedbackGuardsToAiRows)
     && /const violatesExcludedProps = excludedProps\.some\(\(label\) => rowText\.includes\(label\)\)/.test(applyTargetedFeedbackGuardsToAiRows)
     && /return \{[\s\S]*\.\.\.fallback[\s\S]*id:\s*row\.id \|\| fallback\.id[\s\S]*shotNo:\s*row\.shotNo \|\| fallback\.shotNo/.test(applyTargetedFeedbackGuardsToAiRows)
@@ -534,20 +516,14 @@ check(
 );
 check(
   /function targetedShotRevisionSummary\(rows: NewVideoStoryboardShot\[\], feedbackText: string,\s*selectedRowId\?: string\)/.test(newVideoStartSource)
-    && /targetShotRevisionIndexForRows\(feedbackText,\s*rows,\s*selectedRowId\)/.test(targetedShotRevisionSummary)
-    && /cleanTargetShotRevisionText\(feedbackText\)/.test(targetedShotRevisionSummary)
-    && /function protectedShotActionFromFeedback[\s\S]*保留\|保持\|留下\|留下来[\s\S]*用\|把\|将\|让[\s\S]*动作/.test(newVideoStartSource)
-    && /function revisionTextWithProtectedAction[\s\S]*currentAction\.includes\(protectedAction\)[\s\S]*currentAction && !revisionText\.includes\(currentAction\)/.test(newVideoStartSource)
-    && /const protectedAction = protectedShotActionFromFeedback\(feedbackText\)[\s\S]*revisionTextWithProtectedAction\(rawRevisionText, cleanText\(row\.primaryAction\), protectedAction\)/.test(applyTargetedShotRevisionRows)
-    && /const primaryAction = sceneOnlyRevision[\s\S]*protectedAction[\s\S]*\? revisionText[\s\S]*primaryActionFromText\(revisionText\)/.test(applyTargetedShotRevisionRows)
-    && /revisionTextWithProtectedAction\([\s\S]*cleanText\(rows\[targetIndex\]\?\.primaryAction\)[\s\S]*protectedShotActionFromFeedback\(feedbackText\)/.test(targetedShotRevisionSummary)
-    && /const scene = removalRequest \|\| !feedbackExplicitlyRequestsSceneRevision\(feedbackText,\s*revisionText\)[\s\S]*sceneFromShotText\(revisionText,\s*sceneLabels,\s*targetIndex\)/.test(targetedShotRevisionSummary)
-    && /targetLabel = `第 \$\{targetIndex \+ 1\} 镜`/.test(targetedShotRevisionSummary)
-    && /changeLabel = preserveTargetShot[\s\S]*保留原镜头[\s\S]*scene[\s\S]*场景改到\$\{scene\}/.test(targetedShotRevisionSummary)
-    && /feedbackRequestsPreserveShotAction\(feedbackText\)/.test(targetedShotRevisionSummary)
-    && /保留原动作/.test(targetedShotRevisionSummary)
-    && /removalChangeLabel[\s\S]*去掉\$\{excludedProps\.join\("、"\)\}/.test(targetedShotRevisionSummary)
-    && /doneLabel: `已修改\$\{targetLabel\}：\$\{changeLabel\}`/.test(targetedShotRevisionSummary)
+    && /draftRevisionIntentForRows\(feedbackText,\s*rows,\s*selectedRowId\)/.test(targetedShotRevisionSummary)
+    && /draftRevisionSummary\(rows,\s*intent\)/.test(targetedShotRevisionSummary)
+    && /buildDraftRevisionPreview\(appliedIntent\)/.test(draftRevisionSummary)
+    && /revisionTextWithProtectedAction\(item,\s*cleanText\(rows\[targetIndex\]\?\.primaryAction\)\)/.test(draftRevisionSummary)
+    && /doneLabel:\s*`已修改\$\{preview\.targetLabel\}：\$\{preview\.changeFact\}`/.test(draftRevisionSummary)
+    && /item\.operation === "remove_content"/.test(buildDraftRevisionPreview)
+    && /item\.operation === "move_scene"/.test(buildDraftRevisionPreview)
+    && /保留原镜头/.test(draftRevisionIntentSource)
     && /const targetedFeedbackSummary = multiTargetedFeedbackStoryboardRows[\s\S]*multiTargetedShotRevisionSummary\(storyboardRows,\s*feedbackText\)[\s\S]*targetedFeedbackStoryboardRows[\s\S]*targetedShotRevisionSummary\(storyboardRows,\s*feedbackText,\s*selectedFeedbackStoryboardRowId\)/.test(sendDiscussionFeedback)
     && /understandingBody:\s*targetedFeedbackSummary\?\.intentBody/.test(sendDiscussionFeedback)
     && /assistantBody:\s*targetedFeedbackSummary[\s\S]*targetedFeedbackSummary\.doneLabel/.test(sendDiscussionFeedback)
@@ -562,20 +538,19 @@ check(
   failures,
 );
 check(
-  /matchAll\(markerPattern\)/.test(explicitMultiTargetShotRevisionClauses)
-    && /start === 0 \|\| [^\n]*\.test\(cleaned\[start - 1\]/.test(explicitMultiTargetShotRevisionClauses)
-    && /new Set\(markers\.map\(\(marker\) => marker\.targetIndex\)\)\.size < 2/.test(explicitMultiTargetShotRevisionClauses)
-    && /applyTargetedShotRevisionRows\(nextRows,\s*clause\.text\)/.test(applyMultiTargetedShotRevisionRows)
-    && /feedbackExplicitlyRequestsSceneRevision/.test(targetedShotRevisionSummary)
-    && /场景\|地点\|环境/.test(feedbackExplicitlyRequestsSceneRevision)
-    && /summaries\.map\(\(summary\) => `\$\{summary\.targetLabel\}：\$\{summary\.changeLabel\}`\)/.test(multiTargetedShotRevisionSummary)
-    && /不会把后一个镜头的要求写进前一个镜头/.test(multiTargetedShotRevisionSummary)
-    && /workflowControlClausePattern/.test(cleanTargetShotRevisionText)
-    && /repetitionControlPattern/.test(cleanTargetShotRevisionText)
-    && /(?:只在\|在)/.test(explicitMultiTargetShotRevisionClauses)
-    && /保留\|保持\|留下/.test(explicitMultiTargetShotRevisionClauses)
-    && /index === 0 \? 0 : marker\.start/.test(explicitMultiTargetShotRevisionClauses)
-    && /feedbackOnlyPreservesTargetShot/.test(applyTargetedShotRevisionRows),
+  /matchAll\(markerPattern\)/.test(explicitMultiTargetDraftRevisionClauses)
+    && /start === 0 \|\| [^\n]*\.test\(cleaned\[start - 1\]/.test(explicitMultiTargetDraftRevisionClauses)
+    && /new Set\(markers\.map\(\(marker\) => marker\.target\.shotNumber\)\)\.size < 2/.test(explicitMultiTargetDraftRevisionClauses)
+    && /const intent = draftRevisionIntentForRows\(feedbackText,\s*rows\)/.test(applyMultiTargetedShotRevisionRows)
+    && /for \(const item of intent\.items\)/.test(applyMultiTargetedShotRevisionRows)
+    && /applyDraftRevisionItemRows\(nextRows,\s*item\)/.test(applyMultiTargetedShotRevisionRows)
+    && /intent && intent\.items\.length >= 2 \? draftRevisionSummary\(rows,\s*intent\)/.test(multiTargetedShotRevisionSummary)
+    && /不会把后一个镜头的要求写进前一个镜头/.test(draftRevisionSummary)
+    && /workflowControlClausePattern/.test(cleanDraftRevisionText)
+    && /repetitionControlPattern/.test(cleanDraftRevisionText)
+    && /(?:只在\|在)/.test(explicitMultiTargetDraftRevisionClauses)
+    && /保留\|保持\|留下/.test(explicitMultiTargetDraftRevisionClauses)
+    && /index === 0 \? 0 : marker\.start/.test(explicitMultiTargetDraftRevisionClauses),
   "Explicit multi-shot feedback must isolate each target clause, suppress workflow/repetition controls, and report every changed shot without inventing a scene move.",
   failures,
 );
@@ -669,6 +644,9 @@ check(
   /天桥/.test(sceneFromShotText)
     && /深夜\.\{0,8\}图书馆\|图书馆\.\{0,8\}深夜/.test(sceneFromShotText)
     && /书架\|书页/.test(sceneFromShotText)
+    && /清晨\.\{0,8\}菜市场\|菜市场\.\{0,8\}清晨/.test(sceneFromShotText)
+    && /光影\|反光\|倒影/.test(sceneFromShotText)
+    && /previousScene \|\| inheritedScene \|\| "洗衣店"/.test(sceneFromShotText)
     && /海边\|海面\|沙滩/.test(sceneFromShotText)
     && !/海边\|海面\|海浪\|沙滩/.test(sceneFromShotText),
   "Scene inference must not classify result imagery such as 广告牌变成海浪 as a 海边 scene.",
@@ -680,6 +658,7 @@ check(
     && /书架\|书页/.test(localSceneLabelsFromText)
     && /天桥/.test(localSceneLabelsFromText)
     && /天台/.test(localSceneLabelsFromText)
+    && /清晨\.\{0,8\}菜市场\|菜市场\.\{0,8\}清晨/.test(localSceneLabelsFromText)
     && /\/地铁\/u,\s*"地铁"/.test(newVideoStartSource)
     && !/\/车站\|地铁\|站台\/u,\s*"车站"/.test(newVideoStartSource)
     && /海边\|海面\|沙滩/.test(localSceneLabelsFromText)
@@ -1062,6 +1041,9 @@ check(
     && /广告牌/.test(propsFromShotText)
     && /旧手机/.test(propsFromShotText)
     && /玻璃罐/.test(propsFromShotText)
+    && /被雨淋湿\(\?:的\)\?火柴\|湿火柴\|火柴/.test(propsFromShotText)
+    && /空菜篮\|菜篮/.test(propsFromShotText)
+    && /透明\(\?:的\)\?小鱼\|透明\(\?:的\)\?鱼/.test(propsFromShotText)
     && /旧纽扣\|纽扣/.test(propsFromShotText)
     && /坏掉\(\?:的\)\?收音机\|收音机/.test(propsFromShotText)
     && /红雨伞/.test(propsFromShotText)
@@ -1079,7 +1061,7 @@ check(
     && /书架/.test(propsFromShotText)
     && /const propLabels = Array\.from\(new Set\(\[[\s\S]*propsFromShotText\(draft\.script,\s*\[\]\)[\s\S]*factsByKind\(session,\s*"prop_candidate"\)/.test(buildStoryboardRowsFromSession)
     && /referenceAssetCandidates\(fallbackLabels\.filter/.test(newVideoStartSource),
-  "NewVideoStart must infer visible props such as 随身听, 小提琴, 纸飞机, 旧手机, 红雨伞, 便利店招牌, 发光纸鹤, 蓝色电动车, 灯箱, 发光鸟, 热豆浆, 发光字, 书页, and 书架 from shot text, keep specific labels over generic ones, and seed local storyboard props from the full draft before falling back to generic reference candidates.",
+  "NewVideoStart must infer visible props such as 湿火柴, 菜篮, 透明鱼, 随身听, 小提琴, 纸飞机, 旧手机, 红雨伞, 便利店招牌, 发光纸鹤, 蓝色电动车, 灯箱, 发光鸟, 热豆浆, 发光字, 书页, and 书架 from shot text, keep specific labels over generic ones, and seed local storyboard props from the full draft before falling back to generic reference candidates.",
   failures,
 );
 check(

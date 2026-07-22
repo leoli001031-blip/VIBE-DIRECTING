@@ -72,6 +72,12 @@ import {
 } from "../../core/agentWebSearchClient";
 import { classifyDirectorAgentAction } from "../../core/directorAgentAction";
 import {
+  buildDraftRevisionPreview,
+  parseDraftRevisionIntent,
+  type DraftRevisionIntent,
+  type DraftRevisionItem,
+} from "../../core/draftRevisionIntent";
+import {
   detectDirectorAgentPermissionIntent,
   isDirectorAgentPermissionControlOnlyIntent,
   stripDirectorAgentPermissionControlPhrases,
@@ -753,130 +759,22 @@ function storyboardStoryText(text: string) {
   return split.storyText || stripShotCountPlanningInstructions(cleanText(text)) || cleanText(text);
 }
 
-function tailEndingRevisionClause(text: string) {
-  const match = stripDraftRevisionPromptPrefix(text).match(
-    /(?:^|[，,。；;])\s*(?:最后|末尾|结尾|最终)\s*(?:(?:停在|停到|落在|收在|结束在|定格在)|(?:只)?(?:保留|保持|留下|留下来))\s*([^，,。；;]{2,80})/u,
-  );
-  return cleanText(match?.[1]);
-}
-
-function targetShotRevisionIndex(text: string, rowCount: number): number | undefined {
-  const cleaned = stripDraftRevisionPromptPrefix(text);
-  const tailMatch = cleaned.match(/(?:把|将|让|请把|请将)?\s*(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu);
-  if ((tailMatch || tailEndingRevisionClause(cleaned)) && rowCount > 0) return rowCount - 1;
-  const match = cleaned.match(new RegExp(String.raw`(?:把|将|让|把现在的|把当前的)?\s*第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`, "iu"));
-  const index = match ? parseLocalizedShotNumber(match[1] || "") : undefined;
-  if (!index || index < 1 || index > rowCount) return undefined;
-  return index - 1;
-}
-
-function feedbackTargetsTailShot(text: string) {
-  return /(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu.test(stripDraftRevisionPromptPrefix(text))
-    || Boolean(tailEndingRevisionClause(text));
-}
-
-function feedbackTargetsSelectedDraftShot(text: string) {
-  return /(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?/iu.test(stripDraftRevisionPromptPrefix(text));
-}
-
-function selectedDraftShotIndex(rows: NewVideoStoryboardShot[], selectedRowId?: string) {
+function selectedDraftShotNumber(rows: NewVideoStoryboardShot[], selectedRowId?: string) {
   if (!selectedRowId) return undefined;
   const selectedIndex = rows.findIndex((row) => row.id === selectedRowId);
-  return selectedIndex >= 0 ? selectedIndex : undefined;
+  return selectedIndex >= 0 ? selectedIndex + 1 : undefined;
 }
 
-function feedbackRequestsPreserveShotAction(text: string) {
-  return /(?:只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/iu.test(text);
-}
-
-function feedbackOnlyPreservesTargetShot(text: string) {
-  return /^(?:最后|末尾|结尾|最终)\s*(?:只)?(?:保留|保持|留下|留下来)/u.test(stripDraftRevisionPromptPrefix(text));
-}
-
-function protectedShotActionFromFeedback(text: string) {
-  const match = stripDraftRevisionPromptPrefix(text).match(
-    /(?:保留|保持|留下|留下来)[^。；;]{0,56}?((?:用|把|将|让)[^，,。；;]{2,28}?)(?:的)?动作/u,
-  );
-  return cleanText(match?.[1]);
-}
-
-function revisionTextWithProtectedAction(
-  revisionText: string,
-  currentAction: string,
-  protectedAction: string,
+function draftRevisionIntentForRows(
+  text: string,
+  rows: NewVideoStoryboardShot[],
+  selectedRowId?: string,
 ) {
-  if (!protectedAction) return revisionText;
-  return cleanText([
-    currentAction.includes(protectedAction) ? "" : protectedAction,
-    currentAction && !revisionText.includes(currentAction) ? currentAction : "",
-    revisionText,
-  ].filter(Boolean).join("，"));
-}
-
-function cleanTargetShotRevisionText(text: string) {
-  const targetShotPattern = String.raw`(?:第\s*${localizedShotNumberToken}|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`;
-  const targetPrefixPattern = new RegExp(String.raw`^(?:(?:这个|这段|这一镜|这镜|这里)?\s*(?:不对|不行|不准确|不太对)\s*[，,。；;\s]*)?(?:把|将|让|请把|请将)?\s*${targetShotPattern}\s*(?:放到|放在|移到|移至|挪到|换到|换至|改成|改为|调整成|调整为|换成|替换成|变成|变为|做成)?\s*`, "iu");
-  const inlineTargetPattern = new RegExp(String.raw`([，,；;]\s*)(?:只在|在)?\s*${targetShotPattern}\s*`, "iu");
-  const selectedTargetPrefixPattern = /^(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?\s*(?:(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)\s*)?[，,。；;\s]*(?:场景|地点|环境)?\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)?\s*/iu;
-  const sceneOnlyControlPattern = /(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/giu;
-  const safetyClausePattern = /(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:参考图|参考|视频|提交|发送|生成)[^，,。；;]*/giu;
-  const workflowControlClausePattern = /(?:先)?(?:形成|进入|给出|给我|等待)?\s*(?:修改)?确认(?:流程|卡|状态)?|(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:保存|写入|素材|导出)[^，,。；;]*/giu;
-  const audioControlClausePattern = /(?:不要|别|不|不用|不加|别加|不要加)\s*(?:旁白|配音|解说|字幕|音乐|BGM)[^，,。；;]*/giu;
-  const repetitionControlPattern = new RegExp(String.raw`(?:不要|别|不)(?:再)?重复(?:第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|上一镜|前一镜|这个镜头)[^，,。；;]*`, "giu");
-  const leftoverVideoSubmitPattern = /(?:或|和|以及)?\s*(?:提交|发送|生成|生)视频/giu;
-  const contentRemovalPattern = /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)[^，,。；;]*(?:怀表|耳机|广告牌|站牌|随身听|小提琴|纸飞机|灯箱|发光鸟|热豆浆|豆浆|发光字|车票|电影票|票根|门票)[^，,。；;]*/giu;
-  const withoutSafetyClauses = stripDraftRevisionPromptPrefix(tailEndingRevisionClause(text) || text)
-    .replace(safetyClausePattern, " ")
-    .replace(workflowControlClausePattern, " ")
-    .replace(repetitionControlPattern, " ")
-    .replace(leftoverVideoSubmitPattern, " ");
-  return cleanText(stripDirectorAgentPermissionControlPhrases(withoutSafetyClauses))
-    .replace(targetPrefixPattern, " ")
-    .replace(inlineTargetPattern, "$1")
-    .replace(selectedTargetPrefixPattern, " ")
-    .replace(sceneOnlyControlPattern, " ")
-    .replace(/^(?:场景|地点|环境)\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
-    .replace(/^(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
-    .replace(/^\s*(?:改得|改得更|改得更清楚|改清楚|调整得更清楚)[^：:，,。；;]*[：:，,]?\s*/u, " ")
-    .replace(safetyClausePattern, " ")
-    .replace(workflowControlClausePattern, " ")
-    .replace(repetitionControlPattern, " ")
-    .replace(leftoverVideoSubmitPattern, " ")
-    .replace(audioControlClausePattern, " ")
-    .replace(contentRemovalPattern, " ")
-    .replace(/(?:^|[，,。；;\s])(?:图或|参考图或|参考或)(?=$|[，,。；;\s])/giu, " ")
-    .replace(/(?:只)?(?:保留|留下|留下来)\s*/giu, " ")
-    .replace(/(?:仍然|依然|继续)?\s*(?:保持|保留)\s*/giu, " ")
-    .replace(/[，,]\s*[，,]+/gu, "，")
-    .replace(/[，,]\s*([。；;])/gu, "$1")
-    .replace(/[，,。；;]\s*$/u, "")
-    .trim();
-}
-
-function excludedPropLabelsFromFeedback(text: string) {
-  const propLabels: Array<[RegExp, string]> = [
-    [/月亮/u, "月亮"],
-    [/怀表/u, "怀表"],
-    [/耳机/u, "耳机"],
-    [/广告牌/u, "广告牌"],
-    [/站牌/u, "站牌"],
-    [/随身听|Walkman/i, "随身听"],
-    [/小提琴/u, "小提琴"],
-    [/纸飞机/u, "纸飞机"],
-    [/灯箱/u, "灯箱"],
-    [/发光(?:的)?鸟|光鸟/u, "发光鸟"],
-    [/热豆浆|豆浆/u, "热豆浆"],
-    [/发光字/u, "发光字"],
-    [/车票/u, "车票"],
-    [/电影票|票根|门票/u, "电影票"],
-  ];
-  const negativeClauses = cleanText(text)
-    .split(/[，,。；;]/u)
-    .map(cleanText)
-    .filter((clause) => /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)/u.test(clause));
-  return Array.from(new Set(propLabels
-    .filter(([pattern]) => negativeClauses.some((clause) => pattern.test(clause)))
-    .map(([, label]) => label)));
+  return parseDraftRevisionIntent({
+    text,
+    shotCount: rows.length,
+    selectedShotNumber: selectedDraftShotNumber(rows, selectedRowId),
+  });
 }
 
 function textMentionsExcludedProps(text: string, excludedProps: string[]) {
@@ -898,11 +796,9 @@ function removeExcludedLabelsFromText(text: string, excludedLabels: string[]) {
     .replace(/^[，,。；;\s]+|[，,。；;\s]+$/gu, ""));
 }
 
-function targetShotRevisionIndexForRows(text: string, rows: NewVideoStoryboardShot[], selectedRowId?: string) {
-  const selectedIndex = feedbackTargetsSelectedDraftShot(text) ? selectedDraftShotIndex(rows, selectedRowId) : undefined;
-  const fallbackIndex = selectedIndex ?? targetShotRevisionIndex(text, rows.length);
-  const excludedLabels = excludedPropLabelsFromFeedback(text);
-  if (!feedbackTargetsTailShot(text) || !excludedLabels.length) return fallbackIndex;
+function targetShotRevisionIndexForItem(item: DraftRevisionItem, rows: NewVideoStoryboardShot[]) {
+  const fallbackIndex = item.shotNumber - 1;
+  if (item.targetKind !== "tail" || !item.removalTargets.length) return fallbackIndex;
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const rowText = [
       rows[index]?.title,
@@ -910,33 +806,18 @@ function targetShotRevisionIndexForRows(text: string, rows: NewVideoStoryboardSh
       rows[index]?.primaryAction,
       rows[index]?.props,
     ].map(cleanText).filter(Boolean).join(" ");
-    if (excludedLabels.some((label) => rowText.includes(label))) return index;
+    if (item.removalTargets.some((label) => rowText.includes(label))) return index;
   }
   return fallbackIndex;
 }
 
-function explicitMultiTargetShotRevisionClauses(text: string, rowCount: number) {
-  const cleaned = stripDraftRevisionPromptPrefix(text);
-  const markerPattern = new RegExp(String.raw`(?:把|将|让|请把|请将)?\s*(?:(?:只在|在)?\s*第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)(?=\s*(?:只)?(?:保留|保持|留下|留下来)))`, "giu");
-  const markers = Array.from(cleaned.matchAll(markerPattern))
-    .filter((match) => {
-      const start = match.index ?? 0;
-      return start === 0 || /[，,。；;!?！？\n]/u.test(cleaned[start - 1] || "");
-    })
-    .map((match) => ({
-      start: match.index ?? 0,
-      end: (match.index ?? 0) + match[0].length,
-      targetIndex: /(?:最后|末尾|结尾|最终)/u.test(match[0]) && rowCount > 0
-        ? rowCount - 1
-        : targetShotRevisionIndex(match[0], rowCount),
-    }))
-    .filter((marker): marker is { start: number; end: number; targetIndex: number } => marker.targetIndex !== undefined);
-  if (new Set(markers.map((marker) => marker.targetIndex)).size < 2) return [];
-  return markers.map((marker, index) => ({
-    targetIndex: marker.targetIndex,
-    text: cleanText(cleaned.slice(index === 0 ? 0 : marker.start, markers[index + 1]?.start)
-      .replace(/^[，,。；;!?！？\s]+|[，,。；;!?！？\s]+$/gu, "")),
-  })).filter((clause) => clause.text);
+function revisionTextWithProtectedAction(item: DraftRevisionItem, currentAction: string) {
+  if (!item.protectedAction) return item.revisionText;
+  return cleanText([
+    currentAction.includes(item.protectedAction) ? "" : item.protectedAction,
+    currentAction && !item.revisionText.includes(currentAction) ? currentAction : "",
+    item.revisionText,
+  ].filter(Boolean).join("，"));
 }
 
 function cleanStoryboardFeedbackControlClauses(text: string) {
@@ -1223,28 +1104,23 @@ function applyExplicitShotCountFeedbackRows(
   });
 }
 
-function applyTargetedShotRevisionRows(rows: NewVideoStoryboardShot[], feedbackText: string, selectedRowId?: string) {
-  const targetIndex = targetShotRevisionIndexForRows(feedbackText, rows, selectedRowId);
-  if (targetIndex === undefined) return undefined;
-  const preserveTargetShot = feedbackOnlyPreservesTargetShot(feedbackText);
-  const rawRevisionText = cleanText(stripShotCountPlanningInstructions(cleanTargetShotRevisionText(feedbackText))
-    .replace(/^[：:，,。；;\s]+|[：:，,。；;\s]+$/gu, "")) || "按反馈更新这一镜头";
-  const protectedAction = protectedShotActionFromFeedback(feedbackText);
-  const excludedProps = excludedPropLabelsFromFeedback(feedbackText);
+function applyDraftRevisionItemRows(rows: NewVideoStoryboardShot[], item: DraftRevisionItem) {
+  const targetIndex = targetShotRevisionIndexForItem(item, rows);
+  if (targetIndex < 0 || targetIndex >= rows.length) return undefined;
+  if (item.operation === "preserve_target") return rows;
+  const excludedProps = item.removalTargets;
   const sceneLabels = rows.map((row) => cleanText(row.scene)).filter(Boolean);
   return rows.map((row, index) => {
     if (index !== targetIndex) return row;
-    if (preserveTargetShot) return row;
-    const revisionText = revisionTextWithProtectedAction(rawRevisionText, cleanText(row.primaryAction), protectedAction);
-    const cleanedRevisionText = cleanText(revisionText);
-    const removalRequest = Boolean(excludedProps.length)
-      && /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)/u.test(feedbackText);
-    const scene = removalRequest ? "" : sceneFromShotText(revisionText, sceneLabels, index);
-    const sceneOnlyRevision = Boolean(scene)
-      && (sceneOnlyStoryboardSegment(cleanedRevisionText) || cleanedRevisionText === scene);
-    const removalOnlyRevision = removalRequest
-      && !scene
-      && (!cleanedRevisionText || /^不要|^别|^不用|^去掉|^移除|^删掉|^删除/u.test(cleanedRevisionText));
+    const requestedRevisionText = revisionTextWithProtectedAction(item, cleanText(row.primaryAction));
+    const cleanedRevisionText = cleanText(requestedRevisionText);
+    const revisionText = cleanedRevisionText || "按反馈更新这一镜头";
+    const removalRequest = item.removalTargets.length > 0;
+    const scene = item.operation === "move_scene"
+      ? sceneFromShotText(revisionText, sceneLabels, index) || cleanedRevisionText
+      : "";
+    const sceneOnlyRevision = item.operation === "move_scene";
+    const removalOnlyRevision = removalRequest && !cleanedRevisionText;
     const cleanedCurrentAction = removalOnlyRevision
       ? removeExcludedLabelsFromText(row.primaryAction || row.visualDescription || row.title, excludedProps)
       : "";
@@ -1252,7 +1128,7 @@ function applyTargetedShotRevisionRows(rows: NewVideoStoryboardShot[], feedbackT
       ? row.primaryAction
       : removalOnlyRevision
         ? cleanedCurrentAction || row.primaryAction
-        : protectedAction
+        : item.protectedAction
           ? revisionText
           : primaryActionFromText(revisionText);
     const actionSourceText = sceneOnlyRevision || removalOnlyRevision ? primaryAction || row.visualDescription : revisionText;
@@ -1309,80 +1185,57 @@ function applyTargetedShotRevisionRows(rows: NewVideoStoryboardShot[], feedbackT
   });
 }
 
+function applyTargetedShotRevisionRows(rows: NewVideoStoryboardShot[], feedbackText: string, selectedRowId?: string) {
+  const intent = draftRevisionIntentForRows(feedbackText, rows, selectedRowId);
+  if (!intent || intent.items.length !== 1) return undefined;
+  return applyDraftRevisionItemRows(rows, intent.items[0]!);
+}
+
 function applyMultiTargetedShotRevisionRows(rows: NewVideoStoryboardShot[], feedbackText: string) {
-  const clauses = explicitMultiTargetShotRevisionClauses(feedbackText, rows.length);
-  if (clauses.length < 2) return undefined;
+  const intent = draftRevisionIntentForRows(feedbackText, rows);
+  if (!intent || intent.items.length < 2) return undefined;
   let nextRows = rows;
-  for (const clause of clauses) {
-    const revisedRows = applyTargetedShotRevisionRows(nextRows, clause.text);
+  for (const item of intent.items) {
+    const revisedRows = applyDraftRevisionItemRows(nextRows, item);
     if (!revisedRows) return undefined;
     nextRows = revisedRows;
   }
   return nextRows;
 }
 
-function feedbackExplicitlyRequestsSceneRevision(feedbackText: string, revisionText: string) {
-  return /(?:场景|地点|环境)[^，,。；;]{0,12}(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)/u.test(feedbackText)
-    || /(?:放到|放在|移到|移至|挪到|换到|换至|改到|调整到)/u.test(feedbackText)
-    || sceneOnlyStoryboardSegment(revisionText);
+function draftRevisionSummary(rows: NewVideoStoryboardShot[], intent: DraftRevisionIntent) {
+  const appliedIntent: DraftRevisionIntent = {
+    ...intent,
+    items: intent.items.map((item) => {
+      const targetIndex = targetShotRevisionIndexForItem(item, rows);
+      return {
+        ...item,
+        revisionText: revisionTextWithProtectedAction(item, cleanText(rows[targetIndex]?.primaryAction)),
+      };
+    }),
+  };
+  const preview = buildDraftRevisionPreview(appliedIntent);
+  return {
+    targetLabel: preview.targetLabel,
+    changeLabel: preview.changeFact,
+    doneLabel: `已修改${preview.targetLabel}：${preview.changeFact}`,
+    intentBody: intent.multiTarget
+      ? `你要同时修改${preview.targetLabel}：${preview.changeFact}。我会分别更新这些镜头，不会把后一个镜头的要求写进前一个镜头。`
+      : `你要修改${preview.targetLabel}：${preview.changeFact}。我会先更新这个镜头，不会当成新的项目想法。`,
+    readyBody: intent.multiTarget
+      ? `我已按你的要求分别修改${preview.targetLabel}：${preview.changeFact}。`
+      : `我已按你的要求修改${preview.targetLabel}：${preview.changeFact}。`,
+  };
 }
 
 function targetedShotRevisionSummary(rows: NewVideoStoryboardShot[], feedbackText: string, selectedRowId?: string) {
-  const targetIndex = targetShotRevisionIndexForRows(feedbackText, rows, selectedRowId);
-  if (targetIndex === undefined) return undefined;
-  const preserveTargetShot = feedbackOnlyPreservesTargetShot(feedbackText);
-  const rawRevisionText = cleanText(stripShotCountPlanningInstructions(cleanTargetShotRevisionText(feedbackText))
-    .replace(/^[：:，,。；;\s]+|[：:，,。；;\s]+$/gu, "")) || "按反馈更新这一镜头";
-  const revisionText = revisionTextWithProtectedAction(
-    rawRevisionText,
-    cleanText(rows[targetIndex]?.primaryAction),
-    protectedShotActionFromFeedback(feedbackText),
-  );
-  const sceneLabels = rows.map((row) => cleanText(row.scene)).filter(Boolean);
-  const excludedProps = excludedPropLabelsFromFeedback(feedbackText);
-  const removalRequest = Boolean(excludedProps.length)
-    && /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)/u.test(feedbackText);
-  const scene = removalRequest || !feedbackExplicitlyRequestsSceneRevision(feedbackText, revisionText)
-    ? ""
-    : sceneFromShotText(revisionText, sceneLabels, targetIndex);
-  const removalChangeLabel = excludedProps.length
-    && removalRequest
-    ? `去掉${excludedProps.join("、")}`
-    : "";
-  const preserveActionLabel = scene && feedbackRequestsPreserveShotAction(feedbackText) ? "，保留原动作" : "";
-  const targetLabel = `第 ${targetIndex + 1} 镜`;
-  const changeLabel = preserveTargetShot
-    ? "保留原镜头"
-    : scene
-    ? `场景改到${scene}${preserveActionLabel}`
-    : removalChangeLabel
-      ? removalChangeLabel
-    : compactText(revisionText, 28) || "按反馈更新";
-  return {
-    targetLabel,
-    changeLabel,
-    doneLabel: `已修改${targetLabel}：${changeLabel}`,
-    intentBody: `你要修改${targetLabel}：${changeLabel}。我会先更新这个镜头，不会当成新的项目想法。`,
-    readyBody: `我已按你的要求修改${targetLabel}：${changeLabel}。`,
-  };
+  const intent = draftRevisionIntentForRows(feedbackText, rows, selectedRowId);
+  return intent && intent.items.length === 1 ? draftRevisionSummary(rows, intent) : undefined;
 }
 
 function multiTargetedShotRevisionSummary(rows: NewVideoStoryboardShot[], feedbackText: string) {
-  const clauses = explicitMultiTargetShotRevisionClauses(feedbackText, rows.length);
-  if (clauses.length < 2) return undefined;
-  const summaries = clauses
-    .map((clause) => targetedShotRevisionSummary(rows, clause.text))
-    .filter((summary): summary is NonNullable<ReturnType<typeof targetedShotRevisionSummary>> => Boolean(summary));
-  if (summaries.length !== clauses.length) return undefined;
-  const targetLabel = `第 ${clauses.map((clause) => clause.targetIndex + 1).join("、")} 镜`;
-  const changeLabel = summaries.map((summary) => `${summary.targetLabel}：${summary.changeLabel}`).join("；");
-  return {
-    targetLabel,
-    changeLabel,
-    doneLabel: `已修改${targetLabel}：${changeLabel}`,
-    intentBody: `你要同时修改${targetLabel}：${changeLabel}。我会分别更新这些镜头，不会把后一个镜头的要求写进前一个镜头。`,
-    readyBody: `我已按你的要求分别修改${targetLabel}：${changeLabel}。`,
-  };
+  const intent = draftRevisionIntentForRows(feedbackText, rows);
+  return intent && intent.items.length >= 2 ? draftRevisionSummary(rows, intent) : undefined;
 }
 
 function shotCountRevisionSummary(requestedShotCount?: number) {
@@ -1403,11 +1256,14 @@ function applyTargetedFeedbackGuardsToAiRows(
   fallbackRows: NewVideoStoryboardShot[],
   selectedRowId?: string,
 ) {
-  const targetIndex = targetShotRevisionIndexForRows(feedbackText, fallbackRows.length ? fallbackRows : rows, selectedRowId);
-  const excludedProps = excludedPropLabelsFromFeedback(feedbackText);
-  if (targetIndex === undefined || !excludedProps.length) return rows;
+  const identityRows = fallbackRows.length ? fallbackRows : rows;
+  const intent = draftRevisionIntentForRows(feedbackText, identityRows, selectedRowId);
+  const removalItems = intent?.items.filter((item) => item.removalTargets.length) || [];
+  if (!removalItems.length) return rows;
   return rows.map((row, index) => {
-    if (index !== targetIndex) return row;
+    const item = removalItems.find((candidate) => targetShotRevisionIndexForItem(candidate, identityRows) === index);
+    if (!item) return row;
+    const excludedProps = item.removalTargets;
     const rowText = [
       row.title,
       row.visualDescription,
@@ -1785,8 +1641,11 @@ function sceneFromShotText(text: string, sceneLabels: string[], index: number) {
     [/凌晨.{0,8}洗衣店|洗衣店.{0,8}凌晨/u, "凌晨洗衣店"],
     [/无人洗衣店/u, "无人洗衣店"],
     [/洗衣店/u, "洗衣店"],
+    [/清晨.{0,8}菜市场|菜市场.{0,8}清晨/u, "清晨菜市场"],
+    [/菜市场/u, "菜市场"],
     [/天桥/u, "天桥"],
     [/天台/u, "天台"],
+    [/(?:海边|海面|沙滩).{0,16}(?:光影|反光|倒影)|(?:光影|反光|倒影).{0,16}(?:海边|海面|沙滩)/u, previousScene || inheritedScene || "洗衣店"],
     [/海边|海面|沙滩/u, "海边"],
     [/地铁口/u, "地铁口"],
     [/地铁/u, "地铁"],
@@ -1837,6 +1696,8 @@ function localSceneLabelsFromText(text: string) {
     [/凌晨.{0,8}无人洗衣店|无人洗衣店.{0,8}凌晨/u, "凌晨无人洗衣店"],
     [/无人洗衣店/u, "无人洗衣店"],
     [/洗衣店/u, "洗衣店"],
+    [/清晨.{0,8}菜市场|菜市场.{0,8}清晨/u, "清晨菜市场"],
+    [/菜市场/u, "菜市场"],
     [/海边|海面|沙滩/u, "海边"],
     [/地下.{0,8}停车场|停车场.{0,8}地下/u, "地下停车场"],
     [/雨后.{0,8}停车场|停车场.{0,8}雨后/u, "雨后停车场"],
@@ -1870,6 +1731,9 @@ function propsFromShotText(text: string, fallbackLabels: string[]) {
     [/Porsche|GT3|保时捷|911/i, "Porsche 911 GT3"],
     [/旧手机/u, "旧手机"],
     [/玻璃罐/u, "玻璃罐"],
+    [/被雨淋湿(?:的)?火柴|湿火柴|火柴/u, "湿火柴"],
+    [/空菜篮|菜篮/u, "菜篮"],
+    [/透明(?:的)?小鱼|透明(?:的)?鱼/u, "透明鱼"],
     [/旧纽扣|纽扣/u, "旧纽扣"],
     [/坏掉(?:的)?收音机|收音机/u, "坏掉的收音机"],
     [/红雨伞/u, "红雨伞"],

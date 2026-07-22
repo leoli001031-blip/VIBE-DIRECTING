@@ -22,6 +22,10 @@ import {
   directorIntentStartsFreshVideoDraft,
 } from "../../core/directorFreshDraftIntent";
 import {
+  buildDraftRevisionPreview,
+  parseDraftRevisionIntent,
+} from "../../core/draftRevisionIntent";
+import {
   directorAgentPermissionIntentDisallowsVideoSubmit,
   isDirectorAgentExplainOnlyIntent,
   isDirectorAgentPermissionControlOnlyIntent,
@@ -3018,64 +3022,6 @@ function parseReadyDraftTargetShotNumber(value: string) {
   return digitValues[normalized];
 }
 
-function cleanReadyDraftTargetShotRevisionText(value: string) {
-  const targetShotPattern = String.raw`(?:第\s*${readyDraftTargetShotNumberToken}|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`;
-  const targetPrefixPattern = new RegExp(String.raw`^(?:(?:这个|这段|这一镜|这镜|这里)?\s*(?:不对|不行|不准确|不太对)\s*[，,。；;\s]*)?(?:把|将|让|请把|请将)?\s*${targetShotPattern}\s*(?:放到|放在|移到|移至|挪到|换到|换至|改成|改为|调整成|调整为|换成|替换成|变成|变为|做成)?\s*`, "iu");
-  const inlineTargetPattern = new RegExp(String.raw`([，,；;]\s*)(?:只在|在)?\s*${targetShotPattern}\s*`, "iu");
-  const selectedTargetPrefixPattern = /^(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?\s*(?:(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)\s*)?[，,。；;\s]*(?:场景|地点|环境)?\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)?\s*/iu;
-  const sceneOnlyControlPattern = /(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/giu;
-  const safetyClausePattern = /(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:参考图|参考|视频|提交|发送|生成)[^，,。；;]*/giu;
-  const workflowControlClausePattern = /(?:先)?(?:形成|进入|给出|给我|等待)?\s*(?:修改)?确认(?:流程|卡|状态)?|(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:保存|写入|素材|导出)[^，,。；;]*/giu;
-  const audioControlClausePattern = /(?:不要|别|不|不用|不加|别加|不要加)\s*(?:旁白|配音|解说|字幕|音乐|BGM)[^，,。；;]*/giu;
-  const repetitionControlPattern = new RegExp(String.raw`(?:不要|别|不)(?:再)?重复(?:第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|上一镜|前一镜|这个镜头)[^，,。；;]*`, "giu");
-  return cleanStoryText(stripDirectorAgentPermissionControlPhrases(value))
-    .replace(safetyClausePattern, " ")
-    .replace(workflowControlClausePattern, " ")
-    .replace(repetitionControlPattern, " ")
-    .replace(targetPrefixPattern, " ")
-    .replace(inlineTargetPattern, "$1")
-    .replace(/^(?:最后|末尾|结尾|最终)\s*(?:只)?(?:保留|保持|留下|留下来)\s*/u, " ")
-    .replace(selectedTargetPrefixPattern, " ")
-    .replace(sceneOnlyControlPattern, " ")
-    .replace(/^(?:场景|地点|环境)\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
-    .replace(/^(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
-    .replace(/(?:^|[，,。；;\s])(?:图或|参考图或|参考或)(?=$|[，,。；;\s])/giu, " ")
-    .replace(audioControlClausePattern, " ")
-    .replace(/[，,]\s*[，,]+/gu, "，")
-    .replace(/^[，,。；;\s]+|[，,。；;\s]+$/gu, "")
-    .trim();
-}
-
-function readyDraftRemovalTargetFromText(value: string) {
-  const cleaned = cleanStoryText(value);
-  const clauses = cleaned
-    .split(/[，,。；;]/u)
-    .map(cleanStoryText)
-    .filter(Boolean);
-  for (const clause of clauses) {
-    if (/(?:参考图|参考|视频|提交|发送|生成|导出)/u.test(clause)) continue;
-    if (/(?:只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/iu.test(clause)) continue;
-    const match = clause.match(/(?:不要再提|不要|别|不用|去掉|移除|删掉|删除)\s*([^，,。；;!?！？\s]{1,16})/u);
-    const target = cleanStoryText(match?.[1] || "").replace(/^(?:这?个|那?个)/u, "");
-    if (/^(?:完整)?出现$/u.test(target)) continue;
-    if (target) return target;
-  }
-  return "";
-}
-
-function readyDraftIntentTargetsSelectedShot(value: string) {
-  return /(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?/iu.test(value);
-}
-
-function readyDraftPreservesShotAction(value: string) {
-  return /(?:只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/iu.test(value);
-}
-
-function readyDraftFeedbackExplicitlyRequestsSceneRevision(value: string) {
-  return /(?:场景|地点|环境)[^，,。；;]{0,12}(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)/u.test(value)
-    || /(?:放到|放在|移到|移至|挪到|换到|换至|改到|调整到)/u.test(value);
-}
-
 function readyDraftSelectedShotTargetFromAgentContext(context?: {
   title: string;
   hint: string;
@@ -3097,107 +3043,19 @@ function readyDraftSelectedShotTargetFromAgentContext(context?: {
         : undefined;
   if (!shotNumber || !Number.isFinite(shotNumber) || shotNumber < 1) return undefined;
   return {
+    shotNumber,
     targetLabel: `第 ${shotNumber} 镜`,
     targetFact: `第 ${shotNumber} 镜（已选中）`,
   };
 }
 
-function readyDraftTargetShotRevisionFromIntent(value: string, shotCount: number, selectedTarget?: { targetLabel: string; targetFact: string }) {
-  const text = cleanStoryText(value);
-  if (!text) return undefined;
-  const tailMatch = text.match(/(?:把|将|让|请把|请将)?\s*(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu)
-    || text.match(/(?:^|[，,。；;])\s*(?:最后|末尾|结尾|最终)(?=\s*(?:只)?(?:保留|保持|留下|留下来))/u);
-  const ordinalMatch = text.match(new RegExp(String.raw`(?:把|将|让|请把|请将)?\s*第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`, "iu"));
-  const ordinalNumber = ordinalMatch ? parseReadyDraftTargetShotNumber(ordinalMatch[1] || "") : undefined;
-  const selectedMatch = selectedTarget && readyDraftIntentTargetsSelectedShot(text);
-  if (!tailMatch && !ordinalNumber && !selectedMatch) return undefined;
-  const targetLabel = selectedMatch ? selectedTarget.targetLabel : tailMatch ? "最后一镜" : `第 ${ordinalNumber} 镜`;
-  const revisionText = cleanReadyDraftTargetShotRevisionText(text);
-  const sceneMove = readyDraftFeedbackExplicitlyRequestsSceneRevision(text);
-  const removalTarget = readyDraftRemovalTargetFromText(text);
-  const removalOnly = Boolean(removalTarget)
-    && !/(?:改成|改为|换成|调整成|只保留|保留|改拍|改用)/u.test(text);
-  const preserveAction = readyDraftPreservesShotAction(text);
-  const targetFact = selectedMatch
-    ? selectedTarget.targetFact
-    : tailMatch && removalOnly
-    ? `${targetLabel}（含${removalTarget}的镜头）`
-    : tailMatch && shotCount > 0
-      ? `${targetLabel}（第 ${shotCount} 镜）`
-      : targetLabel;
-  const preserveTargetShot = /^(?:最后|末尾|结尾|最终)\s*(?:只)?(?:保留|保持|留下|留下来)/u.test(text);
-  const changeFact = preserveTargetShot
-    ? "保留原镜头"
-    : revisionText
-    ? removalOnly
-      ? `去掉：${removalTarget}`
-      : sceneMove
-      ? `场景：${revisionText}${preserveAction ? "（保留原动作）" : ""}`
-      : revisionText
-    : "";
-  const body = revisionText
-    ? removalOnly
-      ? `我理解你要把${targetLabel}里的${removalTarget}去掉。发送后我会先更新这个镜头，不会生成参考图，也不会发送视频。`
-      : sceneMove
-        ? `我理解你要把${targetLabel}的场景改到${revisionText}${preserveAction ? "，并保留原动作" : ""}。发送后我会先更新这个镜头，不会生成参考图，也不会发送视频。`
-        : `我理解你要修改${targetLabel}：${revisionText}。发送后我会先更新这个镜头，不会生成参考图，也不会发送视频。`
-    : `我理解你要修改${targetLabel}。发送后我会先更新这个镜头，不会生成参考图，也不会发送视频。`;
-  return {
-    label: `修改${targetLabel}`,
-    targetLabel,
-    targetFact,
-    changeFact,
-    preserveAction,
-    body,
-  };
-}
-
-function readyDraftExplicitMultiTargetShotRevisionClauses(value: string, shotCount: number) {
-  const text = cleanStoryText(value);
-  const markerPattern = new RegExp(String.raw`(?:把|将|让|请把|请将)?\s*(?:(?:只在|在)?\s*第\s*${readyDraftTargetShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)|(?:最后|末尾|结尾|最终)(?=\s*(?:只)?(?:保留|保持|留下|留下来)))`, "giu");
-  const markers = Array.from(text.matchAll(markerPattern))
-    .filter((match) => {
-      const start = match.index ?? 0;
-      return start === 0 || /[，,。；;!?！？\n]/u.test(text[start - 1] || "");
-    })
-    .map((match) => {
-      const ordinalMatch = match[0].match(new RegExp(String.raw`第\s*${readyDraftTargetShotNumberToken}`, "iu"));
-      const targetNumber = /(?:最后|末尾|结尾|最终)/u.test(match[0])
-        ? shotCount
-        : ordinalMatch
-          ? parseReadyDraftTargetShotNumber(ordinalMatch[1] || "")
-          : undefined;
-      return {
-        start: match.index ?? 0,
-        targetNumber,
-      };
-    })
-    .filter((marker): marker is { start: number; targetNumber: number } => Boolean(marker.targetNumber && marker.targetNumber > 0 && (!shotCount || marker.targetNumber <= shotCount)));
-  if (new Set(markers.map((marker) => marker.targetNumber)).size < 2) return [];
-  return markers.map((marker, index) => ({
-    targetNumber: marker.targetNumber,
-    text: cleanStoryText(text.slice(index === 0 ? 0 : marker.start, markers[index + 1]?.start)
-      .replace(/^[，,。；;!?！？\s]+|[，,。；;!?！？\s]+$/gu, "")),
-  })).filter((clause) => clause.text);
-}
-
-function readyDraftMultiTargetShotRevisionFromIntent(value: string, shotCount: number) {
-  const clauses = readyDraftExplicitMultiTargetShotRevisionClauses(value, shotCount);
-  if (clauses.length < 2) return undefined;
-  const revisions = clauses
-    .map((clause) => readyDraftTargetShotRevisionFromIntent(clause.text, shotCount))
-    .filter((revision): revision is NonNullable<ReturnType<typeof readyDraftTargetShotRevisionFromIntent>> => Boolean(revision));
-  if (revisions.length !== clauses.length) return undefined;
-  const targetLabel = `第 ${clauses.map((clause) => clause.targetNumber).join("、")} 镜`;
-  const changeFact = revisions.map((revision) => `${revision.targetLabel}：${revision.changeFact || "按要求更新"}`).join("；");
-  return {
-    label: `修改${targetLabel}`,
-    targetLabel,
-    targetFact: targetLabel,
-    changeFact,
-    preserveAction: revisions.some((revision) => revision.preserveAction),
-    body: `我理解你要同时修改${targetLabel}：${changeFact}。发送后我会分别更新这些镜头，不会把后一个镜头的要求写进前一个镜头；也不会生成参考图或发送视频。`,
-  };
+function readyDraftRevisionPreviewFromIntent(value: string, shotCount: number, selectedShotNumber?: number) {
+  const intent = parseDraftRevisionIntent({
+    text: value,
+    shotCount,
+    selectedShotNumber,
+  });
+  return intent ? buildDraftRevisionPreview(intent) : undefined;
 }
 
 function isNewVideoDraftConfirmationRouteIntent(value: string) {
@@ -9123,8 +8981,11 @@ export function MinimalAgentPanel({
   );
   const composerReadyDraftSelectedShotTarget = readyDraftSelectedShotTargetFromAgentContext(visibleExplicitAgentSelectionContext);
   const composerReadyDraftTargetShotRevision = !composerReadyDraftRequestedShotCount
-    ? readyDraftMultiTargetShotRevisionFromIntent(composerReadyDraftInputText, newVideoDraftShotCountForAgent)
-      || readyDraftTargetShotRevisionFromIntent(composerReadyDraftInputText, newVideoDraftShotCountForAgent, composerReadyDraftSelectedShotTarget)
+    ? readyDraftRevisionPreviewFromIntent(
+      composerReadyDraftInputText,
+      newVideoDraftShotCountForAgent,
+      composerReadyDraftSelectedShotTarget?.shotNumber,
+    )
     : undefined;
   const composerReadyDraftTargetsExistingShot = !composerReadyDraftRequestedShotCount
     && Boolean(composerReadyDraftTargetShotRevision || /第\s*(?:[0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕)/u.test(composerReadyDraftInputText));

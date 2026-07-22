@@ -23,6 +23,7 @@
     "agent-current-task-projection:test": "tsx scripts/agent-current-task-projection-test.mts",
     "agent-director-turn-projection:test": "tsx scripts/agent-director-turn-projection-test.mts",
     "agent-director-clarification:test": "tsx scripts/agent-director-clarification-test.mts",
+    "draft-revision-intent:test": "tsx scripts/draft-revision-intent-test.mts",
     "agent-director-review-decision:test": "tsx scripts/agent-director-review-decision-test.mts",
     "agent-director-review-regeneration:test": "tsx scripts/agent-director-review-regeneration-test.mts",
     "agent-director-review-version-pair:test": "tsx scripts/agent-director-review-version-pair-test.mts",

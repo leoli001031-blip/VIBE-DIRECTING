@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "phase": "P12-E",
+  "date": "2026-07-23",
+  "observationKind": "packaged_structured_draft_revision_acceptance",
+  "baselineHead": "fd9197a",
+  "status": "pass",
+  "gateLabels": {
+    "structuredDraftRevision": "P12-E structured draft revision PASS",
+    "externalCreator": "External creator usability NOT VERIFIED",
+    "realProvider": "Real Provider execution NOT VERIFIED",
+    "publicDistribution": "Public distribution NOT CLAIMED"
+  },
+  "executionBoundary": {
+    "frontendDevServerStarted": false,
+    "projectSaveConfirmed": false,
+    "referenceGenerationConfirmed": false,
+    "videoGenerationConfirmed": false,
+    "promotionConfirmed": false,
+    "deliveryOrExportConfirmed": false,
+    "textProviderCalls": 0,
+    "mediaProviderCalls": 0,
+    "providerRetryCount": 0,
+    "isolatedHomeUsed": true,
+    "providerLockUsed": true,
+    "providerTraceFiles": 0,
+    "projectFiles": 0,
+    "runtimeFiles": 0
+  },
+  "packagedLaunch": {
+    "candidate": "release/mac-arm64/Vibe Director Studio.app",
+    "preliminaryComputerUseBundle": "/tmp/vibe-director-p12e-1XI6wB/Vibe Director Studio.app",
+    "preliminaryAppAsarSha256": "15dea42770c44099165e7b7d4388c54e69991422120b3f2645dcb5c73431102e",
+    "finalComputerUseBundle": "/tmp/vibe-director-p12e-final-qir0El/Vibe Director Studio.app",
+    "finalAppAsarSha256": "81251c2fa23c89fb25fedae9bfcbdc57a1cead5445b85bffae25c031f28ff982",
+    "releaseMainExecutableSha256": "1f98b77dd7301fa6496e7c34921925e6be2acf088a65f85a0b92803644c3619d",
+    "launchPreparation": "copy_then_clear_xattrs_then_local_adhoc_resign",
+    "packagedLaunchContract": "pass",
+    "packageSmoke": "pass",
+    "distributionClaim": "local_adhoc_only"
+  },
+  "tasks": [
+    {
+      "id": "d1_multi_target_reflection_revision",
+      "creatorMessagesSent": 2,
+      "shotCount": 3,
+      "targets": [2, 3],
+      "currentRightRailTasksAfterStabilization": 1,
+      "currentTask": "确认这版故事",
+      "result": "pass",
+      "structuredFacts": {
+        "secondShotScene": "凌晨洗衣店",
+        "props": [
+          "湿火柴"
+        ],
+        "secondShotAction": "海边不要完整出现，以蓝色反光扫过衣服",
+        "finalShotPreserved": true
+      },
+      "evidence": "01-d1-multi-target-revision.jpg"
+    },
+    {
+      "id": "d2_market_scene_and_props",
+      "creatorMessagesSent": 2,
+      "shotCount": 2,
+      "currentRightRailTasksAfterStabilization": 1,
+      "currentTask": "确认这版故事",
+      "result": "pass",
+      "structuredFacts": {
+        "scene": "清晨菜市场",
+        "props": [
+          "透明鱼",
+          "菜篮"
+        ],
+        "finalAction": "用菜篮挡光，鱼就看不见了，水洼只剩天空倒影",
+        "childhoodFlashbackAdded": false
+      },
+      "evidence": "02-d2-structured-scene-props.jpg"
+    },
+    {
+      "id": "d3_selected_shot_action_revision",
+      "creatorMessagesSent": 2,
+      "shotCount": 2,
+      "selectedShot": "1-1",
+      "updatedShot": "1-1",
+      "currentRightRailTasksAfterStabilization": 1,
+      "currentTask": "确认这版故事",
+      "result": "pass",
+      "structuredFacts": {
+        "previewChange": "他擦完窗后停一下，不要让倒影立刻消失",
+        "appliedAction": "他擦完窗后停一下，不要让倒影立刻消失",
+        "commandPrefixRetained": false,
+        "temporalConstraintMisclassifiedAsRemoval": false,
+        "finalShotPreserved": true
+      },
+      "evidence": "03-d3-selected-shot-action-revision.jpg"
+    },
+    {
+      "id": "final_bundle_pure_removal_guard",
+      "creatorMessagesSent": 2,
+      "shotCount": 2,
+      "target": "last_shot_containing_怀表",
+      "currentRightRailTasksAfterStabilization": 1,
+      "currentTask": "确认这版故事",
+      "result": "pass_with_p2_copy_friction",
+      "structuredFacts": {
+        "previewChange": "去掉怀表",
+        "firstShotPropPreserved": true,
+        "secondShotPropRemoved": true,
+        "fallbackRevisionTextUsedForRemovalDecision": false
+      },
+      "remainingP2": [
+        "Removing the object can leave local prose fragments such as 她握着起身离开 or 手边可见."
+      ],
+      "evidence": "04-final-bundle-pure-removal.jpg"
+    }
+  ],
+  "restartObservation": {
+    "scope": "unconfirmed_browser_draft",
+    "result": "not_restored",
+    "severityForP12E": "out_of_scope",
+    "nextPhase": "P12-F",
+    "detail": "Quitting and relaunching the same D1 profile returned to 0 shots instead of restoring the unconfirmed browser draft."
+  },
+  "evidenceSha256": {
+    "01-d1-multi-target-revision.jpg": "805ce492fb769c51afcd932c3aec989a64ca74aecfe2d25ba35aaebc477ad0fe",
+    "02-d2-structured-scene-props.jpg": "c83b58c071ef2077e0a4fdecd62e10e79bd5f3a304a29becf2a625e187dbc611",
+    "03-d3-selected-shot-action-revision.jpg": "60cda6436c82d5e43c250971c3d62ff3ec0fdfc6585846f2684ca98dadf45e0f",
+    "04-final-bundle-pure-removal.jpg": "8cfd308893ac769a6d06a916304d1f19a2a93c82492f245a8d12a91c1f325764"
+  },
+  "verification": [
+    "npm run director-ai-storyboard-planner:test",
+    "npm run agent-director-clarification:test",
+    "npm run draft-revision-intent:test",
+    "npm run new-video-start-contract:test",
+    "npm run minimal-agent-p1:test",
+    "npm run minimal-ui:test",
+    "npm run runtime-api-provider-call-lock:test",
+    "npm run current-project-ui-closed-loop:test",
+    "npm run package:dir",
+    "npm run packaged-launch-contract:test",
+    "npm run package:smoke",
+    "npx tsc --noEmit --pretty false",
+    "git diff --check"
+  ]
+}
