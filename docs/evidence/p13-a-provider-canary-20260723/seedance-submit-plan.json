@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "p13_provider_seedance_submit_plan/1.0.0",
+  "projectId": "p13_provider_canary",
+  "projectRoot": "/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+  "projectFactHash": "pv_6d5dcb24",
+  "shotId": "P13S01",
+  "jobId": "agent_video_job_p13_provider_canary_video_plan_submit_video_001",
+  "actionId": "p13s01_seedance_action_once",
+  "confirmationId": "p13s01_seedance_confirmation_once",
+  "receiptId": "p13s01_seedance_submit_receipt_once",
+  "command": "dreamina",
+  "args": [
+    "image2video",
+    "--image",
+    "/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary/assets/candidates/P13S01-image2-reference-1280x720.png",
+    "--prompt",
+    "[jimeng_first_frame_protection_v1]\nFirst-frame protection base prompt:\n- For the first 0.5 seconds, keep the provided first frame composition and character proportions stable.\n- During that protected first 0.5 seconds, allow only subtle environmental motion such as rain, light shimmer, or tiny atmospheric drift.\n- Begin camera movement only after 0.5 seconds.\n- Treat the input image as visual truth; the prompt should describe only the next motion delta, not redraw or reinterpret the picture.\n- Do not stretch characters, change focal length, re-project the person, or re-crop/reframe the shot during the protected opening.\n\nShot motion request:\nCreate one continuous five-second restrained realistic shot from the supplied 16:9 reference frame. The elderly man completes one readable action: he raises the clearly empty basket into the diagonal morning light to shade his eyes. The translucent fish shape gently fades as the basket reaches the light; do not make it glow, burst, transform, or become an explained fantasy event. Use a nearly locked medium-wide camera with only a very subtle forward drift. End by letting the foreground puddle hold a clean reflection of the pale sky while the man remains in the same market space. Preserve the same man, clothing, basket, market layout, wet ground, light direction, and realistic visual treatment. No cuts, no flashback, no montage, no extra characters, no melodrama, no captions, no logo, no watermark, no music.",
+    "--duration",
+    "5",
+    "--video_resolution",
+    "720p",
+    "--model_version",
+    "seedance2.0_vip",
+    "--poll",
+    "90"
+  ],
+  "ratio": "16:9 from validated 1280x720 Image2 input",
+  "maxSubmitCount": 1,
+  "automaticRetry": false,
+  "rawSecretStored": false
+}

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "p13_provider_canary_inspection/1.0.0",
+  "inspectedAt": "2026-07-22T22:40:18.598Z",
+  "projectRoot": "/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+  "projectId": "p13_provider_canary",
+  "projectFactHash": "pv_6d5dcb24",
+  "shotId": "P13S01",
+  "image": {
+    "attemptCount": 1,
+    "status": "needs_review",
+    "outputPath": "assets/candidates/P13S01-image2-reference-1280x720.png",
+    "outputHash": "sha256:b4dbf4837e31212f77027c7e3f4a01637ac02a4dc679ffe7a596205b2c6f4836",
+    "sourceOutputPath": "assets/candidates/P13S01-image2-reference.png",
+    "sourceOutputHash": "sha256:a43edc9e80478fd03e00f7d7ba180f51686aa0b93d59b9faad1822db92728d0b",
+    "dimensions": {
+      "width": 1280,
+      "height": 720
+    },
+    "localNormalization": {
+      "appliedAt": "2026-07-22T22:12:20.070Z",
+      "command": "sips --resampleHeightWidth 720 1280",
+      "providerCalled": false,
+      "preservesOriginal": true,
+      "stdout": "/private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary/assets/candidates/P13S01-image2-reference.png\n  /private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary/assets/candidates/P13S01-image2-reference-1280x720.png\n",
+      "stderr": ""
+    },
+    "providerCallCount": 1,
+    "automaticRetry": false
+  },
+  "video": {
+    "submitAttemptCount": 1,
+    "status": "needs_review",
+    "externalTaskId": "aeba14b4-8d30-4adf-9d5c-1b283fabc951",
+    "outputPath": "/private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary/video/provider-return/P13S01-seedance2.0_vip.mp4",
+    "outputHash": "sha256:deb0746c81f91b179f6f8cbcddee9d474ce2ab35f5c1abab5042aa50c1d2393b",
+    "providerSubmitCount": 1,
+    "queryAttemptCount": 3,
+    "automaticRetry": false
+  },
+  "liveJobs": [
+    {
+      "jobId": "agent_video_job_p13_provider_canary_video_plan_submit_video_001",
+      "actionId": "p13s01_seedance_action_once",
+      "sourceConfirmationId": "p13s01_seedance_confirmation_once",
+      "status": "succeeded",
+      "providerId": "jimeng-seedance",
+      "modelId": "seedance2.0_vip",
+      "providerCalled": true,
+      "externalTaskId": "aeba14b4-8d30-4adf-9d5c-1b283fabc951",
+      "reviewStatus": "needs_review",
+      "outputPath": "/private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary/video/provider-return/P13S01-seedance2.0_vip.mp4",
+      "outputHash": "sha256:deb0746c81f91b179f6f8cbcddee9d474ce2ab35f5c1abab5042aa50c1d2393b"
+    }
+  ],
+  "gates": {
+    "reviewRequired": true,
+    "approved": false,
+    "promoted": false,
+    "delivered": false,
+    "exported": false
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "p13_provider_canary_packaged_observation/1.0.0",
+  "observedAt": "2026-07-22T22:38:58.698Z",
+  "status": "pass",
+  "projectId": "p13_provider_canary",
+  "projectRoot": "/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+  "projectFactHash": "pv_6d5dcb24",
+  "shotId": "P13S01",
+  "externalTaskId": "aeba14b4-8d30-4adf-9d5c-1b283fabc951",
+  "outputPath": "/private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary/video/provider-return/P13S01-seedance2.0_vip.mp4",
+  "outputHash": "sha256:deb0746c81f91b179f6f8cbcddee9d474ce2ab35f5c1abab5042aa50c1d2393b",
+  "providerCallsDuringPackagedInspection": 0,
+  "observation": {
+    "currentTaskStep": "submit_video",
+    "currentTaskSource": "project_observation",
+    "currentTaskLabel": "复核视频",
+    "currentTaskCount": 1,
+    "runningTurnCount": 0,
+    "reviewTurnCount": 1,
+    "selectionTurnCount": 0,
+    "promotionTurnCount": 0,
+    "enabledConfirmations": [],
+    "bodyText": "Vibe Director / 导演台\nP13 Provider Canary\n本地\n查看\n视频\n看视频\n交付\n设置\n项目\nP13 Provider Canary\n视频待确认 · 确认视频结果\n故事\n1 镜头\n参考\n未放\n视频\n1 待看\n交付\n展示包\n段落\n清晨菜市场\n1 镜头\n当前对象\n视频任务\n状态来自当前项目事实\n镜头\n1 个\n参考\n待整理\n视频\n1 段已完成\n视频\nP13S01\n1 段\n5s\n视频已完成\n待复核\n清晨菜市场\n0s / 5s\n\n1 段已返回 · 5s\n\n声音参考\n声音边界\n\n视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。\n\n环境音\n\n环境声围绕：清晨菜市场，老人举起空菜篮挡住斜照晨光，透明鱼淡去，结尾水洼只剩天空倒影。\n\n时长：3s · 淡入 0s · 淡出 0s\n声音参考\n\n已绑定 Voice Source Registry，发送视频时只作为声线、语气和说话质感参考。\n\n本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。\n\n收起\nAI 导演\n正在看视频结果\n当前任务\n\n先看视频结果，通过后再继续下一步。\n\n范围\nP13S01\n状态\nneeds_review\n保护\n不自动重试、不晋级、不导出\n本轮 · Review\n新版本已返回\nneeds_review\n\n结果已返回。先检查动作完成点、情绪转折与已确认参考的连续性。\n\n对象\nP13S01\n范围\nP13S01\n回执\nseedance_sub\n输出\nsha256:deb07\n审查依据：全能参考\n通过预览\n需要修改\n只写入 Review Receipt，不会晋级项目事实，不会导出。\n晋级为项目事实\n需要另行确认\n更早的对话\n3 条\n添加文件\nP13S01 · needs_review\n补充修改意图不会自动重试或提交。\n发送\n已恢复本地项目",
+    "reviewApprovalEnabled": true,
+    "reviewRevisionEnabled": true,
+    "reviewApprovalTitle": "只写入 Review Receipt，不会晋级项目事实，不会导出。",
+    "reviewRevisionTitle": "只进入修改讨论，不会自动重试或重新提交外部任务。"
+  },
+  "gates": {
+    "reviewRequired": true,
+    "approved": false,
+    "promoted": false,
+    "delivered": false,
+    "exported": false
+  }
+}

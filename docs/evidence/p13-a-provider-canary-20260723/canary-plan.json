@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "p13_provider_canary_plan/1.0.0",
+  "createdAt": "2026-07-22T22:09:31.309Z",
+  "projectId": "p13_provider_canary",
+  "projectRoot": "/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+  "projectFactHash": "pv_6d5dcb24",
+  "shotId": "P13S01",
+  "image": {
+    "providerId": "apikey-fun-gpt55-responses-image",
+    "model": "gpt-5.5",
+    "size": "1280x720",
+    "quality": "standard",
+    "maxSubmitCount": 1,
+    "automaticRetry": false,
+    "actionId": "p13s01_image2_action_once",
+    "jobId": "p13s01_image2_job_once",
+    "receiptId": "p13s01_image2_receipt_once",
+    "prompt": "Create one restrained realistic 16:9 cinematic production reference frame for P13S01. Early morning in an open-air market just after rain; stalls are present but no other people are visible. One elderly man in practical muted clothing raises a clearly empty woven market basket to block a diagonal shaft of pale morning sunlight. A single subtle translucent fish shape is fading inside the shaft of light; it must feel fleeting and observational, not like a glowing magical creature. Wet pavement and one foreground puddle reflect the pale sky; compose the frame so the puddle can become the ending visual anchor. Medium-wide single-scene film still, natural skin and fabric, restrained color, quiet emotion, believable light. No flashback, no magic explanation, no melodrama, no extra characters, no montage, no split screen, no text, no logo, no watermark."
+  },
+  "video": {
+    "providerId": "jimeng-seedance",
+    "modelVersion": "seedance2.0_vip",
+    "videoResolution": "720p",
+    "ratio": "16:9",
+    "durationSeconds": 5,
+    "maxSubmitCount": 1,
+    "automaticRetry": false,
+    "actionId": "p13s01_seedance_action_once",
+    "confirmationId": "p13s01_seedance_confirmation_once",
+    "receiptId": "p13s01_seedance_submit_receipt_once",
+    "prompt": "Create one continuous five-second restrained realistic shot from the supplied 16:9 reference frame. The elderly man completes one readable action: he raises the clearly empty basket into the diagonal morning light to shade his eyes. The translucent fish shape gently fades as the basket reaches the light; do not make it glow, burst, transform, or become an explained fantasy event. Use a nearly locked medium-wide camera with only a very subtle forward drift. End by letting the foreground puddle hold a clean reflection of the pale sky while the man remains in the same market space. Preserve the same man, clothing, basket, market layout, wet ground, light direction, and realistic visual treatment. No cuts, no flashback, no montage, no extra characters, no melodrama, no captions, no logo, no watermark, no music."
+  },
+  "gates": {
+    "seedanceRequiresValidImage2": true,
+    "returnedMediaStatus": "needs_review",
+    "autoApprove": false,
+    "autoPromote": false,
+    "autoDeliver": false,
+    "autoExport": false
+  }
+}

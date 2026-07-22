@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "p13_provider_seedance_submit_attempt/1.0.0",
+  "attemptedAt": "2026-07-22T22:12:39.129Z",
+  "projectId": "p13_provider_canary",
+  "projectRoot": "/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+  "projectFactHash": "pv_6d5dcb24",
+  "shotId": "P13S01",
+  "jobId": "agent_video_job_p13_provider_canary_video_plan_submit_video_001",
+  "actionId": "p13s01_seedance_action_once",
+  "confirmationId": "p13s01_seedance_confirmation_once",
+  "receiptId": "p13s01_seedance_submit_receipt_once",
+  "modelVersion": "seedance2.0_vip",
+  "videoResolution": "720p",
+  "ratio": "16:9",
+  "durationSeconds": 5,
+  "maxSubmitCount": 1,
+  "automaticRetry": false
+}
