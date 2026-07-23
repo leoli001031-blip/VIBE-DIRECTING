@@ -11966,6 +11966,178 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   font-weight: 650;
 }
 
+.director-agent-rail .minimal-agent-panel.has-session-timeline .minimal-agent-selection-context {
+  display: none;
+}
+
+.agent-session-timeline {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--signal-line);
+  border-bottom: 1px solid var(--signal-line);
+  padding: 12px 4px 12px 0;
+  scrollbar-gutter: stable;
+}
+
+.agent-session-timeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+  padding-left: 27px;
+}
+
+.agent-session-timeline-head span {
+  color: var(--signal-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.agent-session-timeline-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--signal-ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-session-timeline ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-session-timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  padding: 0 0 11px;
+}
+
+.agent-session-timeline li:not(:last-child)::after {
+  position: absolute;
+  top: 20px;
+  bottom: 0;
+  left: 9px;
+  width: 1px;
+  background: var(--signal-line-strong);
+  content: "";
+}
+
+.agent-session-timeline-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid var(--signal-line-strong);
+  border-radius: 50%;
+  background: var(--signal-surface);
+  color: var(--signal-muted);
+}
+
+.agent-session-timeline li.complete .agent-session-timeline-marker {
+  border-color: var(--signal-success);
+  background: var(--signal-success);
+  color: #ffffff;
+}
+
+.agent-session-timeline li.current .agent-session-timeline-marker {
+  border-color: var(--signal-warning);
+  color: var(--signal-warning);
+  box-shadow: 0 0 0 3px var(--signal-warning-soft);
+}
+
+.agent-session-timeline.blocked li.current .agent-session-timeline-marker {
+  border-color: var(--signal-blocked);
+  color: var(--signal-blocked);
+  box-shadow: 0 0 0 3px var(--signal-blocked-soft);
+}
+
+.agent-session-timeline li.locked .agent-session-timeline-marker {
+  border-style: dashed;
+  color: var(--signal-line-strong);
+}
+
+.agent-session-timeline-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.agent-session-timeline-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--signal-ink);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-session-timeline-copy small {
+  min-width: 0;
+  color: var(--signal-muted);
+  font-size: 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.agent-session-timeline li.current {
+  padding-bottom: 14px;
+}
+
+.agent-session-timeline li.current .agent-session-timeline-copy strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.agent-session-timeline li.current .agent-session-timeline-copy small {
+  color: var(--signal-warning);
+  font-weight: 700;
+}
+
+.agent-session-timeline.blocked li.current .agent-session-timeline-copy small {
+  color: var(--signal-blocked);
+}
+
+.agent-session-timeline li.locked .agent-session-timeline-copy {
+  opacity: 0.62;
+}
+
+.agent-session-timeline-current {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.director-agent-rail .agent-session-timeline-current .minimal-agent-focused-turn {
+  flex: none;
+  overflow: visible;
+  border-top: 0;
+  border-bottom: 0;
+  padding: 10px 0 2px;
+}
+
+.agent-session-timeline-current .minimal-agent-review-turn-head span {
+  display: none;
+}
+
+.agent-session-timeline-current .minimal-agent-review-turn-head strong {
+  font-size: 18px;
+}
+
 .minimal-agent-review-turn {
   color: var(--signal-muted);
 }
@@ -12559,6 +12731,12 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   }
 }
 
+@media (min-width: 1440px) {
+  .minimal-director.preview.has-agent-rail:has(.minimal-agent-panel.has-session-timeline) {
+    grid-template-columns: 210px minmax(0, 1fr) 420px;
+  }
+}
+
 @media (max-width: 1180px) {
   .minimal-topbar,
   .preview-shell .minimal-topbar {
@@ -12782,6 +12960,15 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   .signal-current-task > em {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .agent-session-timeline-copy {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .agent-session-timeline-copy small {
+    text-align: left;
   }
 
   .minimal-agent-input-footer,

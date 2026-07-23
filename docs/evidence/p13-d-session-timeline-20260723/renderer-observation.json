@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "p13_session_timeline_renderer_observation/1.0.0",
+  "status": "renderer_visual_pass_packaged_launch_blocked",
+  "observedAt": "2026-07-23T00:25:14Z",
+  "selectedDirection": 3,
+  "scope": "review_needs_review_vertical_slice",
+  "projectRoot": "/private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+  "projectId": "p13_provider_canary",
+  "shotId": "P13S01",
+  "resultStatus": "needs_review",
+  "outputHash": "deb0746c81f91b179f6f8cbcddee9d474ce2ab35f5c1abab5042aa50c1d2393b",
+  "providerCalls": 0,
+  "reviewActionsInvoked": 0,
+  "projectFactPromotions": 0,
+  "deliveries": 0,
+  "exports": 0,
+  "desktop": {
+    "viewport": {
+      "width": 1480,
+      "height": 980
+    },
+    "timelineCount": 1,
+    "phaseCount": 7,
+    "currentPhaseCount": 1,
+    "currentPhase": "review",
+    "ariaCurrentPhase": "review",
+    "states": {
+      "clarify": "complete",
+      "proposal": "complete",
+      "confirmation": "complete",
+      "running": "complete",
+      "review": "current",
+      "promotion": "locked",
+      "delivery": "locked"
+    },
+    "reviewTurnCount": 1,
+    "runningTurnCount": 0,
+    "reviewApprovalEnabled": true,
+    "reviewRevisionEnabled": true,
+    "promotionDisabled": true,
+    "horizontalOverflow": false,
+    "reviewWithinTimeline": true,
+    "composerAfterTimeline": true,
+    "actionTextFits": true
+  },
+  "constrained": {
+    "viewport": {
+      "width": 980,
+      "height": 820
+    },
+    "timelineCount": 1,
+    "phaseCount": 7,
+    "currentPhaseCount": 1,
+    "currentPhase": "review",
+    "ariaCurrentPhase": "review",
+    "states": {
+      "clarify": "complete",
+      "proposal": "complete",
+      "confirmation": "complete",
+      "running": "complete",
+      "review": "current",
+      "promotion": "locked",
+      "delivery": "locked"
+    },
+    "reviewTurnCount": 1,
+    "runningTurnCount": 0,
+    "reviewApprovalEnabled": true,
+    "reviewRevisionEnabled": true,
+    "promotionDisabled": true,
+    "horizontalOverflow": false,
+    "reviewWithinTimeline": true,
+    "composerAfterTimeline": true,
+    "actionTextFits": true
+  },
+  "protectedHashes": {
+    "project.vibe": "b0f88cd47e0d182de518103dfc609736c6e581ff452bc67ed882fef60bb809b4",
+    "agent-generation-job-ledger.json": "37333ac9a5ed0a640ce660e7d5c5a88b7ccd423f3fa7dda9259c35fc93ac6195",
+    "seedance-result-receipt.json": "ab50607f7b7e812a97cc34c1bb32bb5bcbc3ba53cffee5ba22e1d1f14b06c13d",
+    "P13S01-seedance2.0_vip.mp4": "deb0746c81f91b179f6f8cbcddee9d474ce2ab35f5c1abab5042aa50c1d2393b"
+  },
+  "evidenceHashes": {
+    "01-review-session-timeline-desktop.png": "1a2d304b02cf372824bc33dd70b16e7b322d9194ca31116cc68627c003c58734",
+    "02-review-session-timeline-constrained.png": "26e17009833e4b6dac0ecd9623ea959a30770877bf9074d4d9d1333028ec0fd5",
+    "03-review-session-timeline-reference-viewport.png": "fa54ddb54f335924b7427ac53b303207f3fd906aee68b816e6917507631525a7",
+    "04-reference-vs-implementation.png": "120c628063fb7a55612e5425ef74a1fea4f372f425d984322feeb30aaf1463bd"
+  },
+  "packagedLaunch": {
+    "status": "blocked",
+    "electronVersion": "42.0.1",
+    "packageDirectoryBuilt": true,
+    "codesignVerified": true,
+    "appControlConnected": false,
+    "packagedAcceptanceError": "packaged acceptance control did not appear",
+    "baselineLaunchError": "Packaged executable smoke timed out",
+    "currentExecutableExitCode": 137,
+    "archivedP13BExecutableExitCode": 137,
+    "vanillaElectronVersionCommandExitCode": 137,
+    "computerUseLaunch": "timeoutReached",
+    "classification": "current macOS Electron launch layer; production UI behavior not implicated"
+  }
+}

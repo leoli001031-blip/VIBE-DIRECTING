@@ -253,4 +253,29 @@ No actionable P0, P1, or P2 mismatch remains in the accepted slices.
 - Evidence:
   `docs/evidence/p10-e-packaged-director-workflow-20260719/packaged-observation.json`.
 
-final result: passed
+## P13-D Session Timeline update
+
+- Direction 3 is implemented only for the real `P13S01 · needs_review` Review
+  state; the complete shell was not redesigned.
+- The source direction and production renderer were compared together at the
+  same `1058px` height. The selected hierarchy is preserved: one vertical
+  session sequence, one expanded Review turn, and locked downstream gates.
+- `Review` is the sole current phase. `Clarify`, `Proposal`, `Confirmation`,
+  and `Running` are complete; Project Fact and Delivery are locked.
+- The existing Review actions, receipt boundary, composer, and real returned
+  video remain intact. No action was clicked during visual QA.
+- Desktop `1480x980` and constrained `980x820` checks found no horizontal
+  overflow, Review escape, composer overlap, or action-text clipping.
+- The existing white top bar, center preview structure, and missing
+  Skills/Receipts header are deliberate later-slice differences.
+- Packaged visual QA is blocked because current, archived known-good, and
+  vanilla Electron executables all exit `137` before application code starts.
+  This renderer pass is not presented as packaged acceptance.
+- Evidence:
+  `docs/evidence/p13-d-session-timeline-20260723/renderer-observation.json`.
+
+P10-D through P10-E prior scope: passed
+
+P13-D production renderer visual result: passed
+
+P13-D packaged result: blocked
