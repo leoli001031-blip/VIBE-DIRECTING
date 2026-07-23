@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "p13_session_timeline_clarify_proposal_launch_diagnostics/1.0.0",
+  "status": "contract_pass_visual_and_packaged_blocked",
+  "observedAt": "2026-07-23T01:18:35Z",
+  "selectedDirection": 3,
+  "scope": "clarify_to_proposal_vertical_slice",
+  "providerCalls": 0,
+  "proposalConfirmations": 0,
+  "generationJobsSubmitted": 0,
+  "reviewApprovals": 0,
+  "projectFactPromotions": 0,
+  "deliveries": 0,
+  "exports": 0,
+  "sourceProject": {
+    "root": "/private/tmp/vibe-director-p13-a-20260723/projects/p13-provider-canary",
+    "projectHash": "b0f88cd47e0d182de518103dfc609736c6e581ff452bc67ed882fef60bb809b4",
+    "ledgerHash": "37333ac9a5ed0a640ce660e7d5c5a88b7ccd423f3fa7dda9259c35fc93ac6195",
+    "resultReceiptHash": "ab50607f7b7e812a97cc34c1bb32bb5bcbc3ba53cffee5ba22e1d1f14b06c13d",
+    "mediaHash": "deb0746c81f91b179f6f8cbcddee9d474ce2ab35f5c1abab5042aa50c1d2393b",
+    "modified": false
+  },
+  "contracts": {
+    "agentSessionTimeline": "pass",
+    "agentDirectorTurnProjection": "pass",
+    "agentDirectorClarification": "pass",
+    "agentDirectorReviewRegeneration": "pass",
+    "minimalAgentP1": "pass",
+    "minimalUi": "pass",
+    "typescript": "pass",
+    "diffCheck": "pass",
+    "viteProductionBuild": "pass"
+  },
+  "rendererLaunch": {
+    "status": "blocked_before_navigation",
+    "playwrightMcp": "navigation and tab-list calls did not return before termination",
+    "installedChromeStrictVerification": "failed: disallowed com.apple.FinderInfo xattr on Google Chrome Framework.framework",
+    "isolatedChromeCopyStrictVerification": "pass",
+    "isolatedChromeCopyLaunch": "process terminated by SIGKILL before a page or control channel became available",
+    "screenshotsCaptured": 0
+  },
+  "packagedLaunch": {
+    "status": "blocked_before_application_code",
+    "developerMode": "disabled",
+    "adHocSignature": "rejected as unknown certificate chain",
+    "appleDevelopmentSignature": "fresh package still exits 137 while Developer Mode is disabled",
+    "systemSettingsChanged": false
+  }
+}

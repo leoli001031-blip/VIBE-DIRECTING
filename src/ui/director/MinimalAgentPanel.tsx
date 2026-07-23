@@ -201,7 +201,7 @@ import {
 } from "./agentDirectorClarification";
 import { buildAgentDirectorTurnProjection } from "./agentDirectorTurnProjection";
 import { AgentSessionTimeline } from "./AgentSessionTimeline";
-import { buildAgentReviewSessionTimelineProjection } from "./agentSessionTimelineProjection";
+import { buildAgentSessionTimelineProjection } from "./agentSessionTimelineProjection";
 import {
   activeAgentDirectorReviewRevisionIntentFromTimeline,
   buildAgentDirectorReviewRevisionIntent,
@@ -11265,7 +11265,7 @@ export function MinimalAgentPanel({
     && (agentCurrentTaskProjection.step === "confirm_version_selection" || agentCurrentTaskProjection.step === "confirm_project_fact_promotion");
   const reviewRevisionTurnVisible = agentDirectorTurnProjection.phase === "conversation"
     && Boolean(agentDirectorTurnProjection.reviewRevisionIntent);
-  const reviewSessionTimelineProjection = buildAgentReviewSessionTimelineProjection(agentDirectorTurnProjection);
+  const sessionTimelineProjection = buildAgentSessionTimelineProjection(agentDirectorTurnProjection);
   const focusedTurnVisible = clarificationTurnVisible
     || proposalTurnVisible
     || paidConfirmationTurnVisible
@@ -11942,7 +11942,7 @@ export function MinimalAgentPanel({
 
   return (
     <aside
-      className={`minimal-agent-panel ${hasVisibleActionCard ? "has-visible-action-card" : ""} ${reviewSessionTimelineProjection ? "has-session-timeline" : ""}`}
+      className={`minimal-agent-panel ${hasVisibleActionCard ? "has-visible-action-card" : ""} ${sessionTimelineProjection ? "has-session-timeline" : ""}`}
       data-director-turn-mode={agentDirectorTurnProjection.mode}
       data-director-turn-phase={agentDirectorTurnProjection.phase}
       data-agent-status={status}
@@ -12024,12 +12024,13 @@ export function MinimalAgentPanel({
         </div>
         <em>{displayedCurrentTaskStatus}</em>
       </section>
-      {clarificationTurnVisible && clarificationProjection && (
-        <section
-          className="minimal-agent-focused-turn minimal-agent-clarification-turn"
-          aria-label="当前导演澄清"
-          aria-live="polite"
-        >
+      {clarificationTurnVisible && clarificationProjection && sessionTimelineProjection?.currentPhaseId === "clarify" && (
+        <AgentSessionTimeline projection={sessionTimelineProjection}>
+          <section
+            className="minimal-agent-focused-turn minimal-agent-clarification-turn"
+            aria-label="当前导演澄清"
+            aria-live="polite"
+          >
           <div className="minimal-agent-focused-turn-head">
             <div>
               <span>本轮 · Clarify</span>
@@ -12063,14 +12064,16 @@ export function MinimalAgentPanel({
             我再描述
           </button>
           <small className="minimal-agent-focused-boundary">{clarificationProjection.boundary}</small>
-        </section>
+          </section>
+        </AgentSessionTimeline>
       )}
-      {proposalTurnVisible && displayedProposalProjection && (
-        <section
-          className={`minimal-agent-focused-turn minimal-agent-proposal-turn ${agentDirectorTurnProjection.mode}`}
-          aria-label="当前导演提案"
-          aria-live="polite"
-        >
+      {proposalTurnVisible && displayedProposalProjection && sessionTimelineProjection?.currentPhaseId === "proposal" && (
+        <AgentSessionTimeline projection={sessionTimelineProjection}>
+          <section
+            className={`minimal-agent-focused-turn minimal-agent-proposal-turn ${agentDirectorTurnProjection.mode}`}
+            aria-label="当前导演提案"
+            aria-live="polite"
+          >
           <div className="minimal-agent-focused-turn-head">
             <div>
               <span>本轮 · Proposal</span>
@@ -12134,7 +12137,8 @@ export function MinimalAgentPanel({
           <small className="minimal-agent-focused-boundary">
             {proposalConfirmAction?.boundary || "确认前只保留提案，不执行。"}
           </small>
-        </section>
+          </section>
+        </AgentSessionTimeline>
       )}
       {paidConfirmationTurnVisible && (
         <section
@@ -12405,8 +12409,8 @@ export function MinimalAgentPanel({
           </small>
         </section>
       )}
-      {reviewTurnVisible && reviewSessionTimelineProjection && (
-        <AgentSessionTimeline projection={reviewSessionTimelineProjection}>
+      {reviewTurnVisible && sessionTimelineProjection?.currentPhaseId === "review" && (
+        <AgentSessionTimeline projection={sessionTimelineProjection}>
           <section
             className={`minimal-agent-focused-turn minimal-agent-review-turn ${agentDirectorTurnProjection.mode}`}
             aria-label="当前视频复核"

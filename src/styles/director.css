@@ -12130,10 +12130,12 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   padding: 10px 0 2px;
 }
 
+.agent-session-timeline-current .minimal-agent-focused-turn-head span,
 .agent-session-timeline-current .minimal-agent-review-turn-head span {
   display: none;
 }
 
+.agent-session-timeline-current .minimal-agent-focused-turn-head strong,
 .agent-session-timeline-current .minimal-agent-review-turn-head strong {
   font-size: 18px;
 }

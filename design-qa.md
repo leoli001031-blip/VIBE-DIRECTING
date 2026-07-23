@@ -279,3 +279,29 @@ P10-D through P10-E prior scope: passed
 P13-D production renderer visual result: passed
 
 P13-D packaged result: blocked
+
+## P13-E Session Timeline Clarify / Proposal checkpoint
+
+- Direction 3 now uses the same structured Session Timeline for Clarify,
+  Proposal, and Review. Display copy does not select the phase.
+- Clarify is the only current phase while Proposal and all later gates remain
+  locked. Proposal completes Clarify but leaves Confirmation locked.
+- Existing Clarify choices, Proposal confirmation copy, callbacks, and
+  authority boundaries are unchanged. No new execution control was added.
+- Focused projection, clarification, regeneration, TypeScript, diff, and Vite
+  production-build checks pass.
+- Visual acceptance is blocked before navigation. Playwright MCP does not
+  return, the installed Chrome bundle has a disallowed `FinderInfo` xattr, and
+  a clean isolated Chrome copy is killed before a page appears.
+- Packaged acceptance remains blocked before application code because fresh
+  signatures cannot launch while Developer Mode is disabled.
+- No screenshot substitute was generated. This checkpoint is not presented as
+  production-renderer or packaged visual acceptance.
+- Evidence:
+  `docs/evidence/p13-e-session-timeline-clarify-proposal-20260723/launch-diagnostics.json`.
+
+P13-E implementation and contract result: passed
+
+P13-E production renderer visual result: blocked
+
+P13-E packaged result: blocked
