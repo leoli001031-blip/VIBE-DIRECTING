@@ -2,6 +2,9 @@
 
 Date: 2026-05-18
 
+> Retained evidence snapshot. This is not the latest package or acceptance
+> status. Read `CURRENT-STATUS.md` for the current verdict.
+
 ## Product Shape
 
 Vibe Director Studio is a local-first Project.vibe desktop app. The MVP path does not require accounts or hosted workspaces.

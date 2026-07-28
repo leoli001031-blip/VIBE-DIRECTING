@@ -4,10 +4,13 @@ This `PLAN.md` is a 2026-05-13 historical planning snapshot. Keep it for
 context, but do not use it as the current worker baseline or active deletion
 plan without rechecking the active repo state.
 
-Current baseline:
+Current entry:
 
-- `docs/mvp-integration-development-plan.md`
-- `docs/mvp-delivery-technical-debt-plan.md`
+- `AGENTS.md`
+- `docs/CURRENT-STATUS.md`
+
+The former MVP integration and technical-debt plans are also dated historical
+evidence.
 
 ---
 

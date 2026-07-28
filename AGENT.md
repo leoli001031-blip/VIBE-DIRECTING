@@ -1,3 +1,9 @@
+# Historical Agent Handoff
+
+> This is a 2026-05-18 snapshot. It is retained for product intent and old
+> implementation context, but it is not an active Codex rule file.
+> Read `AGENTS.md` and `docs/CURRENT-STATUS.md` for current rules and facts.
+
 # Vibe Core Agent Handoff
 
 Last updated: 2026-05-18
@@ -10,7 +16,7 @@ Project root:
 /Users/lichenhao/Desktop/new vibe directing
 ```
 
-Current planning authority:
+Planning authority recorded at this historical checkpoint:
 
 ```text
 README.md
@@ -361,7 +367,7 @@ Before any real video-provider test:
 
 Do not call a test successful just because an image looks good. Track provenance, references, source hashes, provider request ids when available, QA status, and preview projection.
 
-## Current Architecture
+## Architecture Recorded in This Snapshot
 
 Current stack:
 
@@ -661,7 +667,7 @@ npm run codex-app-server-image2-edit-adapter:test
 - Do not run destructive git commands.
 - Do not revert user changes.
 
-## Current Next Best Task
+## Historical Next Best Task
 
 The safest next development task is:
 

@@ -206,7 +206,7 @@ assertIncludes(vibeAgentCoreTest, "asset classification result", "visible Agent 
 assertIncludes(vibeAgentCoreTest, "execution boundary", "visible Agent turn chain must include execution boundary");
 assertIncludes(vibeAgentCoreTest, "confirmation request card", "visible Agent turn chain must include confirmation card");
 assertIncludes(directorModeShell, "buildProjectStatusViewModel", "DirectorModeShell must render the unified project status projection");
-assertMatches(directorModeShell, /function ProjectStatusSummary[\s\S]*status\.stage[\s\S]*status\.doing[\s\S]*status\.nextAction[\s\S]*status\.waitingFor[\s\S]*status\.issue/, "project status summary must show stage, work, waiting, next action, and errors");
+assertMatches(directorModeShell, /function ProjectStatusSummary[\s\S]*data-current-task-step=\{currentTask\?\.step \|\| "idle"\}[\s\S]*currentTaskObjectLabel\(currentTask\?\.step\)[\s\S]*status\.issue[\s\S]*visibleFacts\.map/, "project status summary must show the current object, passive project facts, and errors without repeating the right-rail task");
 assertIncludes(projectStatusViewModel, "videoWaitingLabel", "P2 status model must absorb video queue/return state");
 assertIncludes(projectStatusViewModel, "assetWaitingLabel", "P2 status model must absorb reference-generation state");
 

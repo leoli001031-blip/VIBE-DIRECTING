@@ -1,3 +1,8 @@
+# Historical Demo Handoff
+
+> This document records the pre-P13 demo scope. Use
+> `docs/CURRENT-STATUS.md` for current implementation and acceptance facts.
+
 # Vibe Director Studio Demo Handoff
 
 Current demo scope is frozen around the creator-facing loop:

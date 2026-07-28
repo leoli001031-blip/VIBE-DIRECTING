@@ -2,16 +2,20 @@
 
 Updated: 2026-05-18
 
-This document is the current development baseline for Vibe Director Studio. It
-supersedes the root `PLAN.md` as an active worker brief, but does not delete or
-rewrite historical planning documents.
+> Historical baseline: this plan is retained as 2026-05-18 integration
+> evidence. It no longer supersedes the root plan or acts as the current worker
+> brief. Read `../AGENTS.md` and `CURRENT-STATUS.md` first.
+
+At this checkpoint, this document was the development baseline for Vibe
+Director Studio. It superseded the root `PLAN.md` without deleting or rewriting
+older planning documents.
 
 ## Baseline Status
 
 Vibe Director Studio is a local-first Project.vibe desktop app. The current MVP
 path is not the older Codex/Claude CLI route and not a diagnostics dashboard.
 
-Current source-of-truth order:
+Source-of-truth order recorded at this checkpoint:
 
 1. `README.md` for repo entry, local commands, release commands, and active MVP
    path summary.

@@ -1,46 +1,50 @@
 # Vibe Director Studio
 
-Local-first, open-source friendly AI video director desk for Project.vibe projects.
+Local-first AI video director workspace for `Project.vibe` projects.
 
-Note: `public/media/` contains two uncompressed PNGs (`asset_contact_sheet.png` ~1.3MB, `keyframe_pair_contact_sheet.png` ~1.9MB). Consider compressing or converting to WebP for production.
+## Current Entry
 
-## Current Demo Entry
-
+- Current status and acceptance truth: `docs/CURRENT-STATUS.md`.
+- Repository working rules: `AGENTS.md`.
 - Canonical development root: `/Users/lichenhao/Desktop/new vibe directing`.
 - Durable project contract: `Project.vibe` inside the selected project folder.
-- Current demo architecture: `docs/current-demo-architecture.md`.
+- Focused Session Timeline gate: `npm run agent-session-timeline:test`.
+- Focused Agent/UI gates: `npm run minimal-agent-p1:test` and
+  `npm run minimal-ui:test`.
+- Type and patch checks: `npx tsc --noEmit --pretty false` and
+  `git diff --check`.
+- NPM script map: `npm run scripts:groups`.
+- Runtime cleanup is always two-step: `npm run runtime:prune` previews;
+  `npm run runtime:prune:apply` performs only its scoped deletion.
+
+The product path is Agent-first:
+
+1. Open or create a local project.
+2. Clarify the director intent and form a proposal.
+3. Confirm any project mutation or paid execution at its own boundary.
+4. Track Running work by durable job identity.
+5. Review returned media as `needs_review`.
+6. Select and explicitly promote accepted project facts.
+7. Confirm Delivery and local export separately.
+
+Do not start a frontend dev server for ordinary contract or packaged
+acceptance. Use it only when a development task explicitly requires a renderer
+session. Real Provider calls are also outside ordinary verification.
+
+## Historical Demo Material
+
+The following documents remain useful as dated demo evidence, but they are not
+the current product-status authority:
+
+- Demo architecture: `docs/current-demo-architecture.md`.
 - Agent Kernel v1 demo status: `docs/agent-kernel-v1-demo-status.md`.
 - Recording runbook: `docs/demo-recording-runbook.md`.
 - Final rehearsal checklist: `docs/demo-final-rehearsal-checklist.md`.
-- Local dev: `npm run dev -- --port 5178`.
-- Local runtime: `npm run local-runtime-api`.
-- Main demo gate: `npm run demo:ready:test`.
-- Focused UI gates: `npm run minimal-ui:test` and
-  `npm run current-project-ui-closed-loop:test`.
-- Local runtime cleanup: `npm run runtime:prune` previews cleanup, and
-  `npm run runtime:prune:apply` deletes scoped generated artifacts. Safety is
-  covered by `npm run runtime:prune:test`.
-- NPM script map: `npm run scripts:groups`; parked audio/TTS/music work is
-  grouped under `deferred`.
-
-The current demo path is Agent-first:
-
-1. Open or create a local project folder.
-2. Type an idea or drop files into the bottom input.
-3. Let the Agent classify materials, split shots, choose a reference strategy,
-   and propose the next action.
-4. Review generated character, scene, prop, voice reference, and storyboard
-   materials.
-5. Submit Seedance/Jimeng video jobs serially when the project is ready.
-6. Review returned clips in preview and inspect export readiness.
-
-The demo deliberately does not expose local TTS, voice cloning, final music
-mixing, or music-rhythm analysis as the main path. Uploaded human-voice audio is
-treated as a `voice_reference` for the video model, not as BGM.
+- Historical aggregate gate: `npm run demo:ready:test`.
 
 Old Codex/Claude CLI, subagent, P6 Image2, TTS, and music-analysis routes are
-diagnostics or deferred feature lanes. They can help investigate old receipts or
-compatibility scripts, but they are not the first path for a new demo handoff.
+diagnostics, evidence, or deferred lanes. Read their dated acceptance records
+before using them.
 
 ## Release / Package
 
@@ -74,16 +78,18 @@ Local open-source RC smoke does not require a hosted account, Developer ID
 signing identity, notarization, or provider credentials. Release signing and
 notarization are intentionally handled by the `package:release:*` scripts.
 
-## MVP RC Acceptance Commands
+## Legacy MVP RC Verification
 
-Use the clear aliases for default verification:
+These retained aliases cover the older MVP/RC baseline:
 
 ```bash
 npm run verify:mvp
 npm run verify:rc
 ```
 
-For ordinary product sign-off, run `npm run verify:mvp`. For release-candidate sign-off, run `npm run verify:rc`; it is the packaged-app RC path and emits the underlying UI, prototype, P6 no-submit, package, runtime-bundle, and secret-scan checks as evidence. Keep any expanded subcommand output in the RC run record, but do not replace the default alias with legacy diagnostics commands.
+They are broad regression suites, not the source of the current P13 acceptance
+verdict. Check `docs/CURRENT-STATUS.md` before treating a package result as
+current packaged-App proof.
 
 `p6-real-image2:preflight` is the safe no-submit path inside `verify:rc`: it prepares P6 evidence and must report `providerCalled=false` plus `runtimeExternalNetworkCallMade=false`; it does not call Lanyi or any other provider. Real submit uses `p6-real-image2:submit-live` with `VIBE_IMAGE2_API_KEY` and `VIBE_P6_IMAGE2_CONFIRM=submit-p6-image2`; it is manual, human-approved live evidence only, not default CI and not part of `verify:mvp`, `verify:rc`, or legacy diagnostics aggregators. Multi-shot live submit uses scheduler-controlled one-shot provider requests (`scheduler_one_shot_with_retry`) instead of a single provider request with `n=3`; default live policy is max concurrency 3, retry concurrency 2, and max auto retries 2.
 
